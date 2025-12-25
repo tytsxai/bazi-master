@@ -1,0 +1,15 @@
+node_modules
+.git
+.github
+.env*
+*.log
+.DS_Store
+test-results
+verification
+backups
+scripts/backups
+coverage
+dist
+build
+.vscode
+.idea
