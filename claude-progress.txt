@@ -103,3 +103,6 @@
 - Enhanced accessibility keyboard-only Playwright flow with screenshots, console error capture, and cleanup; verified accessibility-keyboard-smoke.spec.js.
 - Marked feature_list.json accessibility smoke flow as passing. Current progress: 46/479 tests passing.
 - Next: continue remaining functional tests (performance smoke, pagination/search/filter, Zodiac compatibility, Tarot edge cases).
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js); both passed.
+- Fixed performance-large-dataset Playwright flow to verify header user name via data-testid and re-verified; marked feature_list.json test #24 as passing. Current progress: 47/479 tests passing.
+- Next: continue remaining functional tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases).
