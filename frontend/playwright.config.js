@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const webPort = Number(process.env.E2E_WEB_PORT || 3000);
+const fallbackPort = 3100 + Math.floor(Math.random() * 800);
+const webPort = Number(process.env.E2E_WEB_PORT || fallbackPort);
 const baseURL = `http://127.0.0.1:${webPort}`;
 
 export default defineConfig({
@@ -27,7 +28,7 @@ export default defineConfig({
     // Run your local dev server before starting the tests (skip when PW_NO_WEB_SERVER=1).
     webServer: process.env.PW_NO_WEB_SERVER === '1' ? undefined : {
         command: 'node scripts/dev-server.mjs',
-        url: `${baseURL}/api/health`,
+        url: baseURL,
         reuseExistingServer: false,
         timeout: 120 * 1000,
         env: {

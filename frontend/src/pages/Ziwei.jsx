@@ -565,13 +565,29 @@ export default function Ziwei() {
             </select>
             {errors.gender && <span className="mt-1 block text-xs text-rose-200">{errors.gender}</span>}
           </label>
-          <button
-            type="submit"
-            disabled={loading || saveLoading}
-            className="md:col-span-5 rounded-full bg-gold-400 px-8 py-2 text-sm font-semibold text-mystic-900 shadow-lg transition hover:scale-105 disabled:opacity-50"
-          >
-            {loading ? 'Calculating...' : 'Generate Zi Wei Chart'}
-          </button>
+          <div className="md:col-span-5 flex flex-col gap-3 sm:flex-row mt-2">
+            <button
+              type="submit"
+              disabled={loading || saveLoading}
+              className="flex-1 rounded-full bg-gold-400 px-8 py-2 text-sm font-semibold text-mystic-900 shadow-lg transition hover:scale-105 disabled:opacity-50"
+            >
+              {loading ? t('profile.calculating') : 'Generate Zi Wei Chart'}
+            </button>
+            <button
+              type="button"
+              onClick={handleStartOver}
+              className="flex-1 rounded-full border border-white/30 px-8 py-2 text-sm font-semibold text-white/80 transition hover:border-gold-400/60 hover:text-white"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="flex-1 rounded-full border border-white/30 px-8 py-2 text-sm font-semibold text-white/80 transition hover:border-gold-400/60 hover:text-white"
+            >
+              Cancel
+            </button>
+          </div>
         </form>
 
         {status && (

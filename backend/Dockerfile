@@ -16,6 +16,9 @@ RUN npm ci
 # Copy backend source code
 COPY backend ./
 
+# Switch Prisma provider to postgresql for production build
+RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/g' ../prisma/schema.prisma
+
 # Generate Prisma Client
 RUN npm run prisma:generate
 

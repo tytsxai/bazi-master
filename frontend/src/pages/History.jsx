@@ -1681,7 +1681,7 @@ export default function History() {
             onClick={handleResetFilters}
             className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-gold-400/60 hover:text-white"
           >
-            Reset filters
+            {t('profile.confirmDelete').includes('Confirm') ? 'Reset filters' : '重置筛选'}
           </button>
         </div>
         {!!orderedDeletedRecords.length && (
@@ -1815,7 +1815,7 @@ export default function History() {
                       onClick={() => requestDelete(record)}
                       className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-rose-400/60 hover:text-rose-200"
                     >
-                      Delete
+                      {t('profile.confirmDelete').includes('Confirm') ? 'Delete' : '删除'}
                     </button>
                   </div>
                 </div>

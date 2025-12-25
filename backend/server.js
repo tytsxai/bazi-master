@@ -437,6 +437,23 @@ app.use(cors({
 app.use(compression());
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
+// Health Check Endpoint (Probes)
+app.get('/health', async (req, res) => {
+  try {
+    // Basic liveness check + DB connectivity
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({
+      status: 'ok',
+      service: 'bazi-master-backend',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime()
+    });
+  } catch (error) {
+    console.error('Health check failed:', error);
+    res.status(503).json({ status: 'error', message: 'Service unhealthy' });
+  }
+});
+
 void ensureSoftDeleteReady().catch((error) => {
   console.error('Failed to initialize soft delete tables:', error);
 });
@@ -645,9 +662,26 @@ app.use((req, res, next) => {
   res.on('finish', () => {
     const durationMs = Number(process.hrtime.bigint() - startTime) / 1e6;
     const url = req?.originalUrl || req?.url || '';
-    console.log(
-      `[${timestamp}] ${req.method} ${url} ${res.statusCode} ${durationMs.toFixed(1)}ms id=${req.requestId}`
-    );
+
+    if (IS_PRODUCTION) {
+      // Structured JSON logging for production
+      console.log(JSON.stringify({
+        level: 'info',
+        timestamp,
+        requestId: req.requestId,
+        method: req.method,
+        url,
+        status: res.statusCode,
+        durationMs,
+        userAgent: req.get('user-agent'),
+        ip: req.ip
+      }));
+    } else {
+      // Human-readable logging for dev
+      console.log(
+        `[${timestamp}] ${req.method} ${url} ${res.statusCode} ${durationMs.toFixed(1)}ms id=${req.requestId}`
+      );
+    }
   });
   next();
 });
@@ -5074,100 +5108,100 @@ server.on('upgrade', (req, socket, head) => {
       return;
     }
 
-        if (!['bazi_ai_request', 'tarot_ai_request', 'iching_ai_request', 'ziwei_ai_request'].includes(message?.type)) {
-          sendWsJson(socket, { type: 'error', message: 'Unsupported request type.' });
+    if (!['bazi_ai_request', 'tarot_ai_request', 'iching_ai_request', 'ziwei_ai_request'].includes(message?.type)) {
+      sendWsJson(socket, { type: 'error', message: 'Unsupported request type.' });
+      return;
+    }
+
+    if (isBusy) {
+      sendWsJson(socket, { type: 'error', message: 'Request already in progress.' });
+      return;
+    }
+    isBusy = true;
+
+    let release = null;
+    try {
+      const token = message?.token;
+      const user = await authorizeToken(token);
+      release = acquireAiGuard(user.id);
+      if (!release) {
+        sendWsJson(socket, { type: 'error', message: AI_CONCURRENCY_ERROR });
+        return;
+      }
+      const payload = message?.payload;
+      let provider = null;
+      try {
+        provider = resolveAiProvider(message?.provider);
+      } catch (error) {
+        sendWsJson(socket, { type: 'error', message: error.message || 'Invalid AI provider.' });
+        return;
+      }
+
+      let aiContext = null;
+      if (message.type === 'bazi_ai_request') {
+        if (!payload?.pillars) {
+          sendWsJson(socket, { type: 'error', message: 'Bazi data required.' });
+          sendClose(1003);
           return;
         }
-    
-        if (isBusy) {
-          sendWsJson(socket, { type: 'error', message: 'Request already in progress.' });
+        aiContext = buildBaziPrompt(payload);
+      } else if (message.type === 'tarot_ai_request') {
+        if (!payload?.cards) {
+          sendWsJson(socket, { type: 'error', message: 'Cards data required.' });
+          sendClose(1003);
           return;
         }
-        isBusy = true;
-    
-        let release = null;
-        try {
-          const token = message?.token;
-          const user = await authorizeToken(token);
-          release = acquireAiGuard(user.id);
-          if (!release) {
-            sendWsJson(socket, { type: 'error', message: AI_CONCURRENCY_ERROR });
-            return;
-          }
-          const payload = message?.payload;
-          let provider = null;
-          try {
-            provider = resolveAiProvider(message?.provider);
-          } catch (error) {
-            sendWsJson(socket, { type: 'error', message: error.message || 'Invalid AI provider.' });
-            return;
-          }
-    
-          let aiContext = null;
-          if (message.type === 'bazi_ai_request') {
-            if (!payload?.pillars) {
-              sendWsJson(socket, { type: 'error', message: 'Bazi data required.' });
-              sendClose(1003);
-              return;
-            }
-            aiContext = buildBaziPrompt(payload);
-          } else if (message.type === 'tarot_ai_request') {
-            if (!payload?.cards) {
-              sendWsJson(socket, { type: 'error', message: 'Cards data required.' });
-              sendClose(1003);
-              return;
-            }
-            const { spreadType, cards, userQuestion } = payload;
-            const normalizedSpread = spreadType || 'SingleCard';
-            const spreadConfig = getTarotSpreadConfig(normalizedSpread);
-            const positions = spreadConfig.positions || [];
-            const cardList = cards.map((card, index) => {
-              const positionLabel = card.positionLabel || positions[index]?.label;
-              const positionMeaning = card.positionMeaning || positions[index]?.meaning;
-              const positionText = [
-                positionLabel ? `${positionLabel}` : null,
-                positionMeaning ? `${positionMeaning}` : null
-              ].filter(Boolean).join(' — ');
-              return `${card.position}. ${positionText ? `${positionText} - ` : ''}${card.name} (${card.isReversed ? 'Reversed' : 'Upright'}) - ${card.isReversed ? card.meaningRev : card.meaningUp}`;
-            }).join('\n');
-    
-            const system = 'You are a tarot reader. Provide a concise reading in Markdown with sections: Interpretation and Advice. Use the position meanings for context. Keep under 220 words. Reference key cards by name.';
-            const userPrompt = `
+        const { spreadType, cards, userQuestion } = payload;
+        const normalizedSpread = spreadType || 'SingleCard';
+        const spreadConfig = getTarotSpreadConfig(normalizedSpread);
+        const positions = spreadConfig.positions || [];
+        const cardList = cards.map((card, index) => {
+          const positionLabel = card.positionLabel || positions[index]?.label;
+          const positionMeaning = card.positionMeaning || positions[index]?.meaning;
+          const positionText = [
+            positionLabel ? `${positionLabel}` : null,
+            positionMeaning ? `${positionMeaning}` : null
+          ].filter(Boolean).join(' — ');
+          return `${card.position}. ${positionText ? `${positionText} - ` : ''}${card.name} (${card.isReversed ? 'Reversed' : 'Upright'}) - ${card.isReversed ? card.meaningRev : card.meaningUp}`;
+        }).join('\n');
+
+        const system = 'You are a tarot reader. Provide a concise reading in Markdown with sections: Interpretation and Advice. Use the position meanings for context. Keep under 220 words. Reference key cards by name.';
+        const userPrompt = `
     Spread: ${normalizedSpread || 'Unknown'}
     Question: ${userQuestion || 'General Reading'}
     Cards:
     ${cardList}
             `.trim();
-            const fallback = () => {
-              const interpretation = 'The spread points to momentum building around your question, with key lessons emerging from the central cards.';
-              const advice = 'Reflect on the card themes and take one grounded action aligned with the most constructive card.';
-              return `
+        const fallback = () => {
+          const interpretation = 'The spread points to momentum building around your question, with key lessons emerging from the central cards.';
+          const advice = 'Reflect on the card themes and take one grounded action aligned with the most constructive card.';
+          return `
     ## 🔮 Tarot Reading: ${normalizedSpread || 'Unknown'}
     **Interpretation:** ${interpretation}
     
     **Advice:** ${advice}
               `.trim();
-            };
-            aiContext = { system, user: userPrompt, fallback };
-          } else if (message.type === 'iching_ai_request') {
-            const { hexagram, resultingHexagram, changingLines, userQuestion, method, timeContext } = payload;
-            if (!hexagram) {
-              sendWsJson(socket, { type: 'error', message: 'Hexagram data required.' });
-              sendClose(1003);
-              return;
-            }
-            const lines = Array.isArray(changingLines) && changingLines.length > 0 ? changingLines.join(', ') : 'None';
-            const hexagramName = typeof hexagram === 'string' ? hexagram : (hexagram?.name || 'Unknown');
-            const resultName = resultingHexagram
-              ? (typeof resultingHexagram === 'string' ? resultingHexagram : (resultingHexagram?.name || 'Unknown'))
-              : 'None';
-            const timeLine = timeContext
-              ? `Time: ${timeContext.year}-${String(timeContext.month).padStart(2, '0')}-${String(timeContext.day).padStart(2, '0')} ${String(timeContext.hour).padStart(2, '0')}:${String(timeContext.minute).padStart(2, '0')}`
-              : null;
-            const methodLine = method ? `Method: ${method}` : null;
-    
-            const system = 'You are an I Ching interpreter. Provide a concise interpretation in Markdown with sections: Interpretation and Advice. Mention the primary and resulting hexagrams when available. Keep under 200 words.';
-            const userPrompt = `
+        };
+        aiContext = { system, user: userPrompt, fallback };
+      } else if (message.type === 'iching_ai_request') {
+        const { hexagram, resultingHexagram, changingLines, userQuestion, method, timeContext } = payload;
+        if (!hexagram) {
+          sendWsJson(socket, { type: 'error', message: 'Hexagram data required.' });
+          sendClose(1003);
+          return;
+        }
+        const lines = Array.isArray(changingLines) && changingLines.length > 0 ? changingLines.join(', ') : 'None';
+        const hexagramName = typeof hexagram === 'string' ? hexagram : (hexagram?.name || 'Unknown');
+        const resultName = resultingHexagram
+          ? (typeof resultingHexagram === 'string' ? resultingHexagram : (resultingHexagram?.name || 'Unknown'))
+          : 'None';
+        const timeLine = timeContext
+          ? `Time: ${timeContext.year}-${String(timeContext.month).padStart(2, '0')}-${String(timeContext.day).padStart(2, '0')} ${String(timeContext.hour).padStart(2, '0')}:${String(timeContext.minute).padStart(2, '0')}`
+          : null;
+        const methodLine = method ? `Method: ${method}` : null;
+
+        const system = 'You are an I Ching interpreter. Provide a concise interpretation in Markdown with sections: Interpretation and Advice. Mention the primary and resulting hexagrams when available. Keep under 200 words.';
+        const userPrompt = `
     Question: ${userQuestion || 'General Guidance'}
     ${methodLine || ''}
     ${timeLine || ''}
@@ -5175,69 +5209,70 @@ server.on('upgrade', (req, socket, head) => {
     Resulting Hexagram: ${resultName}
     Changing Lines: ${lines}
             `.trim();
-            const fallback = () => {
-              const interpretation = 'The primary hexagram points to steady progress through mindful adaptation, while the resulting hexagram signals how the situation may evolve.';
-              const advice = 'Align with your core values while remaining flexible about timing and approach.';
-              return `
+        const fallback = () => {
+          const interpretation = 'The primary hexagram points to steady progress through mindful adaptation, while the resulting hexagram signals how the situation may evolve.';
+          const advice = 'Align with your core values while remaining flexible about timing and approach.';
+          return `
     ## ☯️ I Ching Interpretation
     **Interpretation:** ${interpretation}
     
     **Advice:** ${advice}
               `.trim();
-            };
-            aiContext = { system, user: userPrompt, fallback };
-          } else if (message.type === 'ziwei_ai_request') {
-            const { birthYear, birthMonth, birthDay, birthHour, gender, chart: chartPayload } = payload;
-            let chart = chartPayload;
-            let birthMeta = { birthYear, birthMonth, birthDay, birthHour, gender };
-            if (!chart || typeof chart !== 'object') {
-              const payloadMeta = {
-                birthYear: Number(birthYear),
-                birthMonth: Number(birthMonth),
-                birthDay: Number(birthDay),
-                birthHour: Number(birthHour),
-                gender
-              };
-              const result = calculateZiweiChart(payloadMeta);
-              const timeMeta = buildBirthTimeMeta(payloadMeta);
-              chart = { ...result, ...timeMeta };
-              birthMeta = payloadMeta;
+        };
+        aiContext = { system, user: userPrompt, fallback };
+      } else if (message.type === 'ziwei_ai_request') {
+        const { birthYear, birthMonth, birthDay, birthHour, gender, chart: chartPayload } = payload;
+        let chart = chartPayload;
+        let birthMeta = { birthYear, birthMonth, birthDay, birthHour, gender };
+        if (!chart || typeof chart !== 'object') {
+          const payloadMeta = {
+            birthYear: Number(birthYear),
+            birthMonth: Number(birthMonth),
+            birthDay: Number(birthDay),
+            birthHour: Number(birthHour),
+            gender
+          };
+          const result = calculateZiweiChart(payloadMeta);
+          const timeMeta = buildBirthTimeMeta(payloadMeta);
+          chart = { ...result, ...timeMeta };
+          birthMeta = payloadMeta;
+        }
+        aiContext = buildZiweiPrompt({ chart, birth: birthMeta });
+      }
+
+      sendWsJson(socket, { type: 'start' });
+      const content = await generateAIContent({ system: aiContext.system, user: aiContext.user, fallback: aiContext.fallback, provider });
+      await streamContent(content || '');
+
+      // Optional: Persistence for Tarot and Iching (following existing logic)
+      if (message.type === 'tarot_ai_request') {
+        try {
+          await prisma.tarotRecord.create({
+            data: {
+              userId: user.id,
+              spreadType: payload.spreadType || 'SingleCard',
+              cards: JSON.stringify(payload.cards),
+              userQuestion: payload.userQuestion,
+              aiInterpretation: content
             }
-            aiContext = buildZiweiPrompt({ chart, birth: birthMeta });
-          }
-    
-          sendWsJson(socket, { type: 'start' });
-          const content = await generateAIContent({ system: aiContext.system, user: aiContext.user, fallback: aiContext.fallback, provider });
-          await streamContent(content || '');
-    
-          // Optional: Persistence for Tarot and Iching (following existing logic)
-          if (message.type === 'tarot_ai_request') {
-            try {
-              await prisma.tarotRecord.create({
-                data: {
-                  userId: user.id,
-                  spreadType: payload.spreadType || 'SingleCard',
-                  cards: JSON.stringify(payload.cards),
-                  userQuestion: payload.userQuestion,
-                  aiInterpretation: content
-                }
-              });
-            } catch (e) { console.error('Failed to save tarot record:', e); }
-          }
-    
-          if (!isClosed) {
-            sendWsJson(socket, { type: 'done' });
-            sendClose(1000);
-          }
-        } catch (error) {
-          sendWsJson(socket, { type: 'error', message: error.message || 'AI request failed.' });
-          sendClose(1011);
-        } finally {
-          if (release) {
-            release();
-          }
-          isBusy = false;
-        }  };
+          });
+        } catch (e) { console.error('Failed to save tarot record:', e); }
+      }
+
+      if (!isClosed) {
+        sendWsJson(socket, { type: 'done' });
+        sendClose(1000);
+      }
+    } catch (error) {
+      sendWsJson(socket, { type: 'error', message: error.message || 'AI request failed.' });
+      sendClose(1011);
+    } finally {
+      if (release) {
+        release();
+      }
+      isBusy = false;
+    }
+  };
 
   sendWsJson(socket, { type: 'connected' });
 

@@ -7,7 +7,7 @@
     "dev": "node scripts/dev-server.mjs",
     "build": "vite build",
     "preview": "vite preview --port 3000",
-    "test": "playwright test"
+    "test": "node scripts/run-playwright.mjs"
   },
   "dependencies": {
     "i18next": "^23.11.5",

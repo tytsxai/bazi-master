@@ -185,15 +185,8 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/favorites"
-          element={
-            <ProtectedRoute>
-              <Favorites />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="*" element={<NotFoundRedirect />} />
+        <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </section>
   );

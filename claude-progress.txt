@@ -106,3 +106,9 @@
 - Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js); both passed.
 - Fixed performance-large-dataset Playwright flow to verify header user name via data-testid and re-verified; marked feature_list.json test #24 as passing. Current progress: 47/479 tests passing.
 - Next: continue remaining functional tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases).
+- Fixed Playwright dev-server robustness: webServer now targets baseURL instead of /api/health and dev-server respects PW_PORT; added keep-alive handling for reused servers.
+- Fixed Login.jsx parse error (missing closing brace) that was breaking Vite startup.
+- Added Playwright AI streaming WebSocket test (ai-streaming.spec.js) with screenshots, login validation, WS event assertions, and cleanup.
+- Verified AI streaming flow end-to-end via Playwright (PW_PORT=3000); captured verification screenshots.
+- Marked feature_list.json test #25 (AI streaming via WebSocket flow) as passing. Current progress: 48/479 tests passing.
+- Next: continue remaining functional tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases).
