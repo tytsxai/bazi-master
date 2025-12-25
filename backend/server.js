@@ -2,7 +2,7 @@ import express from 'express';
 import http from 'http';
 import crypto from 'crypto';
 import cors from 'cors';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { Solar } from 'lunar-javascript';
 import tarotDeck from './data/tarotData.js';
 import { TRIGRAMS, hexagrams, hexagramByTrigrams, hexagramByLines } from './data/ichingHexagrams.js';
@@ -12,8 +12,64 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 console.log('--- SERVER STARTING: FIX APPLIED ---');
 
+const ensureSoftDeleteTables = async () => {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS BaziRecordTrash (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL,
+      recordId INTEGER NOT NULL,
+      deletedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(userId, recordId)
+    );
+  `);
+};
+
+const ensureSoftDeleteReady = (() => {
+  let ready = null;
+  return async () => {
+    if (!ready) {
+      ready = ensureSoftDeleteTables().catch((error) => {
+        console.error('Failed to ensure soft delete tables:', error);
+        throw error;
+      });
+    }
+    return ready;
+  };
+})();
+
+const fetchDeletedRecordIds = async (userId) => {
+  await ensureSoftDeleteReady();
+  const rows = await prisma.$queryRaw`SELECT recordId FROM BaziRecordTrash WHERE userId = ${userId}`;
+  return rows.map((row) => row.recordId);
+};
+
+const isRecordSoftDeleted = async (userId, recordId) => {
+  await ensureSoftDeleteReady();
+  const rows = await prisma.$queryRaw`
+    SELECT 1 as exists FROM BaziRecordTrash WHERE userId = ${userId} AND recordId = ${recordId} LIMIT 1
+  `;
+  return rows.length > 0;
+};
+
 app.use(cors());
 app.use(express.json());
+
+const MAX_URL_LENGTH = Number(process.env.MAX_URL_LENGTH || 16384);
+
+const isUrlTooLong = (req) => {
+  const url = req?.originalUrl || req?.url || '';
+  return url.length > MAX_URL_LENGTH;
+};
+
+const isWhitespaceOnly = (value) =>
+  typeof value === 'string' && value.length > 0 && value.trim().length === 0;
+
+app.use((req, res, next) => {
+  if (isUrlTooLong(req)) {
+    return res.status(414).json({ error: 'Request-URI Too Long' });
+  }
+  return next();
+});
 
 // --- AI Provider Settings ---
 const AI_PROVIDER = (process.env.AI_PROVIDER
@@ -24,6 +80,9 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620';
 const AI_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS || 700);
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 15000);
+const AI_CONCURRENCY_ERROR = 'AI request already in progress. Please wait.';
+const aiInFlightByUser = new Set();
+const baziSubmitInFlight = new Map();
 
 const AVAILABLE_PROVIDERS = [
   { name: 'openai', enabled: Boolean(process.env.OPENAI_API_KEY) },
@@ -193,6 +252,15 @@ const generateAIContent = async ({ system, user, fallback }) => {
   return fallback();
 };
 
+const acquireAiGuard = (userId) => {
+  if (!userId) return () => {};
+  if (aiInFlightByUser.has(userId)) return null;
+  aiInFlightByUser.add(userId);
+  return () => {
+    aiInFlightByUser.delete(userId);
+  };
+};
+
 const buildBaziPrompt = ({ pillars, fiveElements, tenGods, luckCycles, strength }) => {
   const elementLines = fiveElements
     ? Object.entries(fiveElements).map(([key, value]) => `- ${key}: ${value}`).join('\n')
@@ -280,10 +348,74 @@ const parsePreferences = (raw) => {
   }
 };
 
+const buildSettingsEtag = (row) => {
+  if (!row?.updatedAt) return null;
+  return `W/"${row.updatedAt}"`;
+};
+
+const parseIfMatchHeader = (headerValue) => {
+  if (!headerValue || typeof headerValue !== 'string') return null;
+  const token = headerValue.split(',')[0].trim();
+  if (!token) return null;
+  if (token === '*') return '*';
+  if (token.startsWith('W/"') && token.endsWith('"')) {
+    return token.slice(3, -1);
+  }
+  if (token.startsWith('"') && token.endsWith('"')) {
+    return token.slice(1, -1);
+  }
+  return token;
+};
+
+const buildBaziSubmitKey = (userId, payload) => {
+  if (!userId || !payload) return null;
+  const birthLocation =
+    typeof payload.birthLocation === 'string' ? payload.birthLocation.trim() : '';
+  const timezone = typeof payload.timezone === 'string' ? payload.timezone.trim() : '';
+  const gender =
+    typeof payload.gender === 'string' ? payload.gender.trim().toLowerCase() : '';
+  const keyPayload = {
+    userId,
+    birthYear: payload.birthYear,
+    birthMonth: payload.birthMonth,
+    birthDay: payload.birthDay,
+    birthHour: payload.birthHour,
+    gender,
+    birthLocation,
+    timezone,
+  };
+  const hash = crypto.createHash('sha256').update(JSON.stringify(keyPayload)).digest('hex');
+  return `${userId}:${hash}`;
+};
+
 // --- Mappings & Constants ---
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const SESSION_IDLE_MS = Number(process.env.SESSION_IDLE_MS || 30 * 60 * 1000);
+const RESET_TOKEN_TTL_MS = Number(process.env.RESET_TOKEN_TTL_MS || 30 * 60 * 1000);
 const sessionStore = new Map();
+const resetTokenStore = new Map();
+const resetTokenByUser = new Map();
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const GOOGLE_REDIRECT_URI =
+  process.env.GOOGLE_REDIRECT_URI || `http://localhost:${PORT}/api/auth/google/callback`;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const oauthStateStore = new Map();
+const ADMIN_EMAILS = new Set(
+  (process.env.ADMIN_EMAILS || 'admin@example.com')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+);
+const WECHAT_APP_ID = process.env.WECHAT_APP_ID || '';
+const WECHAT_APP_SECRET = process.env.WECHAT_APP_SECRET || '';
+const WECHAT_SCOPE = process.env.WECHAT_SCOPE || 'snsapi_login';
+const WECHAT_FRONTEND_URL = process.env.WECHAT_FRONTEND_URL || FRONTEND_URL || 'http://localhost:3000';
+const WECHAT_REDIRECT_URI = process.env.WECHAT_REDIRECT_URI
+  || `${process.env.BACKEND_BASE_URL || 'http://localhost:4000'}/api/auth/wechat/callback`;
+const WECHAT_STATE_TTL_MS = 10 * 60 * 1000;
+const wechatStateStore = new Map();
 
 const parseAuthToken = (token) => {
   const match = token.match(/^token_(\d+)_(\d+)$/);
@@ -292,6 +424,95 @@ const parseAuthToken = (token) => {
   const issuedAt = Number(match[2]);
   if (!Number.isFinite(userId) || !Number.isFinite(issuedAt)) return null;
   return { userId, issuedAt };
+};
+
+const sanitizeNextPath = (raw) => {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (!trimmed.startsWith('/')) return null;
+  if (trimmed.startsWith('//') || trimmed.startsWith('/\\')) return null;
+  return trimmed;
+};
+
+const buildOauthState = (nextPath) => {
+  const state = crypto.randomBytes(24).toString('hex');
+  oauthStateStore.set(state, { createdAt: Date.now(), nextPath });
+  return state;
+};
+
+const consumeOauthState = (state) => {
+  const entry = oauthStateStore.get(state);
+  if (!entry) return null;
+  oauthStateStore.delete(state);
+  if (Date.now() - entry.createdAt > OAUTH_STATE_TTL_MS) return null;
+  return entry;
+};
+
+const buildOauthRedirectUrl = ({ token, user, nextPath, error }) => {
+  const redirectUrl = new URL('/login', FRONTEND_URL);
+  if (token) redirectUrl.searchParams.set('token', token);
+  if (user) {
+    const encodedUser = Buffer.from(JSON.stringify(user)).toString('base64url');
+    redirectUrl.searchParams.set('user', encodedUser);
+  }
+  if (nextPath) redirectUrl.searchParams.set('next', nextPath);
+  if (error) redirectUrl.searchParams.set('error', error);
+  return redirectUrl.toString();
+};
+
+const isAdminUser = (user) => {
+  if (!user?.email) return false;
+  return ADMIN_EMAILS.has(String(user.email).toLowerCase());
+};
+
+const createWeChatState = (redirectPath) => {
+  const state = crypto.randomBytes(16).toString('hex');
+  const now = Date.now();
+  wechatStateStore.set(state, { createdAt: now, redirectPath });
+  for (const [key, entry] of wechatStateStore.entries()) {
+    if (now - entry.createdAt > WECHAT_STATE_TTL_MS) {
+      wechatStateStore.delete(key);
+    }
+  }
+  return state;
+};
+
+const consumeWeChatState = (state) => {
+  const entry = wechatStateStore.get(state);
+  if (!entry) return null;
+  wechatStateStore.delete(state);
+  if (Date.now() - entry.createdAt > WECHAT_STATE_TTL_MS) return null;
+  return entry.redirectPath;
+};
+
+const createResetToken = (userId) => {
+  const existingToken = resetTokenByUser.get(userId);
+  if (existingToken) {
+    resetTokenStore.delete(existingToken);
+  }
+  const token = crypto.randomBytes(24).toString('hex');
+  resetTokenStore.set(token, { userId, expiresAt: Date.now() + RESET_TOKEN_TTL_MS });
+  resetTokenByUser.set(userId, token);
+  return token;
+};
+
+const consumeResetToken = (token) => {
+  if (!token) return null;
+  const entry = resetTokenStore.get(token);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    resetTokenStore.delete(token);
+    if (resetTokenByUser.get(entry.userId) === token) {
+      resetTokenByUser.delete(entry.userId);
+    }
+    return null;
+  }
+  resetTokenStore.delete(token);
+  if (resetTokenByUser.get(entry.userId) === token) {
+    resetTokenByUser.delete(entry.userId);
+  }
+  return entry.userId;
 };
 
 // Pinyin and Element mappings for Stems (TianGan)
@@ -816,31 +1037,50 @@ function buildPillar(ganChar, zhiChar) {
   };
 }
 
-const requireAuth = async (req, res, next) => {
-  const auth = req.headers.authorization || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-
+const authorizeToken = async (token) => {
+  if (!token) throw new Error('Unauthorized');
   const parsed = parseAuthToken(token);
-  if (!parsed) return res.status(401).json({ error: 'Invalid token' });
+  if (!parsed) throw new Error('Invalid token');
   if (Date.now() - parsed.issuedAt > TOKEN_TTL_MS) {
-    return res.status(401).json({ error: 'Token expired' });
+    throw new Error('Token expired');
   }
 
   const now = Date.now();
   const lastSeen = sessionStore.get(token) ?? parsed.issuedAt;
   if (now - lastSeen > SESSION_IDLE_MS) {
     sessionStore.delete(token);
-    return res.status(401).json({ error: 'Session expired' });
+    throw new Error('Session expired');
   }
   sessionStore.set(token, now);
 
   const userId = parsed.userId;
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return res.status(401).json({ error: 'User not found' });
+  if (!user) throw new Error('User not found');
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    isAdmin: isAdminUser(user)
+  };
+};
 
-  req.user = { id: user.id, email: user.email, name: user.name };
-  next();
+const requireAuth = async (req, res, next) => {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  try {
+    const user = await authorizeToken(token);
+    req.user = user;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: error.message || 'Unauthorized' });
+  }
+};
+
+const requireAdmin = (req, res, next) => {
+  if (!req.user?.isAdmin) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  return next();
 };
 
 const serializeRecord = (record) => ({
@@ -850,6 +1090,419 @@ const serializeRecord = (record) => ({
   tenGods: record.tenGods ? JSON.parse(record.tenGods) : null,
   luckCycles: record.luckCycles ? JSON.parse(record.luckCycles) : null,
 });
+
+const parseJsonValue = (raw) => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const serializeIchingRecord = (record) => ({
+  ...record,
+  numbers: parseJsonValue(record.numbers),
+  hexagram: parseJsonValue(record.hexagram),
+  resultingHexagram: parseJsonValue(record.resultingHexagram),
+  changingLines: parseJsonValue(record.changingLines),
+  timeContext: parseJsonValue(record.timeContext),
+});
+
+const formatTimezoneOffset = (offsetMinutes) => {
+  if (!Number.isFinite(offsetMinutes)) return 'UTC';
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMinutes);
+  const hours = Math.floor(abs / 60);
+  const minutes = abs % 60;
+  return `UTC${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+
+const parseTimezoneOffsetMinutes = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^(utc|gmt|z)$/i.test(trimmed)) return 0;
+  const match = trimmed.match(/^(?:utc|gmt)?\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?$/i);
+  if (!match) return null;
+  const sign = match[1] === '-' ? -1 : 1;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3] || 0);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 14 || minutes > 59) return null;
+  return sign * (hours * 60 + minutes);
+};
+
+const getOffsetMinutesFromTimeZone = (timeZone, date) => {
+  if (typeof timeZone !== 'string' || !timeZone.trim()) return null;
+  try {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const parts = dtf.formatToParts(date);
+    const values = {};
+    parts.forEach((part) => {
+      if (part.type !== 'literal') values[part.type] = part.value;
+    });
+    const asUtc = Date.UTC(
+      Number(values.year),
+      Number(values.month) - 1,
+      Number(values.day),
+      Number(values.hour),
+      Number(values.minute),
+      Number(values.second),
+    );
+    if (!Number.isFinite(asUtc)) return null;
+    return Math.round((asUtc - date.getTime()) / 60000);
+  } catch (error) {
+    return null;
+  }
+};
+
+const buildBirthTimeMeta = ({
+  birthYear,
+  birthMonth,
+  birthDay,
+  birthHour,
+  birthMinute,
+  timezone,
+  timezoneOffsetMinutes,
+}) => {
+  const year = Number(birthYear);
+  const month = Number(birthMonth);
+  const day = Number(birthDay);
+  const hour = Number.isFinite(Number(birthHour)) ? Number(birthHour) : 0;
+  const minute = Number.isFinite(Number(birthMinute)) ? Number(birthMinute) : 0;
+  if (![year, month, day].every(Number.isFinite)) {
+    return { timezoneOffsetMinutes: null, birthTimestamp: null, birthIso: null };
+  }
+
+  const offsetFromPayload = parseTimezoneOffsetMinutes(timezoneOffsetMinutes);
+  const offsetFromLabel = parseTimezoneOffsetMinutes(timezone);
+  const baseUtcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  const offsetFromZone = offsetFromLabel === null ? getOffsetMinutesFromTimeZone(timezone, baseUtcDate) : null;
+  const resolvedOffset = Number.isFinite(offsetFromPayload)
+    ? offsetFromPayload
+    : Number.isFinite(offsetFromLabel)
+      ? offsetFromLabel
+      : offsetFromZone;
+
+  if (!Number.isFinite(resolvedOffset)) {
+    return { timezoneOffsetMinutes: null, birthTimestamp: null, birthIso: null };
+  }
+
+  const birthTimestamp = Date.UTC(year, month - 1, day, hour, minute, 0) - resolvedOffset * 60 * 1000;
+  return {
+    timezoneOffsetMinutes: resolvedOffset,
+    birthTimestamp,
+    birthIso: new Date(birthTimestamp).toISOString(),
+  };
+};
+
+const serializeRecordWithTimezone = (record) => {
+  const base = serializeRecord(record);
+  const meta = buildBirthTimeMeta({
+    birthYear: record.birthYear,
+    birthMonth: record.birthMonth,
+    birthDay: record.birthDay,
+    birthHour: record.birthHour,
+    timezone: record.timezone,
+  });
+  return { ...base, ...meta };
+};
+
+const getBirthSortTimestamp = (record) => {
+  if (!record) return null;
+  const meta = buildBirthTimeMeta({
+    birthYear: record.birthYear,
+    birthMonth: record.birthMonth,
+    birthDay: record.birthDay,
+    birthHour: record.birthHour,
+    timezone: record.timezone,
+  });
+  if (Number.isFinite(meta?.birthTimestamp)) return meta.birthTimestamp;
+  const year = Number(record.birthYear);
+  const month = Number(record.birthMonth);
+  const day = Number(record.birthDay);
+  const hour = Number.isFinite(Number(record.birthHour)) ? Number(record.birthHour) : 0;
+  if (![year, month, day].every(Number.isFinite)) return null;
+  return Date.UTC(year, month - 1, day, hour, 0, 0);
+};
+
+const sortRecordsByBirth = (records, direction) => {
+  if (!Array.isArray(records)) return records;
+  const dir = direction === 'asc' ? 1 : -1;
+  const keyed = records.map((record) => ({
+    record,
+    key: getBirthSortTimestamp(record),
+    createdAt: record?.createdAt instanceof Date
+      ? record.createdAt.getTime()
+      : new Date(record?.createdAt ?? 0).getTime(),
+    id: record?.id ?? 0,
+  }));
+
+  keyed.sort((a, b) => {
+    const aFinite = Number.isFinite(a.key);
+    const bFinite = Number.isFinite(b.key);
+    if (aFinite && bFinite && a.key !== b.key) return (a.key - b.key) * dir;
+    if (aFinite && !bFinite) return -1;
+    if (!aFinite && bFinite) return 1;
+    if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
+    return b.id - a.id;
+  });
+
+  return keyed.map((entry) => entry.record);
+};
+
+const normalizeSearchValue = (value) => (value == null ? '' : String(value).toLowerCase());
+
+const recordMatchesQuery = (record, queryLower) => {
+  if (!queryLower) return true;
+  return [
+    record.birthLocation,
+    record.timezone,
+    record.gender,
+    record.pillars,
+  ].some((field) => normalizeSearchValue(field).includes(queryLower));
+};
+
+const parseJsonField = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value === 'object') return value;
+  return null;
+};
+
+const coerceInt = (value) => {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return null;
+  return Math.trunc(numberValue);
+};
+
+const isValidCalendarDate = (year, month, day) => {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day
+  );
+};
+
+const validateBaziInput = (raw) => {
+  const birthYear = Number(raw?.birthYear);
+  const birthMonth = Number(raw?.birthMonth);
+  const birthDay = Number(raw?.birthDay);
+  const birthHour = Number(raw?.birthHour);
+  const genderRaw = raw?.gender;
+  const gender = typeof genderRaw === 'string' ? genderRaw.trim() : '';
+  const birthLocationRaw = raw?.birthLocation;
+  const timezoneRaw = raw?.timezone;
+  if (isWhitespaceOnly(genderRaw) || isWhitespaceOnly(birthLocationRaw) || isWhitespaceOnly(timezoneRaw)) {
+    return { ok: false, payload: null, reason: 'whitespace' };
+  }
+  const birthLocation = typeof birthLocationRaw === 'string' ? birthLocationRaw.trim() : birthLocationRaw;
+  const timezone = typeof timezoneRaw === 'string' ? timezoneRaw.trim() : timezoneRaw;
+
+  if (
+    !Number.isInteger(birthYear)
+    || birthYear < 1
+    || birthYear > 9999
+    || !Number.isInteger(birthMonth)
+    || birthMonth < 1
+    || birthMonth > 12
+    || !Number.isInteger(birthDay)
+    || birthDay < 1
+    || birthDay > 31
+    || !Number.isInteger(birthHour)
+    || birthHour < 0
+    || birthHour > 23
+    || !gender
+    || !isValidCalendarDate(birthYear, birthMonth, birthDay)
+  ) {
+    return { ok: false, payload: null, reason: 'invalid' };
+  }
+
+  return {
+    ok: true,
+    payload: {
+      ...raw,
+      birthYear,
+      birthMonth,
+      birthDay,
+      birthHour,
+      gender,
+      birthLocation,
+      timezone,
+    },
+  };
+};
+
+const BAZI_CACHE_TTL_MS = Number(process.env.BAZI_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
+const BAZI_CACHE_MAX_ENTRIES = Number(process.env.BAZI_CACHE_MAX_ENTRIES || 500);
+const baziCalculationCache = new Map();
+
+const buildBaziCacheKey = (data) => {
+  if (!data) return null;
+  const birthYear = coerceInt(data.birthYear);
+  const birthMonth = coerceInt(data.birthMonth);
+  const birthDay = coerceInt(data.birthDay);
+  const birthHour = coerceInt(data.birthHour);
+  const gender =
+    typeof data.gender === 'string' ? data.gender.trim().toLowerCase() : null;
+
+  if (
+    birthYear === null
+    || birthMonth === null
+    || birthDay === null
+    || birthHour === null
+    || !gender
+  ) {
+    return null;
+  }
+
+  return `${birthYear}-${birthMonth}-${birthDay}-${birthHour}-${gender}`;
+};
+
+const buildFiveElementsPercent = (fiveElements) => {
+  if (!fiveElements || typeof fiveElements !== 'object') return null;
+  const total = Object.values(fiveElements).reduce((sum, value) => {
+    const next = Number(value);
+    return sum + (Number.isFinite(next) ? next : 0);
+  }, 0);
+
+  return ELEMENTS.reduce((acc, element) => {
+    const raw = Number(fiveElements[element]);
+    const safe = Number.isFinite(raw) ? raw : 0;
+    acc[element] = total ? Math.round((safe / total) * 100) : 0;
+    return acc;
+  }, {});
+};
+
+const normalizeBaziResult = (result) => {
+  if (!result || typeof result !== 'object') return result;
+  if (result.fiveElementsPercent || !result.fiveElements) return result;
+  const fiveElementsPercent = buildFiveElementsPercent(result.fiveElements);
+  if (!fiveElementsPercent) return result;
+  return { ...result, fiveElementsPercent };
+};
+
+const pruneBaziCache = () => {
+  if (!Number.isFinite(BAZI_CACHE_MAX_ENTRIES) || BAZI_CACHE_MAX_ENTRIES <= 0) {
+    return;
+  }
+  while (baziCalculationCache.size > BAZI_CACHE_MAX_ENTRIES) {
+    const oldestKey = baziCalculationCache.keys().next().value;
+    if (!oldestKey) break;
+    baziCalculationCache.delete(oldestKey);
+  }
+};
+
+const getCachedBaziCalculation = (key) => {
+  if (!key) return null;
+  const entry = baziCalculationCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt && entry.expiresAt <= Date.now()) {
+    baziCalculationCache.delete(key);
+    return null;
+  }
+  // Refresh LRU position
+  baziCalculationCache.delete(key);
+  baziCalculationCache.set(key, entry);
+  return entry.value;
+};
+
+const setBaziCacheEntry = (key, value) => {
+  if (!key) return;
+  const normalized = normalizeBaziResult(value);
+  const expiresAt = Number.isFinite(BAZI_CACHE_TTL_MS) && BAZI_CACHE_TTL_MS > 0
+    ? Date.now() + BAZI_CACHE_TTL_MS
+    : null;
+  if (baziCalculationCache.has(key)) {
+    baziCalculationCache.delete(key);
+  }
+  baziCalculationCache.set(key, { value: normalized, expiresAt });
+  pruneBaziCache();
+};
+
+const primeBaziCalculationCache = (data, result) => {
+  const key = buildBaziCacheKey(data);
+  if (!key || !result) return;
+  setBaziCacheEntry(key, result);
+};
+
+const invalidateBaziCalculationCache = (data) => {
+  const key = typeof data === 'string' ? data : buildBaziCacheKey(data);
+  if (!key) return;
+  baziCalculationCache.delete(key);
+};
+
+const buildImportRecord = (raw, userId) => {
+  if (!raw || typeof raw !== 'object') return null;
+  const birthYear = coerceInt(raw.birthYear);
+  const birthMonth = coerceInt(raw.birthMonth);
+  const birthDay = coerceInt(raw.birthDay);
+  const birthHour = coerceInt(raw.birthHour);
+  const gender = typeof raw.gender === 'string' ? raw.gender.trim() : '';
+  if (!birthYear || !birthMonth || !birthDay || birthHour === null || !gender) return null;
+
+  let pillars = parseJsonField(raw.pillars);
+  let fiveElements = parseJsonField(raw.fiveElements);
+  let tenGods = parseJsonField(raw.tenGods);
+  let luckCycles = parseJsonField(raw.luckCycles);
+
+  if (!pillars || !fiveElements) {
+    const computed = getBaziCalculation({ birthYear, birthMonth, birthDay, birthHour, gender });
+    if (!pillars) pillars = computed.pillars;
+    if (!fiveElements) fiveElements = computed.fiveElements;
+    if (!tenGods) tenGods = computed.tenGods;
+    if (!luckCycles) luckCycles = computed.luckCycles;
+  }
+  primeBaziCalculationCache(
+    { birthYear, birthMonth, birthDay, birthHour, gender },
+    { pillars, fiveElements, tenGods, luckCycles }
+  );
+
+  const createdAtRaw = raw.createdAt ? new Date(raw.createdAt) : null;
+  const createdAt = createdAtRaw && !Number.isNaN(createdAtRaw.getTime()) ? createdAtRaw : null;
+
+  const timezoneOffset = parseTimezoneOffsetMinutes(raw.timezoneOffsetMinutes);
+  const timezoneFallback = Number.isFinite(timezoneOffset)
+    ? formatTimezoneOffset(timezoneOffset)
+    : null;
+
+  const record = {
+    userId,
+    birthYear,
+    birthMonth,
+    birthDay,
+    birthHour,
+    gender,
+    birthLocation: typeof raw.birthLocation === 'string' ? raw.birthLocation : null,
+    timezone: typeof raw.timezone === 'string' ? raw.timezone : timezoneFallback,
+    pillars: JSON.stringify(pillars),
+    fiveElements: JSON.stringify(fiveElements),
+    tenGods: tenGods ? JSON.stringify(tenGods) : null,
+    luckCycles: luckCycles ? JSON.stringify(luckCycles) : null,
+  };
+
+  if (createdAt) record.createdAt = createdAt;
+  return record;
+};
 
 const parseIdParam = (value) => {
   const id = Number(value);
@@ -1023,6 +1676,232 @@ const performCalculation = (data) => {
   return { pillars, fiveElements: counts, fiveElementsPercent, tenGods, luckCycles };
 };
 
+const getBaziCalculation = (data, { bypassCache = false } = {}) => {
+  const cacheKey = buildBaziCacheKey(data);
+  if (!bypassCache && cacheKey) {
+    const cached = getCachedBaziCalculation(cacheKey);
+    if (cached) return cached;
+  }
+  const result = performCalculation(data);
+  if (cacheKey) setBaziCacheEntry(cacheKey, result);
+  return result;
+};
+
+// --- Ziwei (V2) Calculation ---
+const ZIWEI_BRANCH_ORDER = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+const ZIWEI_MONTH_BRANCH_ORDER = ['寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥', '子', '丑'];
+const ZIWEI_PALACES = [
+  { key: 'ming', name: 'Ming', cn: '命宫' },
+  { key: 'brothers', name: 'Brothers', cn: '兄弟' },
+  { key: 'spouse', name: 'Spouse', cn: '夫妻' },
+  { key: 'children', name: 'Children', cn: '子女' },
+  { key: 'wealth', name: 'Wealth', cn: '财帛' },
+  { key: 'health', name: 'Health', cn: '疾厄' },
+  { key: 'travel', name: 'Travel', cn: '迁移' },
+  { key: 'friends', name: 'Friends', cn: '仆役' },
+  { key: 'career', name: 'Career', cn: '官禄' },
+  { key: 'property', name: 'Property', cn: '田宅' },
+  { key: 'mental', name: 'Mental', cn: '福德' },
+  { key: 'parents', name: 'Parents', cn: '父母' },
+];
+
+const ZIWEI_MAJOR_STARS = {
+  ziwei: { key: 'ziwei', name: 'Zi Wei', cn: '紫微' },
+  tianji: { key: 'tianji', name: 'Tian Ji', cn: '天机' },
+  taiyang: { key: 'taiyang', name: 'Tai Yang', cn: '太阳' },
+  wuqu: { key: 'wuqu', name: 'Wu Qu', cn: '武曲' },
+  tiantong: { key: 'tiantong', name: 'Tian Tong', cn: '天同' },
+  lianzhen: { key: 'lianzhen', name: 'Lian Zhen', cn: '廉贞' },
+  tianfu: { key: 'tianfu', name: 'Tian Fu', cn: '天府' },
+  taiyin: { key: 'taiyin', name: 'Tai Yin', cn: '太阴' },
+  tanlang: { key: 'tanlang', name: 'Tan Lang', cn: '贪狼' },
+  jumen: { key: 'jumen', name: 'Ju Men', cn: '巨门' },
+  tianxiang: { key: 'tianxiang', name: 'Tian Xiang', cn: '天相' },
+  tianliang: { key: 'tianliang', name: 'Tian Liang', cn: '天梁' },
+  qisha: { key: 'qisha', name: 'Qi Sha', cn: '七杀' },
+  pojun: { key: 'pojun', name: 'Po Jun', cn: '破军' },
+};
+
+const ZIWEI_MINOR_STARS = {
+  wenchang: { key: 'wenchang', name: 'Wen Chang', cn: '文昌' },
+  wenqu: { key: 'wenqu', name: 'Wen Qu', cn: '文曲' },
+  zuofu: { key: 'zuofu', name: 'Zuo Fu', cn: '左辅' },
+  youbi: { key: 'youbi', name: 'You Bi', cn: '右弼' },
+  huoxing: { key: 'huoxing', name: 'Huo Xing', cn: '火星' },
+  lingxing: { key: 'lingxing', name: 'Ling Xing', cn: '铃星' },
+  tiankui: { key: 'tiankui', name: 'Tian Kui', cn: '天魁' },
+  tianyue: { key: 'tianyue', name: 'Tian Yue', cn: '天钺' },
+};
+
+const ZIWEI_SIHUA_BY_STEM = {
+  '甲': { lu: 'lianzhen', quan: 'pojun', ke: 'wuqu', ji: 'taiyang' },
+  '乙': { lu: 'tianji', quan: 'tianliang', ke: 'ziwei', ji: 'taiyin' },
+  '丙': { lu: 'tiantong', quan: 'tianji', ke: 'wenchang', ji: 'lianzhen' },
+  '丁': { lu: 'taiyin', quan: 'tiantong', ke: 'tianji', ji: 'jumen' },
+  '戊': { lu: 'tanlang', quan: 'taiyin', ke: 'youbi', ji: 'tianji' },
+  '己': { lu: 'wuqu', quan: 'tanlang', ke: 'tianliang', ji: 'wenqu' },
+  '庚': { lu: 'taiyang', quan: 'wuqu', ke: 'taiyin', ji: 'tiantong' },
+  '辛': { lu: 'jumen', quan: 'taiyang', ke: 'wenqu', ji: 'wenchang' },
+  '壬': { lu: 'tianliang', quan: 'ziwei', ke: 'tianji', ji: 'pojun' },
+  '癸': { lu: 'pojun', quan: 'jumen', ke: 'taiyin', ji: 'tanlang' },
+};
+
+const normalizeIndex = (value, modulo = 12) => ((value % modulo) + modulo) % modulo;
+
+const getTimeBranchIndex = (birthHour) => {
+  const hour = Number(birthHour);
+  if (!Number.isFinite(hour)) return 0;
+  return Math.floor((hour + 1) / 2) % 12;
+};
+
+const buildZiweiPalaces = (mingIndex) => {
+  const palaces = ZIWEI_BRANCH_ORDER.map((branch, index) => ({
+    index,
+    branch: {
+      key: branch,
+      name: BRANCHES_MAP[branch]?.name || branch,
+      element: BRANCHES_MAP[branch]?.element || 'Unknown',
+      polarity: BRANCHES_MAP[branch]?.polarity || null,
+    },
+    palace: null,
+    stars: { major: [], minor: [] },
+    transformations: [],
+  }));
+
+  ZIWEI_PALACES.forEach((palace, offset) => {
+    const index = normalizeIndex(mingIndex + offset);
+    palaces[index].palace = palace;
+  });
+
+  return palaces;
+};
+
+const calculateZiweiChart = (data) => {
+  const { birthYear, birthMonth, birthDay, birthHour } = data;
+  const solar = Solar.fromYmdHms(birthYear, birthMonth, birthDay, birthHour || 0, 0, 0);
+  const lunar = solar.getLunar();
+  const eightChar = lunar.getEightChar();
+
+  const lunarMonth = lunar.getMonth();
+  const lunarDay = lunar.getDay();
+  const lunarYear = lunar.getYear();
+  const isLeapMonth = typeof lunar.isLeap === 'function' ? lunar.isLeap() : Boolean(lunar.isLeap);
+
+  const monthBranch = ZIWEI_MONTH_BRANCH_ORDER[normalizeIndex(lunarMonth - 1)];
+  const monthBranchIndex = ZIWEI_BRANCH_ORDER.indexOf(monthBranch);
+  const timeBranchIndex = getTimeBranchIndex(birthHour);
+
+  const mingIndex = normalizeIndex(monthBranchIndex - timeBranchIndex);
+  const shenIndex = normalizeIndex(monthBranchIndex + timeBranchIndex);
+
+  const ziweiIndex = normalizeIndex(monthBranchIndex + (lunarDay - 1));
+  const tianfuIndex = normalizeIndex(ziweiIndex + 6);
+
+  const palaces = buildZiweiPalaces(mingIndex);
+
+  const transformMap = ZIWEI_SIHUA_BY_STEM[eightChar.getYearGan()] || {};
+  const transformByStarKey = Object.values(transformMap).reduce((acc, key) => {
+    if (key) acc[key] = acc[key] || [];
+    return acc;
+  }, {});
+  Object.entries(transformMap).forEach(([type, key]) => {
+    if (!key) return;
+    if (!transformByStarKey[key]) transformByStarKey[key] = [];
+    transformByStarKey[key].push(type);
+  });
+
+  const addStar = (index, star, group) => {
+    if (!star) return;
+    const target = palaces[index];
+    if (!target) return;
+    const transforms = transformByStarKey[star.key] || [];
+    const entry = transforms.length
+      ? { ...star, transforms }
+      : { ...star };
+    target.stars[group].push(entry);
+    if (transforms.length) {
+      transforms.forEach((type) => {
+        target.transformations.push({ type, starKey: star.key, starName: star.name, starCn: star.cn });
+      });
+    }
+  };
+
+  const ziweiGroup = [
+    { star: ZIWEI_MAJOR_STARS.ziwei, offset: 0 },
+    { star: ZIWEI_MAJOR_STARS.tianji, offset: 1 },
+    { star: ZIWEI_MAJOR_STARS.taiyang, offset: 3 },
+    { star: ZIWEI_MAJOR_STARS.wuqu, offset: 4 },
+    { star: ZIWEI_MAJOR_STARS.tiantong, offset: 5 },
+    { star: ZIWEI_MAJOR_STARS.lianzhen, offset: 6 },
+  ];
+
+  const tianfuGroup = [
+    { star: ZIWEI_MAJOR_STARS.tianfu, offset: 0 },
+    { star: ZIWEI_MAJOR_STARS.taiyin, offset: 1 },
+    { star: ZIWEI_MAJOR_STARS.tanlang, offset: 2 },
+    { star: ZIWEI_MAJOR_STARS.jumen, offset: 3 },
+    { star: ZIWEI_MAJOR_STARS.tianxiang, offset: 4 },
+    { star: ZIWEI_MAJOR_STARS.tianliang, offset: 5 },
+    { star: ZIWEI_MAJOR_STARS.qisha, offset: 6 },
+    { star: ZIWEI_MAJOR_STARS.pojun, offset: 7 },
+  ];
+
+  ziweiGroup.forEach(({ star, offset }) => addStar(normalizeIndex(ziweiIndex + offset), star, 'major'));
+  tianfuGroup.forEach(({ star, offset }) => addStar(normalizeIndex(tianfuIndex + offset), star, 'major'));
+
+  const minorBase = normalizeIndex(lunarDay + timeBranchIndex);
+  const minorGroup = [
+    { star: ZIWEI_MINOR_STARS.wenchang, offset: 0 },
+    { star: ZIWEI_MINOR_STARS.wenqu, offset: 4 },
+    { star: ZIWEI_MINOR_STARS.zuofu, offset: 6 },
+    { star: ZIWEI_MINOR_STARS.youbi, offset: 10 },
+    { star: ZIWEI_MINOR_STARS.huoxing, offset: 2 },
+    { star: ZIWEI_MINOR_STARS.lingxing, offset: 8 },
+    { star: ZIWEI_MINOR_STARS.tiankui, offset: 1 },
+    { star: ZIWEI_MINOR_STARS.tianyue, offset: 7 },
+  ];
+  minorGroup.forEach(({ star, offset }) => addStar(normalizeIndex(minorBase + offset), star, 'minor'));
+
+  const transformations = Object.entries(transformMap).map(([type, starKey]) => {
+    const starDef = ZIWEI_MAJOR_STARS[starKey] || ZIWEI_MINOR_STARS[starKey] || { key: starKey };
+    return {
+      type,
+      starKey,
+      starName: starDef.name || starKey,
+      starCn: starDef.cn || null,
+    };
+  });
+
+  return {
+    lunar: {
+      year: lunarYear,
+      month: lunarMonth,
+      day: lunarDay,
+      isLeap: isLeapMonth,
+      yearStem: eightChar.getYearGan(),
+      yearBranch: eightChar.getYearZhi(),
+      monthStem: eightChar.getMonthGan(),
+      monthBranch: eightChar.getMonthZhi(),
+      dayStem: eightChar.getDayGan(),
+      dayBranch: eightChar.getDayZhi(),
+      timeStem: eightChar.getTimeGan(),
+      timeBranch: eightChar.getTimeZhi(),
+    },
+    mingPalace: {
+      index: mingIndex,
+      branch: palaces[mingIndex]?.branch,
+      palace: palaces[mingIndex]?.palace,
+    },
+    shenPalace: {
+      index: shenIndex,
+      branch: palaces[shenIndex]?.branch,
+      palace: palaces[shenIndex]?.palace,
+    },
+    fourTransformations: transformations,
+    palaces,
+  };
+};
+
 // --- Routes ---
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
@@ -1139,6 +2018,141 @@ app.get('/api/zodiac/compatibility', (req, res) => {
   });
 });
 
+app.get('/api/auth/google', (req, res) => {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return res.status(500).json({ error: 'Google OAuth not configured' });
+  }
+
+  const nextPath = sanitizeNextPath(req.query.next);
+  const state = buildOauthState(nextPath);
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    response_type: 'code',
+    scope: 'openid email profile',
+    state,
+    prompt: 'select_account',
+    include_granted_scopes: 'true',
+  });
+
+  return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+app.get('/api/auth/google/callback', async (req, res) => {
+  const code = typeof req.query.code === 'string' ? req.query.code : null;
+  const state = typeof req.query.state === 'string' ? req.query.state : null;
+  const oauthError = typeof req.query.error === 'string' ? req.query.error : null;
+
+  if (oauthError) {
+    const redirectUrl = buildOauthRedirectUrl({ error: oauthError });
+    return res.redirect(redirectUrl);
+  }
+
+  if (!code || !state) {
+    const redirectUrl = buildOauthRedirectUrl({ error: 'missing_code' });
+    return res.redirect(redirectUrl);
+  }
+
+  const stateEntry = consumeOauthState(state);
+  if (!stateEntry) {
+    const redirectUrl = buildOauthRedirectUrl({ error: 'invalid_state' });
+    return res.redirect(redirectUrl);
+  }
+
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    const redirectUrl = buildOauthRedirectUrl({ error: 'not_configured', nextPath: stateEntry.nextPath });
+    return res.redirect(redirectUrl);
+  }
+
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: GOOGLE_REDIRECT_URI,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const detail = await tokenRes.text();
+      console.error('Google token exchange failed:', tokenRes.status, detail);
+      const redirectUrl = buildOauthRedirectUrl({
+        error: 'token_exchange_failed',
+        nextPath: stateEntry.nextPath,
+      });
+      return res.redirect(redirectUrl);
+    }
+
+    const tokenData = await tokenRes.json();
+    const accessToken = tokenData?.access_token;
+    if (!accessToken) {
+      const redirectUrl = buildOauthRedirectUrl({
+        error: 'missing_access_token',
+        nextPath: stateEntry.nextPath,
+      });
+      return res.redirect(redirectUrl);
+    }
+
+    const profileRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!profileRes.ok) {
+      const detail = await profileRes.text();
+      console.error('Google profile fetch failed:', profileRes.status, detail);
+      const redirectUrl = buildOauthRedirectUrl({
+        error: 'profile_fetch_failed',
+        nextPath: stateEntry.nextPath,
+      });
+      return res.redirect(redirectUrl);
+    }
+
+    const profile = await profileRes.json();
+    const email = profile?.email;
+    if (!email) {
+      const redirectUrl = buildOauthRedirectUrl({ error: 'missing_email', nextPath: stateEntry.nextPath });
+      return res.redirect(redirectUrl);
+    }
+
+    const displayName =
+      profile?.name
+      || profile?.given_name
+      || profile?.family_name
+      || email.split('@')[0];
+
+    let user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      const randomPassword = crypto.randomBytes(24).toString('hex');
+      user = await prisma.user.create({
+        data: { email, name: displayName, password: randomPassword },
+      });
+    } else if (!user.name && displayName) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { name: displayName },
+      });
+    }
+
+    const token = `token_${user.id}_${Date.now()}`;
+    sessionStore.set(token, Date.now());
+
+    const redirectUrl = buildOauthRedirectUrl({
+      token,
+      user: { id: user.id, email: user.email, name: user.name },
+      nextPath: stateEntry.nextPath,
+    });
+    return res.redirect(redirectUrl);
+  } catch (error) {
+    console.error('Google OAuth callback error:', error);
+    const redirectUrl = buildOauthRedirectUrl({ error: 'server_error', nextPath: stateEntry.nextPath });
+    return res.redirect(redirectUrl);
+  }
+});
+
 app.post('/api/register', async (req, res) => {
   const { email, password, name } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
@@ -1156,24 +2170,195 @@ app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   try {
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || user.password !== password) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user || user.password !== password) {
+      return res.status(401).json({ error: 'Login failed' });
+    }
     const token = `token_${user.id}_${Date.now()}`;
     sessionStore.set(token, Date.now());
-    res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isAdmin: isAdminUser(user)
+      }
+    });
   } catch (error) { console.error(error); res.status(500).json({ error: 'Internal server error' }); }
+});
+
+app.get('/api/auth/wechat/redirect', (req, res) => {
+  if (!WECHAT_APP_ID) {
+    return res.status(500).json({ error: 'WeChat OAuth not configured' });
+  }
+  const redirectPath = sanitizeNextPath(req.query?.next) || '/profile';
+  const state = createWeChatState(redirectPath);
+  const redirectUri = encodeURIComponent(WECHAT_REDIRECT_URI);
+  const scope = encodeURIComponent(WECHAT_SCOPE);
+  const wechatUrl = `https://open.weixin.qq.com/connect/qrconnect?appid=${WECHAT_APP_ID}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${state}#wechat_redirect`;
+  res.redirect(wechatUrl);
+});
+
+app.get('/api/auth/wechat/callback', async (req, res) => {
+  const code = typeof req.query?.code === 'string' ? req.query.code : null;
+  const state = typeof req.query?.state === 'string' ? req.query.state : null;
+
+  const redirectToFrontend = (params) => {
+    const target = new URL('/login', WECHAT_FRONTEND_URL);
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== null && value !== undefined) {
+        target.searchParams.set(key, String(value));
+      }
+    });
+    res.redirect(target.toString());
+  };
+
+  if (!code || !state) {
+    return redirectToFrontend({ error: 'wechat_missing_params', provider: 'wechat' });
+  }
+  if (!WECHAT_APP_ID || !WECHAT_APP_SECRET) {
+    return redirectToFrontend({ error: 'wechat_not_configured', provider: 'wechat' });
+  }
+  const redirectPath = consumeWeChatState(state);
+  if (!redirectPath) {
+    return redirectToFrontend({ error: 'wechat_invalid_state', provider: 'wechat' });
+  }
+
+  try {
+    const tokenRes = await fetchWithTimeout(
+      `https://api.weixin.qq.com/sns/oauth2/access_token?appid=${WECHAT_APP_ID}&secret=${WECHAT_APP_SECRET}&code=${code}&grant_type=authorization_code`,
+      { method: 'GET' },
+      10000
+    );
+    if (!tokenRes.ok) {
+      const text = await tokenRes.text();
+      console.error('WeChat token error:', text);
+      return redirectToFrontend({ error: 'wechat_token_failed', provider: 'wechat' });
+    }
+    const tokenData = await tokenRes.json();
+    if (tokenData?.errcode) {
+      console.error('WeChat token response error:', tokenData);
+      return redirectToFrontend({ error: 'wechat_token_failed', provider: 'wechat' });
+    }
+
+    let profile = null;
+    if (tokenData?.access_token && tokenData?.openid) {
+      const profileRes = await fetchWithTimeout(
+        `https://api.weixin.qq.com/sns/userinfo?access_token=${tokenData.access_token}&openid=${tokenData.openid}&lang=zh_CN`,
+        { method: 'GET' },
+        10000
+      );
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        if (!profileData?.errcode) {
+          profile = profileData;
+        }
+      }
+    }
+
+    const openId = tokenData?.openid;
+    if (!openId) {
+      return redirectToFrontend({ error: 'wechat_missing_openid', provider: 'wechat' });
+    }
+    const email = `wechat_${openId}@wechat.local`;
+    const displayName = profile?.nickname || 'WeChat User';
+
+    let user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email,
+          password: crypto.randomBytes(16).toString('hex'),
+          name: displayName,
+        },
+      });
+    } else if (!user.name && displayName) {
+      user = await prisma.user.update({
+        where: { email },
+        data: { name: displayName },
+      });
+    }
+
+    const token = `token_${user.id}_${Date.now()}`;
+    sessionStore.set(token, Date.now());
+
+    const userPayload = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      isAdmin: isAdminUser(user),
+    };
+    const encodedUser = Buffer.from(JSON.stringify(userPayload)).toString('base64url');
+    return redirectToFrontend({
+      token,
+      user: encodedUser,
+      next: redirectPath,
+      provider: 'wechat',
+    });
+  } catch (error) {
+    console.error('WeChat OAuth error:', error);
+    return redirectToFrontend({ error: 'wechat_oauth_failed', provider: 'wechat' });
+  }
+});
+
+app.post('/api/password/request', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user) {
+      const token = createResetToken(user.id);
+      console.log(`[password-reset] Reset token for ${user.email}: ${token}`);
+    }
+  } catch (error) {
+    console.error('Password reset request error:', error);
+  }
+
+  res.json({
+    message: 'If an account exists for that email, a reset link has been sent.'
+  });
+});
+
+app.post('/api/password/reset', async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token || typeof token !== 'string' || !password || typeof password !== 'string') {
+    return res.status(400).json({ error: 'Reset token and new password are required' });
+  }
+
+  const userId = consumeResetToken(token);
+  if (!userId) {
+    return res.status(400).json({ error: 'Invalid or expired reset token' });
+  }
+
+  try {
+    await prisma.user.update({ where: { id: userId }, data: { password } });
+    return res.json({ message: 'Password updated' });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    return res.status(500).json({ error: 'Unable to reset password' });
+  }
 });
 
 app.get('/api/user/settings', requireAuth, async (req, res) => {
   try {
     const rows = await prisma.$queryRaw`
-      SELECT locale, preferences FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
+      SELECT locale, preferences, updatedAt FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
     `;
     const row = Array.isArray(rows) ? rows[0] : null;
+    const etag = buildSettingsEtag(row);
+    if (etag) {
+      res.set('ETag', etag);
+    }
     res.json({
       settings: {
         locale: row?.locale ?? null,
         preferences: parsePreferences(row?.preferences),
+        updatedAt: row?.updatedAt ?? null,
       },
+      etag,
     });
   } catch (error) {
     console.error(error);
@@ -1191,23 +2376,111 @@ app.put('/api/user/settings', requireAuth, async (req, res) => {
   }
 
   try {
+    const expectedUpdatedAt =
+      typeof req.body?.expectedUpdatedAt === 'string' ? req.body.expectedUpdatedAt : null;
+    const ifMatchValue = parseIfMatchHeader(req.headers['if-match']);
     const rows = await prisma.$queryRaw`
-      SELECT locale, preferences FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
+      SELECT locale, preferences, updatedAt FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
     `;
     const row = Array.isArray(rows) ? rows[0] : null;
+    const currentEtag = buildSettingsEtag(row);
+    const hasRow = Boolean(row);
+    if (ifMatchValue === '*' && !hasRow) {
+      return res.status(409).json({
+        error: 'Settings have changed. Please refresh and try again.',
+        settings: null,
+        etag: null,
+      });
+    }
+    if (ifMatchValue && ifMatchValue !== '*' && (!hasRow || ifMatchValue !== row.updatedAt)) {
+      return res.status(409).json({
+        error: 'Settings have changed. Please refresh and try again.',
+        settings: {
+          locale: row?.locale ?? null,
+          preferences: parsePreferences(row?.preferences),
+          updatedAt: row?.updatedAt ?? null,
+        },
+        etag: currentEtag,
+      });
+    }
+    if (expectedUpdatedAt && (!hasRow || expectedUpdatedAt !== row.updatedAt)) {
+      return res.status(409).json({
+        error: 'Settings have changed. Please refresh and try again.',
+        settings: {
+          locale: row?.locale ?? null,
+          preferences: parsePreferences(row?.preferences),
+          updatedAt: row?.updatedAt ?? null,
+        },
+        etag: currentEtag,
+      });
+    }
+
     const existingPreferences = parsePreferences(row?.preferences);
     const nextLocale = typeof locale === 'string' ? locale : row?.locale ?? null;
     const nextPreferences = preferences ?? existingPreferences ?? null;
     const preferencesJson = nextPreferences ? JSON.stringify(nextPreferences) : null;
+    const requiresExisting = ifMatchValue === '*' || Boolean(expectedUpdatedAt) || Boolean(ifMatchValue);
 
-    await prisma.$executeRaw`
-      INSERT INTO UserSettings (userId, locale, preferences, createdAt, updatedAt)
-      VALUES (${req.user.id}, ${nextLocale}, ${preferencesJson}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT(userId)
-      DO UPDATE SET locale = excluded.locale, preferences = excluded.preferences, updatedAt = CURRENT_TIMESTAMP
+    if (requiresExisting && !hasRow) {
+      return res.status(409).json({
+        error: 'Settings have changed. Please refresh and try again.',
+        settings: null,
+        etag: null,
+      });
+    }
+
+    const expectedMatch =
+      expectedUpdatedAt || (ifMatchValue && ifMatchValue !== '*' ? ifMatchValue : null);
+
+    const updateResult = expectedMatch
+      ? await prisma.$executeRaw`
+          INSERT INTO UserSettings (userId, locale, preferences, createdAt, updatedAt)
+          VALUES (${req.user.id}, ${nextLocale}, ${preferencesJson}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(userId)
+          DO UPDATE SET locale = excluded.locale, preferences = excluded.preferences, updatedAt = CURRENT_TIMESTAMP
+          WHERE UserSettings.updatedAt = ${expectedMatch}
+        `
+      : await prisma.$executeRaw`
+          INSERT INTO UserSettings (userId, locale, preferences, createdAt, updatedAt)
+          VALUES (${req.user.id}, ${nextLocale}, ${preferencesJson}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(userId)
+          DO UPDATE SET locale = excluded.locale, preferences = excluded.preferences, updatedAt = CURRENT_TIMESTAMP
+        `;
+
+    if (expectedMatch && updateResult === 0) {
+      const refreshRows = await prisma.$queryRaw`
+        SELECT locale, preferences, updatedAt FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
+      `;
+      const refreshRow = Array.isArray(refreshRows) ? refreshRows[0] : null;
+      const refreshEtag = buildSettingsEtag(refreshRow);
+      return res.status(409).json({
+        error: 'Settings have changed. Please refresh and try again.',
+        settings: {
+          locale: refreshRow?.locale ?? null,
+          preferences: parsePreferences(refreshRow?.preferences),
+          updatedAt: refreshRow?.updatedAt ?? null,
+        },
+        etag: refreshEtag,
+      });
+    }
+
+    const updatedRows = await prisma.$queryRaw`
+      SELECT locale, preferences, updatedAt FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
     `;
-
-    res.json({ status: 'ok', settings: { locale: nextLocale, preferences: nextPreferences } });
+    const updatedRow = Array.isArray(updatedRows) ? updatedRows[0] : null;
+    const updatedEtag = buildSettingsEtag(updatedRow);
+    if (updatedEtag) {
+      res.set('ETag', updatedEtag);
+    }
+    res.json({
+      status: 'ok',
+      settings: {
+        locale: updatedRow?.locale ?? nextLocale ?? null,
+        preferences: parsePreferences(updatedRow?.preferences) ?? nextPreferences ?? null,
+        updatedAt: updatedRow?.updatedAt ?? null,
+      },
+      etag: updatedEtag,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -1218,19 +2491,29 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
+app.get('/api/admin/health', requireAuth, requireAdmin, (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.post('/api/bazi/calculate', (req, res) => {
-  const { birthYear, birthMonth, birthDay, birthHour, gender } = req.body;
-  if (!birthYear || !birthMonth || !birthDay || birthHour === undefined || !gender) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  const validation = validateBaziInput(req.body);
+  if (!validation.ok) {
+    const message = validation.reason === 'whitespace'
+      ? 'Whitespace-only input is not allowed'
+      : 'Missing required fields';
+    return res.status(400).json({ error: message });
   }
 
   try {
-    const result = performCalculation(req.body);
+    const payload = validation.payload;
+    const result = getBaziCalculation(payload);
+    const timeMeta = buildBirthTimeMeta(payload);
     // basic returns pillars + fiveElements
     res.json({
       pillars: result.pillars,
       fiveElements: result.fiveElements,
       fiveElementsPercent: result.fiveElementsPercent,
+      ...timeMeta,
     });
   } catch (e) {
     console.error(e);
@@ -1239,40 +2522,36 @@ app.post('/api/bazi/calculate', (req, res) => {
 });
 
 app.post('/api/bazi/full-analysis', requireAuth, (req, res) => {
-  const { birthYear, birthMonth, birthDay, birthHour, gender } = req.body;
-  if (!birthYear || !birthMonth || !birthDay || birthHour === undefined || !gender) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  const validation = validateBaziInput(req.body);
+  if (!validation.ok) {
+    const message = validation.reason === 'whitespace'
+      ? 'Whitespace-only input is not allowed'
+      : 'Missing required fields';
+    return res.status(400).json({ error: message });
   }
 
   try {
-    const result = performCalculation(req.body);
-    res.json(result);
+    const payload = validation.payload;
+    const result = getBaziCalculation(payload);
+    const timeMeta = buildBirthTimeMeta(payload);
+    res.json({ ...result, ...timeMeta });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Calculation error' });
   }
 });
 
-app.post('/api/bazi/records', requireAuth, async (req, res) => {
-  const {
-    birthYear,
-    birthMonth,
-    birthDay,
-    birthHour,
-    gender,
-    birthLocation,
-    timezone,
-    result: providedResult,
-  } = req.body || {};
+app.post('/api/ziwei/calculate', (req, res) => {
+  const { birthYear, birthMonth, birthDay, birthHour, gender } = req.body || {};
+  if (!birthYear || !birthMonth || !birthDay || birthHour === undefined || !gender) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
 
   const birthYearNumber = Number(birthYear);
   const birthMonthNumber = Number(birthMonth);
   const birthDayNumber = Number(birthDay);
   const birthHourNumber = Number(birthHour);
 
-  if (!gender) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
   if (
     !Number.isInteger(birthYearNumber)
     || birthYearNumber < 1
@@ -1291,12 +2570,65 @@ app.post('/api/bazi/records', requireAuth, async (req, res) => {
   }
 
   try {
-    const calculationPayload = {
+    const payload = {
       ...req.body,
       birthYear: birthYearNumber,
       birthMonth: birthMonthNumber,
       birthDay: birthDayNumber,
       birthHour: birthHourNumber,
+    };
+    const result = calculateZiweiChart(payload);
+    const timeMeta = buildBirthTimeMeta(payload);
+    res.json({ ...result, ...timeMeta });
+  } catch (error) {
+    console.error('Ziwei calculation error:', error);
+    res.status(500).json({ error: 'Calculation error' });
+  }
+});
+
+app.post('/api/bazi/records', requireAuth, async (req, res) => {
+  const validation = validateBaziInput(req.body);
+  if (!validation.ok) {
+    const message = validation.reason === 'whitespace'
+      ? 'Whitespace-only input is not allowed'
+      : 'Missing required fields';
+    return res.status(400).json({ error: message });
+  }
+
+  const submitKey = buildBaziSubmitKey(req.user.id, validation.payload);
+  const inFlight = submitKey ? baziSubmitInFlight.get(submitKey) : null;
+  if (inFlight) {
+    try {
+      const record = await inFlight;
+      if (!record) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      return res.json({ record: serializeRecordWithTimezone(record) });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  const createRecord = async () => {
+    const {
+      birthYear,
+      birthMonth,
+      birthDay,
+      birthHour,
+      gender,
+      birthLocation,
+      timezone,
+      result: providedResult,
+    } = validation.payload;
+
+    const calculationPayload = {
+      ...validation.payload,
+      birthYear,
+      birthMonth,
+      birthDay,
+      birthHour,
+      gender,
     };
     const normalizedProvidedResult =
       providedResult && typeof providedResult === 'object' ? providedResult : null;
@@ -1305,7 +2637,7 @@ app.post('/api/bazi/records', requireAuth, async (req, res) => {
       || !normalizedProvidedResult?.fiveElements
       || !normalizedProvidedResult?.tenGods
       || !normalizedProvidedResult?.luckCycles;
-    const computedResult = needsCalculation ? performCalculation(calculationPayload) : null;
+    const computedResult = needsCalculation ? getBaziCalculation(calculationPayload) : null;
     const finalResult = {
       pillars: normalizedProvidedResult?.pillars ?? computedResult?.pillars,
       fiveElements: normalizedProvidedResult?.fiveElements ?? computedResult?.fiveElements,
@@ -1314,16 +2646,18 @@ app.post('/api/bazi/records', requireAuth, async (req, res) => {
     };
 
     if (!finalResult.pillars || !finalResult.fiveElements) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return null;
     }
 
-    const record = await prisma.baziRecord.create({
+    primeBaziCalculationCache(calculationPayload, finalResult);
+
+    return prisma.baziRecord.create({
       data: {
         userId: req.user.id,
-        birthYear: birthYearNumber,
-        birthMonth: birthMonthNumber,
-        birthDay: birthDayNumber,
-        birthHour: birthHourNumber,
+        birthYear,
+        birthMonth,
+        birthDay,
+        birthHour,
         gender,
         birthLocation: typeof birthLocation === 'string' && birthLocation.trim()
           ? birthLocation.trim()
@@ -1335,20 +2669,483 @@ app.post('/api/bazi/records', requireAuth, async (req, res) => {
         luckCycles: finalResult.luckCycles ? JSON.stringify(finalResult.luckCycles) : null,
       },
     });
+  };
 
-    res.json({ record: serializeRecord(record) });
+  const createPromise = createRecord();
+  if (submitKey) {
+    baziSubmitInFlight.set(submitKey, createPromise);
+  }
+
+  try {
+    const record = await createPromise;
+    if (!record) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    return res.json({ record: serializeRecordWithTimezone(record) });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    if (submitKey) {
+      baziSubmitInFlight.delete(submitKey);
+    }
   }
 });
 
-app.get('/api/bazi/records', requireAuth, async (req, res) => {
-  const records = await prisma.baziRecord.findMany({
-    where: { userId: req.user.id },
-    orderBy: { createdAt: 'desc' },
+const normalizeRangeFilter = (rangeDays) => {
+  if (typeof rangeDays === 'string') {
+    const normalized = rangeDays.trim().toLowerCase();
+    if (normalized === 'today') return { rangeType: 'today', rangeDays: null };
+    if (normalized === 'week' || normalized === 'this-week' || normalized === 'thisweek') {
+      return { rangeType: 'week', rangeDays: null };
+    }
+  }
+  const parsedRange = Number(rangeDays);
+  const validRangeDays = Number.isFinite(parsedRange) && parsedRange > 0 ? parsedRange : null;
+  return { rangeType: null, rangeDays: validRangeDays };
+};
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const getStartOfLocalDayUtc = (baseDate, offsetMinutes) => {
+  const offsetMs = offsetMinutes * 60000;
+  const localNow = new Date(baseDate.getTime() + offsetMs);
+  const localStartUtcMs = Date.UTC(
+    localNow.getUTCFullYear(),
+    localNow.getUTCMonth(),
+    localNow.getUTCDate()
+  );
+  return new Date(localStartUtcMs - offsetMs);
+};
+
+const getStartOfLocalWeekUtc = (baseDate, offsetMinutes) => {
+  const offsetMs = offsetMinutes * 60000;
+  const localNow = new Date(baseDate.getTime() + offsetMs);
+  const localStartUtcMs = Date.UTC(
+    localNow.getUTCFullYear(),
+    localNow.getUTCMonth(),
+    localNow.getUTCDate()
+  );
+  const day = localNow.getUTCDay();
+  const diffToMonday = (day + 6) % 7;
+  const weekStartLocalUtcMs = localStartUtcMs - diffToMonday * MS_PER_DAY;
+  return new Date(weekStartLocalUtcMs - offsetMs);
+};
+
+const parseRecordsQuery = (source) => {
+  const {
+    page = '1',
+    pageSize = '100',
+    q,
+    gender,
+    rangeDays,
+    sort,
+    status,
+    timezoneOffsetMinutes,
+  } = source || {};
+
+  const parsedPage = Number(page);
+  const parsedPageSize = Number(pageSize);
+  const safePage = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.trunc(parsedPage) : 1;
+  const safePageSize = Number.isFinite(parsedPageSize) && parsedPageSize > 0
+    ? Math.min(Math.trunc(parsedPageSize), 500)
+    : 100;
+
+  const normalizedQuery = typeof q === 'string' ? q.trim() : '';
+  const normalizedGender = typeof gender === 'string' ? gender.trim().toLowerCase() : '';
+  const validGender = normalizedGender === 'male' || normalizedGender === 'female'
+    ? normalizedGender
+    : null;
+  const { rangeType, rangeDays: validRangeDays } = normalizeRangeFilter(rangeDays);
+  const resolvedTimezoneOffsetMinutes = parseTimezoneOffsetMinutes(timezoneOffsetMinutes);
+  const sortOption = typeof sort === 'string' && sort.trim() ? sort.trim() : 'created-desc';
+  const statusOption = typeof status === 'string' ? status.trim().toLowerCase() : 'active';
+  const normalizedStatus = ['active', 'deleted', 'all'].includes(statusOption) ? statusOption : 'active';
+
+  return {
+    safePage,
+    safePageSize,
+    normalizedQuery,
+    validGender,
+    validRangeDays,
+    rangeType,
+    timezoneOffsetMinutes: resolvedTimezoneOffsetMinutes,
+    sortOption,
+    normalizedStatus,
+  };
+};
+
+const parseSearchTerms = (input) => {
+  if (!input) return [];
+  const terms = [];
+  const regex = /"([^"]+)"|'([^']+)'|(\S+)/g;
+  let match = null;
+  while ((match = regex.exec(input)) !== null) {
+    const rawTerm = (match[1] || match[2] || match[3] || '').trim();
+    const cleaned = rawTerm.replace(/^["']+|["']+$/g, '').trim();
+    if (cleaned) terms.push(cleaned);
+  }
+  return terms;
+};
+
+const buildSearchOr = (term) => ([
+  { birthLocation: { contains: term, mode: 'insensitive' } },
+  { timezone: { contains: term, mode: 'insensitive' } },
+  { gender: { contains: term, mode: 'insensitive' } },
+  { pillars: { contains: term, mode: 'insensitive' } },
+]);
+
+const getBaziRecords = async (req, res, source) => {
+  const {
+    safePage,
+    safePageSize,
+    normalizedQuery,
+    validGender,
+    validRangeDays,
+    rangeType,
+    timezoneOffsetMinutes,
+    sortOption,
+    normalizedStatus,
+  } = parseRecordsQuery(source);
+  const hasQuotes = normalizedQuery.includes('"') || normalizedQuery.includes("'");
+  const searchTerms = normalizedQuery
+    ? (hasQuotes ? parseSearchTerms(normalizedQuery) : [normalizedQuery])
+    : [];
+  const normalizedTerms = searchTerms
+    .map((term) => term.toLowerCase())
+    .filter(Boolean);
+  const shouldFilterInMemory = normalizedTerms.length > 0;
+  const birthSortDirection = sortOption === 'birth-asc'
+    ? 'asc'
+    : sortOption === 'birth-desc'
+      ? 'desc'
+      : null;
+
+  const baseWhere = { userId: req.user.id };
+  const where = { userId: req.user.id };
+  const deletedIds = await fetchDeletedRecordIds(req.user.id);
+
+  if (normalizedStatus === 'active' && deletedIds.length) {
+    baseWhere.id = { notIn: deletedIds };
+    where.id = { notIn: deletedIds };
+  } else if (normalizedStatus === 'deleted') {
+    if (!deletedIds.length) {
+      return res.json({
+        records: [],
+        hasMore: false,
+        totalCount: 0,
+        filteredCount: 0,
+      });
+    }
+    baseWhere.id = { in: deletedIds };
+    where.id = { in: deletedIds };
+  }
+  if (validGender) where.gender = validGender;
+  if (rangeType === 'today') {
+    const offsetMinutes = Number.isFinite(timezoneOffsetMinutes) ? timezoneOffsetMinutes : 0;
+    const start = getStartOfLocalDayUtc(new Date(), offsetMinutes);
+    where.createdAt = { gte: start };
+  } else if (rangeType === 'week') {
+    const offsetMinutes = Number.isFinite(timezoneOffsetMinutes) ? timezoneOffsetMinutes : 0;
+    const start = getStartOfLocalWeekUtc(new Date(), offsetMinutes);
+    where.createdAt = { gte: start };
+  } else if (validRangeDays) {
+    where.createdAt = { gte: new Date(Date.now() - validRangeDays * 24 * 60 * 60 * 1000) };
+  }
+  if (!shouldFilterInMemory && normalizedQuery) {
+    if (searchTerms.length > 1) {
+      where.AND = searchTerms.map((term) => ({ OR: buildSearchOr(term) }));
+    } else if (searchTerms.length === 1) {
+      where.OR = buildSearchOr(searchTerms[0]);
+    }
+  }
+
+  let orderBy = { createdAt: 'desc' };
+  if (sortOption === 'created-asc') {
+    orderBy = { createdAt: 'asc' };
+  } else if (sortOption === 'birth-desc') {
+    orderBy = [
+      { birthYear: 'desc' },
+      { birthMonth: 'desc' },
+      { birthDay: 'desc' },
+      { birthHour: 'desc' },
+      { createdAt: 'desc' },
+    ];
+  } else if (sortOption === 'birth-asc') {
+    orderBy = [
+      { birthYear: 'asc' },
+      { birthMonth: 'asc' },
+      { birthDay: 'asc' },
+      { birthHour: 'asc' },
+      { createdAt: 'desc' },
+    ];
+  }
+
+  const skip = (safePage - 1) * safePageSize;
+
+  if (shouldFilterInMemory) {
+    const [totalCount, records] = await Promise.all([
+      prisma.baziRecord.count({ where: baseWhere }),
+      prisma.baziRecord.findMany({ where, orderBy }),
+    ]);
+    const filteredRecords = records.filter((record) =>
+      normalizedTerms.every((term) => recordMatchesQuery(record, term))
+    );
+    const sortedRecords = birthSortDirection
+      ? sortRecordsByBirth(filteredRecords, birthSortDirection)
+      : filteredRecords;
+    const filteredCount = sortedRecords.length;
+    const pageSlice = sortedRecords.slice(skip, skip + safePageSize + 1);
+    const hasMore = pageSlice.length > safePageSize;
+    const pageRecords = hasMore ? pageSlice.slice(0, safePageSize) : pageSlice;
+
+    return res.json({
+      records: pageRecords.map(serializeRecordWithTimezone),
+      hasMore,
+      totalCount,
+      filteredCount,
+    });
+  }
+
+  if (birthSortDirection) {
+    const [totalCount, records] = await Promise.all([
+      prisma.baziRecord.count({ where: baseWhere }),
+      prisma.baziRecord.findMany({ where }),
+    ]);
+    const sortedRecords = sortRecordsByBirth(records, birthSortDirection);
+    const filteredCount = sortedRecords.length;
+    const pageSlice = sortedRecords.slice(skip, skip + safePageSize + 1);
+    const hasMore = pageSlice.length > safePageSize;
+    const pageRecords = hasMore ? pageSlice.slice(0, safePageSize) : pageSlice;
+
+    return res.json({
+      records: pageRecords.map(serializeRecordWithTimezone),
+      hasMore,
+      totalCount,
+      filteredCount,
+    });
+  }
+
+  const [totalCount, filteredCount, records] = await Promise.all([
+    prisma.baziRecord.count({ where: baseWhere }),
+    prisma.baziRecord.count({ where }),
+    prisma.baziRecord.findMany({
+      where,
+      orderBy,
+      skip,
+      take: safePageSize + 1,
+    }),
+  ]);
+  const hasMore = records.length > safePageSize;
+  const pageRecords = hasMore ? records.slice(0, safePageSize) : records;
+
+  return res.json({
+    records: pageRecords.map(serializeRecordWithTimezone),
+    hasMore,
+    totalCount,
+    filteredCount,
   });
-  res.json({ records: records.map(serializeRecord) });
+};
+
+app.get('/api/bazi/records', requireAuth, async (req, res) => {
+  return getBaziRecords(req, res, req.query);
+});
+
+app.post('/api/bazi/records/search', requireAuth, async (req, res) => {
+  return getBaziRecords(req, res, req.body);
+});
+
+app.get('/api/bazi/records/export', requireAuth, async (req, res) => {
+  const {
+    normalizedQuery,
+    validGender,
+    validRangeDays,
+    sortOption,
+    normalizedStatus,
+  } = parseRecordsQuery(req.query);
+  const hasQuotes = normalizedQuery.includes('"') || normalizedQuery.includes("'");
+  const searchTerms = normalizedQuery
+    ? (hasQuotes ? parseSearchTerms(normalizedQuery) : [normalizedQuery])
+    : [];
+  const normalizedTerms = searchTerms
+    .map((term) => term.toLowerCase())
+    .filter(Boolean);
+  const shouldFilterInMemory = normalizedTerms.length > 0;
+
+  const where = { userId: req.user.id };
+  const deletedIds = await fetchDeletedRecordIds(req.user.id);
+
+  if (normalizedStatus === 'active' && deletedIds.length) {
+    where.id = { notIn: deletedIds };
+  } else if (normalizedStatus === 'deleted') {
+    if (!deletedIds.length) {
+      return res.json({
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        records: [],
+      });
+    }
+    where.id = { in: deletedIds };
+  }
+  if (validGender) where.gender = validGender;
+  if (validRangeDays) {
+    where.createdAt = { gte: new Date(Date.now() - validRangeDays * 24 * 60 * 60 * 1000) };
+  }
+  if (!shouldFilterInMemory && normalizedQuery) {
+    if (searchTerms.length > 1) {
+      where.AND = searchTerms.map((term) => ({ OR: buildSearchOr(term) }));
+    } else if (searchTerms.length === 1) {
+      where.OR = buildSearchOr(searchTerms[0]);
+    }
+  }
+
+  let orderBy = { createdAt: 'desc' };
+  if (sortOption === 'created-asc') {
+    orderBy = { createdAt: 'asc' };
+  } else if (sortOption === 'birth-desc') {
+    orderBy = [
+      { birthYear: 'desc' },
+      { birthMonth: 'desc' },
+      { birthDay: 'desc' },
+      { birthHour: 'desc' },
+      { createdAt: 'desc' },
+    ];
+  } else if (sortOption === 'birth-asc') {
+    orderBy = [
+      { birthYear: 'asc' },
+      { birthMonth: 'asc' },
+      { birthDay: 'asc' },
+      { birthHour: 'asc' },
+      { createdAt: 'desc' },
+    ];
+  }
+
+  let records = await prisma.baziRecord.findMany({
+    where,
+    orderBy,
+  });
+  if (shouldFilterInMemory) {
+    records = records.filter((record) =>
+      normalizedTerms.every((term) => recordMatchesQuery(record, term))
+    );
+  }
+  res.json({
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    records: records.map(serializeRecordWithTimezone),
+  });
+});
+
+app.post('/api/bazi/records/import', requireAuth, async (req, res) => {
+  const incoming = Array.isArray(req.body) ? req.body : req.body?.records;
+  if (!Array.isArray(incoming) || !incoming.length) {
+    return res.status(400).json({ error: 'No records provided' });
+  }
+
+  const toCreate = [];
+  const errorIndices = [];
+  const importEntries = [];
+  incoming.forEach((raw, index) => {
+    const record = buildImportRecord(raw, req.user.id);
+    if (record) {
+      importEntries.push({ index, record });
+      toCreate.push(record);
+    } else {
+      errorIndices.push(index);
+    }
+  });
+
+  if (!toCreate.length) {
+    return res.status(400).json({ error: 'No valid records found' });
+  }
+
+  try {
+    const result = await prisma.baziRecord.createMany({ data: toCreate });
+    res.json({
+      created: result.count,
+      skipped: incoming.length - toCreate.length,
+      errors: errorIndices.length ? errorIndices.slice(0, 5) : undefined,
+    });
+  } catch (error) {
+    console.error('Import error (bulk):', error);
+    let created = 0;
+    const failedIndices = [];
+    for (const entry of importEntries) {
+      try {
+        await prisma.baziRecord.create({ data: entry.record });
+        created += 1;
+      } catch (entryError) {
+        console.error('Import error (single):', entryError);
+        failedIndices.push(entry.index);
+      }
+    }
+
+    if (!created) {
+      return res.status(500).json({
+        error: 'Unable to import records',
+        failed: failedIndices.slice(0, 5),
+      });
+    }
+
+    res.json({
+      created,
+      skipped: incoming.length - toCreate.length,
+      failed: failedIndices.length ? failedIndices.slice(0, 5) : undefined,
+      errors: errorIndices.length ? errorIndices.slice(0, 5) : undefined,
+    });
+  }
+});
+
+app.post('/api/bazi/records/bulk-delete', requireAuth, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : null;
+  if (!ids || !ids.length) {
+    return res.status(400).json({ error: 'No record ids provided' });
+  }
+
+  const normalizedIds = ids
+    .map((id) => parseIdParam(id))
+    .filter((id) => id !== null);
+
+  if (!normalizedIds.length) {
+    return res.status(400).json({ error: 'No valid record ids provided' });
+  }
+
+  const existing = await prisma.baziRecord.findMany({
+    where: { userId: req.user.id, id: { in: normalizedIds } },
+    select: { id: true },
+  });
+  const existingIds = existing.map((record) => record.id);
+
+  if (!existingIds.length) {
+    return res.status(404).json({ error: 'No matching records found' });
+  }
+
+  await ensureSoftDeleteReady();
+  await prisma.$executeRaw(
+    Prisma.sql`
+      INSERT OR IGNORE INTO BaziRecordTrash (userId, recordId)
+      VALUES ${Prisma.join(existingIds.map((id) => Prisma.sql`(${req.user.id}, ${id})`))}
+    `
+  );
+
+  res.json({
+    deleted: existingIds.length,
+    requested: normalizedIds.length,
+    skipped: normalizedIds.length - existingIds.length,
+  });
+});
+
+app.get('/api/bazi/records/:id', requireAuth, async (req, res) => {
+  const recordId = parseIdParam(req.params.id);
+  if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
+  const record = await prisma.baziRecord.findFirst({
+    where: { id: recordId, userId: req.user.id },
+  });
+  if (!record) return res.status(404).json({ error: 'Record not found' });
+  if (await isRecordSoftDeleted(req.user.id, recordId)) {
+    return res.status(404).json({ error: 'Record not found' });
+  }
+  res.json({ record: serializeRecordWithTimezone(record) });
 });
 
 app.delete('/api/bazi/records/:id', requireAuth, async (req, res) => {
@@ -1359,11 +3156,42 @@ app.delete('/api/bazi/records/:id', requireAuth, async (req, res) => {
   });
   if (!record) return res.status(404).json({ error: 'Record not found' });
 
-  await prisma.$transaction([
-    prisma.favorite.deleteMany({ where: { recordId } }),
-    prisma.baziRecord.delete({ where: { id: recordId } }),
-  ]);
-  res.json({ status: 'ok' });
+  invalidateBaziCalculationCache({
+    birthYear: record.birthYear,
+    birthMonth: record.birthMonth,
+    birthDay: record.birthDay,
+    birthHour: record.birthHour,
+    gender: record.gender,
+  });
+
+  await ensureSoftDeleteReady();
+  await prisma.$executeRaw`
+    INSERT OR IGNORE INTO BaziRecordTrash (userId, recordId) VALUES (${req.user.id}, ${recordId})
+  `;
+  res.json({ status: 'ok', softDeleted: true });
+});
+
+app.post('/api/bazi/records/:id/restore', requireAuth, async (req, res) => {
+  const recordId = parseIdParam(req.params.id);
+  if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
+  const record = await prisma.baziRecord.findFirst({
+    where: { id: recordId, userId: req.user.id },
+  });
+  if (!record) return res.status(404).json({ error: 'Record not found' });
+
+  await ensureSoftDeleteReady();
+  const deletedRows = await prisma.$queryRaw`
+    SELECT id FROM BaziRecordTrash WHERE userId = ${req.user.id} AND recordId = ${recordId} LIMIT 1
+  `;
+  if (!deletedRows.length) {
+    return res.status(404).json({ error: 'Record not deleted' });
+  }
+
+  await prisma.$executeRaw`
+    DELETE FROM BaziRecordTrash WHERE userId = ${req.user.id} AND recordId = ${recordId}
+  `;
+
+  res.json({ status: 'ok', record: serializeRecordWithTimezone(record) });
 });
 
 app.post('/api/favorites', requireAuth, async (req, res) => {
@@ -1372,33 +3200,54 @@ app.post('/api/favorites', requireAuth, async (req, res) => {
 
   const record = await prisma.baziRecord.findFirst({ where: { id: recordId, userId: req.user.id } });
   if (!record) return res.status(404).json({ error: 'Record not found' });
+  if (await isRecordSoftDeleted(req.user.id, recordId)) {
+    return res.status(404).json({ error: 'Record not found' });
+  }
 
-  const favorite = await prisma.favorite.upsert({
+  const existingFavorite = await prisma.favorite.findUnique({
     where: { userId_recordId: { userId: req.user.id, recordId } },
-    update: {},
-    create: { userId: req.user.id, recordId },
-    include: { record: true },
   });
+  if (existingFavorite) {
+    return res.status(409).json({ error: 'Favorite already exists' });
+  }
+
+  let favorite = null;
+  try {
+    favorite = await prisma.favorite.create({
+      data: { userId: req.user.id, recordId },
+      include: { record: true },
+    });
+  } catch (error) {
+    if (error?.code === 'P2002') {
+      return res.status(409).json({ error: 'Favorite already exists' });
+    }
+    console.error('Failed to create favorite:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 
   res.json({
     favorite: {
       ...favorite,
-      record: serializeRecord(favorite.record),
+      record: serializeRecordWithTimezone(favorite.record),
     },
   });
 });
 
 app.get('/api/favorites', requireAuth, async (req, res) => {
   const favorites = await prisma.favorite.findMany({
-    where: { userId: req.user.id },
+    where: { userId: req.user.id, record: { userId: req.user.id } },
     include: { record: true },
     orderBy: { createdAt: 'desc' },
   });
+  const deletedIds = await fetchDeletedRecordIds(req.user.id);
+  const deletedSet = new Set(deletedIds);
   res.json({
-    favorites: favorites.map((favorite) => ({
-      ...favorite,
-      record: serializeRecord(favorite.record),
-    })),
+    favorites: favorites
+      .filter((favorite) => !deletedSet.has(favorite.recordId))
+      .map((favorite) => ({
+        ...favorite,
+        record: serializeRecordWithTimezone(favorite.record),
+      })),
   });
 });
 
@@ -1417,68 +3266,57 @@ app.post('/api/bazi/ai-interpret', requireAuth, async (req, res) => {
   const { pillars, fiveElements, tenGods, strength } = req.body;
   if (!pillars) return res.status(400).json({ error: 'Bazi data required' });
 
-  const elementLines = fiveElements
-    ? Object.entries(fiveElements).map(([key, value]) => `- ${key}: ${value}`).join('\n')
-    : '- Not provided';
-  const tenGodLines = Array.isArray(tenGods)
-    ? tenGods
-      .filter((tg) => tg?.strength > 0)
-      .sort((a, b) => b.strength - a.strength)
-      .slice(0, 5)
-      .map((tg) => `- ${tg.name}: ${tg.strength}`)
-      .join('\n')
-    : '- Not provided';
-  const luckLines = Array.isArray(req.body.luckCycles)
-    ? req.body.luckCycles.map((cycle) => `- ${cycle.range}: ${cycle.stem}${cycle.branch}`).join('\n')
-    : '- Not provided';
+  const { system, user, fallback } = buildBaziPrompt({
+    pillars,
+    fiveElements,
+    tenGods,
+    luckCycles: req.body.luckCycles,
+    strength
+  });
 
-  const system = 'You are a seasoned BaZi practitioner. Provide a concise, grounded interpretation in Markdown with sections: Summary, Key Patterns, Advice. Keep under 220 words.';
-  const user = `
-Day Master: ${pillars?.day?.stem || 'Unknown'} (${pillars?.day?.elementStem || 'Unknown'})
-Month Pillar: ${pillars?.month?.stem || 'Unknown'} ${pillars?.month?.branch || 'Unknown'} (${pillars?.month?.elementBranch || 'Unknown'})
-Five Elements:
-${elementLines}
-Ten Gods (top):
-${tenGodLines}
-Luck Cycles:
-${luckLines}
-Strength Notes: ${strength || 'Not provided'}
-  `.trim();
-
-  const fallback = () => `
-## 🔮 AI BaZi Analysis
-**Summary:** A ${pillars?.day?.elementStem || 'balanced'} Day Master chart with notable elemental distribution.
-
-**Key Patterns:**
-${tenGodLines}
-
-**Advice:**
-Focus on balancing elements that are lower in count and lean into favorable cycles.
-  `.trim();
-
-  const content = await generateAIContent({ system, user, fallback });
-  res.json({ content });
+  const release = acquireAiGuard(req.user.id);
+  if (!release) {
+    return res.status(429).json({ error: AI_CONCURRENCY_ERROR });
+  }
+  try {
+    const content = await generateAIContent({ system, user, fallback });
+    res.json({ content });
+  } finally {
+    release();
+  }
 });
 
 
 // --- Tarot Endpoints ---
 
 const TAROT_SPREADS = {
-  SingleCard: { count: 1, labels: ['Insight'] },
-  ThreeCard: { count: 3, labels: ['Past', 'Present', 'Future'] },
+  SingleCard: {
+    count: 1,
+    positions: [
+      { label: 'Insight', meaning: 'The core message to focus on right now.' }
+    ]
+  },
+  ThreeCard: {
+    count: 3,
+    positions: [
+      { label: 'Past', meaning: 'What led to this moment.' },
+      { label: 'Present', meaning: 'The current energy or situation.' },
+      { label: 'Future', meaning: 'Likely direction if the path continues.' }
+    ]
+  },
   CelticCross: {
     count: 10,
-    labels: [
-      'Present',
-      'Challenge',
-      'Past',
-      'Future',
-      'Above',
-      'Below',
-      'Advice',
-      'External',
-      'Hopes/Fears',
-      'Outcome'
+    positions: [
+      { label: 'Present', meaning: 'Your current situation or heart of the matter.' },
+      { label: 'Challenge', meaning: 'The obstacle, tension, or crossing influence.' },
+      { label: 'Past', meaning: 'Recent past events or influences fading.' },
+      { label: 'Future', meaning: 'Near-future direction or next steps.' },
+      { label: 'Above', meaning: 'Conscious goals, aspirations, or ideals.' },
+      { label: 'Below', meaning: 'Subconscious roots, foundations, or hidden motives.' },
+      { label: 'Advice', meaning: 'Guidance on how to respond or proceed.' },
+      { label: 'External', meaning: 'Outside influences, people, or environment.' },
+      { label: 'Hopes/Fears', meaning: 'Inner desires, anxieties, or expectations.' },
+      { label: 'Outcome', meaning: 'Likely outcome if current course continues.' }
     ]
   }
 };
@@ -1492,6 +3330,7 @@ app.post('/api/tarot/draw', requireAuth, async (req, res) => {
   const { spreadType = 'SingleCard' } = req.body;
   const normalizedSpread = spreadType || 'SingleCard';
   const spreadConfig = getTarotSpreadConfig(normalizedSpread);
+  const positions = spreadConfig.positions || [];
 
   // Simple shuffle
   const shuffled = [...tarotDeck].sort(() => 0.5 - Math.random());
@@ -1500,11 +3339,22 @@ app.post('/api/tarot/draw', requireAuth, async (req, res) => {
   const drawnCards = shuffled.slice(0, drawCount).map((card, index) => ({
     ...card,
     position: index + 1,
-    positionLabel: spreadConfig.labels?.[index] || null,
+    positionLabel: positions[index]?.label || spreadConfig.labels?.[index] || null,
+    positionMeaning: positions[index]?.meaning || null,
     isReversed: Math.random() < 0.3 // 30% chance of reversal
   }));
 
-  res.json({ spreadType: normalizedSpread, cards: drawnCards });
+  res.json({
+    spreadType: normalizedSpread,
+    cards: drawnCards,
+    spreadMeta: {
+      positions: positions.map((position, index) => ({
+        position: index + 1,
+        label: position.label,
+        meaning: position.meaning
+      }))
+    }
+  });
 });
 
 app.post('/api/tarot/ai-interpret', requireAuth, async (req, res) => {
@@ -1512,11 +3362,19 @@ app.post('/api/tarot/ai-interpret', requireAuth, async (req, res) => {
   if (!cards || cards.length === 0) return res.status(400).json({ error: 'No cards provided' });
 
   const normalizedSpread = spreadType || 'SingleCard';
-  const cardList = cards.map(c =>
-    `${c.position}. ${c.positionLabel ? `${c.positionLabel} - ` : ''}${c.name} (${c.isReversed ? 'Reversed' : 'Upright'}) - ${c.isReversed ? c.meaningRev : c.meaningUp}`
-  ).join('\n');
+  const spreadConfig = getTarotSpreadConfig(normalizedSpread);
+  const positions = spreadConfig.positions || [];
+  const cardList = cards.map((card, index) => {
+    const positionLabel = card.positionLabel || positions[index]?.label;
+    const positionMeaning = card.positionMeaning || positions[index]?.meaning;
+    const positionText = [
+      positionLabel ? `${positionLabel}` : null,
+      positionMeaning ? `${positionMeaning}` : null
+    ].filter(Boolean).join(' — ');
+    return `${card.position}. ${positionText ? `${positionText} - ` : ''}${card.name} (${card.isReversed ? 'Reversed' : 'Upright'}) - ${card.isReversed ? card.meaningRev : card.meaningUp}`;
+  }).join('\n');
 
-  const system = 'You are a tarot reader. Provide a concise reading in Markdown with sections: Interpretation and Advice. Keep under 220 words. Reference key cards by name.';
+  const system = 'You are a tarot reader. Provide a concise reading in Markdown with sections: Interpretation and Advice. Use the position meanings for context. Keep under 220 words. Reference key cards by name.';
   const user = `
 Spread: ${normalizedSpread || 'Unknown'}
 Question: ${userQuestion || 'General Reading'}
@@ -1530,7 +3388,16 @@ ${cardList}
 **Advice:** Reflect on the card themes and take one grounded action aligned with the most constructive card.
   `.trim();
 
-  const content = await generateAIContent({ system, user, fallback });
+  const release = acquireAiGuard(req.user.id);
+  if (!release) {
+    return res.status(429).json({ error: AI_CONCURRENCY_ERROR });
+  }
+  let content = '';
+  try {
+    content = await generateAIContent({ system, user, fallback });
+  } finally {
+    release();
+  }
 
   // Persist the record
   try {
@@ -1686,11 +3553,237 @@ Changing Lines: ${lines}
 **Advice:** Align with your core values while remaining flexible about timing and approach.
   `.trim();
 
-  const content = await generateAIContent({ system, user, fallback });
-  res.json({ content });
+  const release = acquireAiGuard(req.user.id);
+  if (!release) {
+    return res.status(429).json({ error: AI_CONCURRENCY_ERROR });
+  }
+  try {
+    const content = await generateAIContent({ system, user, fallback });
+    res.json({ content });
+  } finally {
+    release();
+  }
 });
 
-app.listen(PORT, () => {
+app.post('/api/iching/history', requireAuth, async (req, res) => {
+  const {
+    method,
+    numbers,
+    hexagram,
+    resultingHexagram,
+    changingLines,
+    timeContext,
+    userQuestion,
+    aiInterpretation,
+  } = req.body || {};
+
+  if (!hexagram || typeof hexagram !== 'object') {
+    return res.status(400).json({ error: 'Hexagram data required' });
+  }
+
+  try {
+    const record = await prisma.ichingRecord.create({
+      data: {
+        userId: req.user.id,
+        method: typeof method === 'string' && method.trim() ? method.trim() : 'number',
+        numbers: Array.isArray(numbers) ? JSON.stringify(numbers) : null,
+        hexagram: JSON.stringify(hexagram),
+        resultingHexagram: resultingHexagram ? JSON.stringify(resultingHexagram) : null,
+        changingLines: Array.isArray(changingLines) ? JSON.stringify(changingLines) : null,
+        timeContext: timeContext ? JSON.stringify(timeContext) : null,
+        userQuestion: typeof userQuestion === 'string' ? userQuestion.trim() : null,
+        aiInterpretation: typeof aiInterpretation === 'string' ? aiInterpretation : null,
+      },
+    });
+    res.json({ record: serializeIchingRecord(record) });
+  } catch (error) {
+    console.error('Failed to save I Ching record:', error);
+    res.status(500).json({ error: 'Unable to save record' });
+  }
+});
+
+app.get('/api/iching/history', requireAuth, async (req, res) => {
+  try {
+    const records = await prisma.ichingRecord.findMany({
+      where: { userId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ records: records.map(serializeIchingRecord) });
+  } catch (error) {
+    console.error('Failed to load I Ching history:', error);
+    res.status(500).json({ error: 'Unable to load history' });
+  }
+});
+
+app.delete('/api/iching/history/:id', requireAuth, async (req, res) => {
+  const recordId = parseIdParam(req.params.id);
+  if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
+
+  try {
+    const record = await prisma.ichingRecord.findUnique({ where: { id: recordId } });
+    if (!record || record.userId !== req.user.id) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+    await prisma.ichingRecord.delete({ where: { id: recordId } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete I Ching record:', error);
+    res.status(500).json({ error: 'Unable to delete record' });
+  }
+});
+
+const server = http.createServer(app);
+
+server.on('upgrade', (req, socket, head) => {
+  if ((req.url || '').length > MAX_URL_LENGTH) {
+    socket.write('HTTP/1.1 414 Request-URI Too Long\r\nConnection: close\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  if (req.url !== WS_PATH) {
+    socket.destroy();
+    return;
+  }
+
+  const upgradeHeader = req.headers.upgrade;
+  if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
+    socket.destroy();
+    return;
+  }
+
+  const key = req.headers['sec-websocket-key'];
+  if (!key) {
+    socket.destroy();
+    return;
+  }
+
+  const acceptKey = buildWsAcceptKey(key);
+  const responseHeaders = [
+    'HTTP/1.1 101 Switching Protocols',
+    'Upgrade: websocket',
+    'Connection: Upgrade',
+    `Sec-WebSocket-Accept: ${acceptKey}`,
+  ];
+  socket.write(`${responseHeaders.join('\r\n')}\r\n\r\n`);
+
+  let buffer = head && head.length ? Buffer.from(head) : Buffer.alloc(0);
+  let isBusy = false;
+  let isClosed = false;
+
+  const sendClose = (code = 1000) => {
+    if (isClosed) return;
+    isClosed = true;
+    const payload = Buffer.alloc(2);
+    payload.writeUInt16BE(code, 0);
+    socket.write(encodeWsFrame(payload, 0x8));
+    socket.end();
+  };
+
+  const sendPong = (payload) => {
+    if (isClosed) return;
+    socket.write(encodeWsFrame(payload, 0x0a));
+  };
+
+  const streamContent = async (content) => {
+    const chunkSize = 120;
+    for (let i = 0; i < content.length; i += chunkSize) {
+      if (isClosed) return;
+      const chunk = content.slice(i, i + chunkSize);
+      sendWsJson(socket, { type: 'chunk', content: chunk });
+    }
+  };
+
+  const handleTextMessage = async (text) => {
+    if (isClosed) return;
+    let message;
+    try {
+      message = JSON.parse(text);
+    } catch {
+      sendWsJson(socket, { type: 'error', message: 'Invalid JSON payload.' });
+      sendClose(1002);
+      return;
+    }
+
+    if (message?.type !== 'bazi_ai_request') {
+      sendWsJson(socket, { type: 'error', message: 'Unsupported request type.' });
+      return;
+    }
+
+    if (isBusy) {
+      sendWsJson(socket, { type: 'error', message: 'Request already in progress.' });
+      return;
+    }
+    isBusy = true;
+
+    let release = null;
+    try {
+      const token = message?.token;
+      const user = await authorizeToken(token);
+      release = acquireAiGuard(user.id);
+      if (!release) {
+        sendWsJson(socket, { type: 'error', message: AI_CONCURRENCY_ERROR });
+        return;
+      }
+      const payload = message?.payload;
+      if (!payload?.pillars) {
+        sendWsJson(socket, { type: 'error', message: 'Bazi data required.' });
+        sendClose(1003);
+        return;
+      }
+
+      sendWsJson(socket, { type: 'start' });
+      const { system, user: userPrompt, fallback } = buildBaziPrompt(payload);
+      const content = await generateAIContent({ system, user: userPrompt, fallback });
+      await streamContent(content || '');
+      sendWsJson(socket, { type: 'done' });
+      sendClose(1000);
+    } catch (error) {
+      sendWsJson(socket, { type: 'error', message: error.message || 'AI request failed.' });
+      sendClose(1011);
+    } finally {
+      if (release) {
+        release();
+      }
+      isBusy = false;
+    }
+  };
+
+  sendWsJson(socket, { type: 'connected' });
+
+  socket.on('data', (data) => {
+    buffer = Buffer.concat([buffer, data]);
+    const result = decodeWsFrames(buffer);
+    buffer = result.remainder;
+
+    for (const frame of result.frames) {
+      if (frame.payload.length > WS_MAX_PAYLOAD) {
+        sendWsJson(socket, { type: 'error', message: 'Payload too large.' });
+        sendClose(1009);
+        return;
+      }
+
+      if (frame.opcode === 0x8) {
+        sendClose(1000);
+        return;
+      }
+      if (frame.opcode === 0x9) {
+        sendPong(frame.payload);
+        continue;
+      }
+      if (frame.opcode === 0x1) {
+        const text = frame.payload.toString('utf8');
+        void handleTextMessage(text);
+      }
+    }
+  });
+
+  socket.on('error', () => {
+    sendClose(1011);
+  });
+});
+
+server.listen(PORT, () => {
 
   console.log(`BaZi Master API running on http://localhost:${PORT}`);
 });

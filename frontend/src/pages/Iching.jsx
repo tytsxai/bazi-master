@@ -12,6 +12,9 @@ export default function Iching() {
   const [aiResult, setAiResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -25,6 +28,32 @@ export default function Iching() {
       });
     return () => { isMounted = false; };
   }, []);
+
+  const loadHistory = async () => {
+    if (!token) return;
+    setHistoryLoading(true);
+    try {
+      const res = await fetch('/api/iching/history', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Unable to load history');
+      const data = await res.json();
+      setHistory(data.records || []);
+    } catch (error) {
+      console.error(error);
+      setStatus({ type: 'error', message: 'Unable to load history.' });
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setHistory([]);
+      return;
+    }
+    loadHistory();
+  }, [isAuthenticated, token]);
 
   const filteredHexagrams = useMemo(() => {
     if (!filter.trim()) return hexagrams;
@@ -133,6 +162,69 @@ export default function Iching() {
       setStatus({ type: 'error', message: error.message });
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!isAuthenticated) {
+      setStatus({ type: 'error', message: 'Please login to save this reading.' });
+      return;
+    }
+    if (!divination?.hexagram) {
+      setStatus({ type: 'error', message: 'Divine a hexagram before saving.' });
+      return;
+    }
+    if (saveLoading) return;
+    setSaveLoading(true);
+    setStatus(null);
+    try {
+      const res = await fetch('/api/iching/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          method: divination.method,
+          numbers: divination.numbers,
+          hexagram: divination.hexagram,
+          resultingHexagram: divination.resultingHexagram,
+          changingLines: divination.changingLines,
+          timeContext: divination.timeContext,
+          userQuestion: question,
+          aiInterpretation: aiResult,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Save failed.');
+      }
+      const data = await res.json();
+      if (data.record) {
+        setHistory((prev) => [data.record, ...prev]);
+      } else {
+        await loadHistory();
+      }
+      setStatus({ type: 'success', message: 'Reading saved to history.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message || 'Save failed.' });
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const handleDeleteHistory = async (recordId) => {
+    if (!token) return;
+    const current = history.find((record) => record.id === recordId);
+    setHistory((prev) => prev.filter((record) => record.id !== recordId));
+    try {
+      const res = await fetch(`/api/iching/history/${recordId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Delete failed');
+    } catch (error) {
+      console.error(error);
+      if (current) {
+        setHistory((prev) => [current, ...prev]);
+      }
     }
   };
 
@@ -298,7 +390,7 @@ export default function Iching() {
           )}
 
           {divination?.hexagram && (
-            <div className="mt-8 flex justify-center">
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
               <button
                 type="button"
                 onClick={handleAiInterpret}
@@ -306,6 +398,14 @@ export default function Iching() {
                 className="rounded-full bg-indigo-600 px-8 py-3 font-bold text-white shadow-lg transition hover:bg-indigo-500 disabled:opacity-60"
               >
                 {aiLoading ? 'Interpreting...' : 'Reveal AI Interpretation'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saveLoading}
+                className="rounded-full border border-emerald-400/40 px-8 py-3 text-sm font-semibold text-emerald-100 transition hover:border-emerald-300 hover:text-white disabled:opacity-60"
+              >
+                {saveLoading ? 'Saving...' : 'Save to History'}
               </button>
             </div>
           )}
@@ -316,6 +416,59 @@ export default function Iching() {
               <div className="mt-4 prose prose-invert max-w-none whitespace-pre-wrap text-white/90">
                 {aiResult}
               </div>
+            </section>
+          )}
+          {isAuthenticated && (
+            <section className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-display text-2xl text-white">I Ching History</h3>
+                  <p className="text-sm text-white/60">Saved hexagrams from your recent consultations.</p>
+                </div>
+                <div className="text-xs text-white/60">
+                  {history.length} saved
+                </div>
+              </div>
+              {historyLoading ? (
+                <p className="mt-4 text-sm text-white/60">Loading history...</p>
+              ) : history.length ? (
+                <div className="mt-4 grid gap-4">
+                  {history.map((record) => (
+                    <div key={record.id} className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm text-white">
+                            {record.hexagram?.name} → {record.resultingHexagram?.name || 'No change'}
+                          </p>
+                          <p className="mt-1 text-xs text-white/60">
+                            Lines: {record.changingLines?.length ? record.changingLines.join(', ') : 'None'} · Method: {record.method}
+                          </p>
+                          {record.userQuestion && (
+                            <p className="mt-2 text-xs text-white/70">Question: {record.userQuestion}</p>
+                          )}
+                          <p className="mt-2 text-[0.7rem] uppercase tracking-[0.2em] text-white/40">
+                            Saved {new Date(record.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteHistory(record.id)}
+                          className="rounded-full border border-rose-400/40 px-3 py-1 text-xs text-rose-100 transition hover:border-rose-300 hover:text-rose-200"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      {record.aiInterpretation && (
+                        <div className="mt-3 rounded-2xl border border-purple-400/30 bg-purple-900/20 p-3 text-xs text-white/80">
+                          {record.aiInterpretation}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-white/60">No saved readings yet.</p>
+              )}
             </section>
           )}
         </div>

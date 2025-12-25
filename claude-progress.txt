@@ -22,3 +22,8 @@
 - Verified guest Bazi flow end-to-end; marked test #2 as passing. Current progress: 7/479 tests passing.
 - Next: address remaining Bazi-related functional tests (timezone/true solar time) before Tarot/Iching modules.
 - Enhanced accessibility: Ensured WCAG AA color contrast compliance (extended gold palette, fixed contrast issues in Zodiac module, added global default text color).
+- Fixed auth/profile regression by removing unsupported react-router blocker usage and added UserSettings/IchingRecord tables to Prisma.
+- Implemented I Ching history save/load/delete API + UI, added save action + history panel, and created Playwright verification script.
+- Re-verified registered + guest BaZi flows via Playwright scripts; added I Ching end-to-end verification with screenshots.
+- Marked feature_list.json test #4 as passing. Current progress: 9/479 tests passing.
+- Next: continue remaining I Ching/Tarot/Zodiac functional tests and align feature_list steps for non-BaZi modules.

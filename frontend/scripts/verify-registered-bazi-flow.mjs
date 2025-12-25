@@ -55,8 +55,14 @@ try {
 
   await registerUser();
 
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.evaluate(() => {
+    localStorage.removeItem('bazi_token');
+    localStorage.removeItem('bazi_user');
+    localStorage.removeItem('bazi_last_activity');
+  });
+  await page.reload({ waitUntil: 'networkidle' });
   await shot('step-1-home');
 
   await page.getByRole('link', { name: 'Login' }).click();
@@ -71,16 +77,14 @@ try {
   await expect(page.getByRole('button', { name: new RegExp(name) })).toBeVisible();
   await shot('step-4-logged-in');
 
-  await page.getByRole('link', { name: 'Home' }).click();
-  await page.waitForLoadState('networkidle');
-  await page.getByRole('link', { name: /BaZi.*Four Pillars/ }).click();
-  await page.waitForLoadState('networkidle');
+  await page.goto(`${baseUrl}bazi`, { waitUntil: 'networkidle' });
   await shot('step-5-bazi');
 
   await page.getByLabel('Birth Year').fill(String(birthData.birthYear));
   await page.getByLabel('Birth Month').fill(String(birthData.birthMonth));
   await page.getByLabel('Birth Day').fill(String(birthData.birthDay));
   await page.getByLabel('Birth Hour (0-23)').fill(String(birthData.birthHour));
+  await page.getByLabel('Gender').selectOption(birthData.gender);
   await page.getByLabel('Birth Location').fill(birthData.birthLocation);
   await page.getByLabel('Timezone').fill(birthData.timezone);
   await shot('step-6-bazi-filled');
@@ -119,8 +123,7 @@ try {
   }
   await shot('step-10-favorited');
 
-  await page.getByRole('link', { name: 'History' }).click();
-  await page.waitForLoadState('networkidle');
+  await page.goto(`${baseUrl}history`, { waitUntil: 'networkidle' });
   await expect(page.getByText(birthData.birthLocation)).toBeVisible();
   await shot('step-11-history');
 
@@ -128,17 +131,17 @@ try {
   await expect(page.getByText(birthData.birthLocation)).toBeVisible();
   await shot('step-12-history-refresh');
 
-  await page.getByRole('link', { name: 'Favorites' }).click();
-  await page.waitForLoadState('networkidle');
+  await page.goto(`${baseUrl}favorites`, { waitUntil: 'networkidle' });
   await expect(page.getByText(birthData.birthLocation)).toBeVisible();
   await shot('step-13-favorites');
 
   await page.getByRole('button', { name: 'Remove' }).first().click();
   await shot('step-14-favorite-removed');
 
-  await page.getByRole('link', { name: 'History' }).click();
-  await page.waitForLoadState('networkidle');
-  await page.getByRole('button', { name: 'Delete' }).first().click();
+  await page.goto(`${baseUrl}history`, { waitUntil: 'networkidle' });
+  await expect(page.getByText(birthData.birthLocation)).toBeVisible();
+  await page.getByRole('button', { name: 'Delete', exact: true }).first().click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
   await expect(page.getByText(birthData.birthLocation)).toHaveCount(0);
   await shot('step-15-history-deleted');
 
