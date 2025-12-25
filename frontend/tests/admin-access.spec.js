@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 test('Non-admin user is redirected to 403 when accessing admin area', async ({ page }) => {
+  const screenshotPath = (name) => `verification/admin-access-non-admin-${name}.png`;
+
   await page.addInitScript(() => {
     localStorage.setItem('locale', 'en-US');
     localStorage.setItem('bazi_token', 'token_user_123');
@@ -12,12 +14,16 @@ test('Non-admin user is redirected to 403 when accessing admin area', async ({ p
   });
 
   await page.goto('/admin', { waitUntil: 'domcontentloaded' });
+  await page.screenshot({ path: screenshotPath('step-1-admin-redirect') });
 
   await expect(page).toHaveURL(/\/403$/);
   await expect(page.getByRole('heading', { name: '403 - Forbidden' })).toBeVisible();
+  await page.screenshot({ path: screenshotPath('step-2-403-visible') });
 });
 
 test('Admin user can access admin area', async ({ page }) => {
+  const screenshotPath = (name) => `verification/admin-access-admin-${name}.png`;
+
   await page.addInitScript(() => {
     localStorage.setItem('locale', 'en-US');
     localStorage.setItem('bazi_token', 'token_admin_456');
@@ -29,7 +35,9 @@ test('Admin user can access admin area', async ({ page }) => {
   });
 
   await page.goto('/admin', { waitUntil: 'domcontentloaded' });
+  await page.screenshot({ path: screenshotPath('step-1-admin-page') });
 
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole('heading', { name: 'Admin' })).toBeVisible();
+  await page.screenshot({ path: screenshotPath('step-2-admin-heading') });
 });

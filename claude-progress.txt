@@ -141,3 +141,8 @@
 - Next: continue remaining Security & Access Control tests (e.g., protected routes for history/favorites/profile, admin access, etc.).
 - Verified guest history access control: added Playwright screenshots for guest /history redirect and re-ran security-guest-history.spec.js; marked feature_list.json test #32 as passing. Current progress: 55/479 tests passing.
 - Next: continue remaining Security & Access Control tests (guest access to favorites/profile, protected route redirects, admin access).
+- Restarted Colima and docker-compose services so Postgres/Redis are available; restarted frontend dev server to reclaim port 3000 from old docker container.
+- Re-ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js) with PW_NO_WEB_SERVER=1; both passed.
+- Added verification screenshots to admin-access.spec.js and verified admin/non-admin access flow via Playwright.
+- Marked feature_list.json test "[A. Security & Access Control] User role cannot access admin-only areas (if any) and gets 403/redirect" as passing. Current progress: 56/479 tests passing.
+- Next: continue remaining Security & Access Control API tests (401/403 for unauthenticated endpoints).
