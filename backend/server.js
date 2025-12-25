@@ -391,12 +391,32 @@ const callAnthropic = async ({ system, user }) => {
   return contentBlock?.trim();
 };
 
-const generateAIContent = async ({ system, user, fallback }) => {
+const normalizeProviderName = (value) =>
+  typeof value === 'string' ? value.trim().toLowerCase() : '';
+
+const resolveAiProvider = (requestedProvider) => {
+  const normalized = normalizeProviderName(requestedProvider);
+  const provider = normalized || AI_PROVIDER;
+  const providerMeta = AVAILABLE_PROVIDERS.find((item) => item.name === provider);
+  if (!providerMeta) {
+    throw new Error('Unknown AI provider.');
+  }
+  if (!providerMeta.enabled) {
+    throw new Error('Requested AI provider is not available.');
+  }
+  return provider;
+};
+
+const generateAIContent = async ({ system, user, fallback, provider }) => {
+  const resolvedProvider = resolveAiProvider(provider);
+  if (resolvedProvider === 'mock') {
+    return fallback();
+  }
   try {
-    if (AI_PROVIDER === 'openai') {
+    if (resolvedProvider === 'openai') {
       return await callOpenAI({ system, user });
     }
-    if (AI_PROVIDER === 'anthropic') {
+    if (resolvedProvider === 'anthropic') {
       return await callAnthropic({ system, user });
     }
   } catch (error) {
@@ -3079,6 +3099,12 @@ apiRouter.delete('/favorites/:id', requireAuth, async (req, res) => {
 apiRouter.post('/bazi/ai-interpret', requireAuth, async (req, res) => {
   const { pillars, fiveElements, tenGods, strength } = req.body;
   if (!pillars) return res.status(400).json({ error: 'Bazi data required' });
+  let provider = null;
+  try {
+    provider = resolveAiProvider(req.body?.provider);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'Invalid AI provider.' });
+  }
 
   const { system, user, fallback } = buildBaziPrompt({
     pillars,
@@ -3093,7 +3119,7 @@ apiRouter.post('/bazi/ai-interpret', requireAuth, async (req, res) => {
     return res.status(429).json({ error: AI_CONCURRENCY_ERROR });
   }
   try {
-    const content = await generateAIContent({ system, user, fallback });
+    const content = await generateAIContent({ system, user, fallback, provider });
     res.json({ content });
   } finally {
     release();
@@ -3111,6 +3137,12 @@ apiRouter.post('/tarot/draw', requireAuth, async (req, res) => {
 apiRouter.post('/tarot/ai-interpret', requireAuth, async (req, res) => {
   const { spreadType, cards, userQuestion } = req.body;
   if (!cards || cards.length === 0) return res.status(400).json({ error: 'No cards provided' });
+  let provider = null;
+  try {
+    provider = resolveAiProvider(req.body?.provider);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'Invalid AI provider.' });
+  }
 
   const normalizedSpread = spreadType || 'SingleCard';
   const spreadConfig = getTarotSpreadConfig(normalizedSpread);
@@ -3145,7 +3177,7 @@ ${cardList}
   }
   let content = '';
   try {
-    content = await generateAIContent({ system, user, fallback });
+    content = await generateAIContent({ system, user, fallback, provider });
   } finally {
     release();
   }
@@ -3268,6 +3300,12 @@ apiRouter.post('/iching/divine', (req, res) => {
 apiRouter.post('/iching/ai-interpret', requireAuth, async (req, res) => {
   const { hexagram, resultingHexagram, changingLines, userQuestion, method, timeContext } = req.body;
   if (!hexagram) return res.status(400).json({ error: 'Hexagram data required' });
+  let provider = null;
+  try {
+    provider = resolveAiProvider(req.body?.provider);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'Invalid AI provider.' });
+  }
 
   const lines = Array.isArray(changingLines) && changingLines.length > 0 ? changingLines.join(', ') : 'None';
   const hexagramName = typeof hexagram === 'string' ? hexagram : (hexagram?.name || 'Unknown');
@@ -3300,7 +3338,7 @@ Changing Lines: ${lines}
     return res.status(429).json({ error: AI_CONCURRENCY_ERROR });
   }
   try {
-    const content = await generateAIContent({ system, user, fallback });
+    const content = await generateAIContent({ system, user, fallback, provider });
     res.json({ content });
   } finally {
     release();
@@ -3592,10 +3630,17 @@ server.on('upgrade', (req, socket, head) => {
         sendClose(1003);
         return;
       }
+      let provider = null;
+      try {
+        provider = resolveAiProvider(message?.provider);
+      } catch (error) {
+        sendWsJson(socket, { type: 'error', message: error.message || 'Invalid AI provider.' });
+        return;
+      }
 
       sendWsJson(socket, { type: 'start' });
       const { system, user: userPrompt, fallback } = buildBaziPrompt(payload);
-      const content = await generateAIContent({ system, user: userPrompt, fallback });
+      const content = await generateAIContent({ system, user: userPrompt, fallback, provider });
       await streamContent(content || '');
       sendWsJson(socket, { type: 'done' });
       sendClose(1000);

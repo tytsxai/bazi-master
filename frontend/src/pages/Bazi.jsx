@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { getPreferredAiProvider } from '../utils/aiProvider.js';
 
 const GUEST_STORAGE_KEY = 'bazi_guest_calculation_v1';
 const LAST_SAVED_FINGERPRINT_KEY = 'bazi_last_saved_fingerprint_v1';
@@ -762,9 +763,11 @@ export default function Bazi() {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        const provider = getPreferredAiProvider();
         const message = {
           type: 'bazi_ai_request',
           token,
+          provider,
           payload
         };
         ws.send(JSON.stringify(message));
@@ -1172,6 +1175,7 @@ export default function Bazi() {
               onClick={() => setConfirmAiOpen(true)}
               className="rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 px-4 py-2 text-sm font-bold text-white shadow-lg transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!fullResult || isAiLoading}
+              data-testid="bazi-ai-interpret"
             >
               ✨ {isAiLoading ? t('bazi.aiThinking') : t('bazi.aiInterpret')}
             </button>

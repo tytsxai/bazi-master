@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { getPreferredAiProvider } from '../utils/aiProvider.js';
 
 export default function Iching() {
   const { token, isAuthenticated } = useAuth();
@@ -139,6 +140,7 @@ export default function Iching() {
     setStatus({ type: 'info', message: 'Listening to the oracle...' });
 
     try {
+      const provider = getPreferredAiProvider();
       const res = await fetch('/api/iching/ai-interpret', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -148,7 +150,8 @@ export default function Iching() {
           resultingHexagram: divination.resultingHexagram,
           method: divination.method,
           timeContext: divination.timeContext,
-          userQuestion: question
+          userQuestion: question,
+          provider
         })
       });
       if (!res.ok) {

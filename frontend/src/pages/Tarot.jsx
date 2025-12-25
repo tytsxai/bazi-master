@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { getPreferredAiProvider } from '../utils/aiProvider.js';
 
 export default function Tarot() {
   const { token, isAuthenticated } = useAuth();
@@ -12,6 +13,19 @@ export default function Tarot() {
   const [userQuestion, setUserQuestion] = useState('');
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  const celticCrossPositions = useMemo(() => ([
+    { position: 1, label: 'Present', meaning: 'Your current situation or heart of the matter.' },
+    { position: 2, label: 'Challenge', meaning: 'The obstacle, tension, or crossing influence.' },
+    { position: 3, label: 'Past', meaning: 'Recent past events or influences fading.' },
+    { position: 4, label: 'Future', meaning: 'Near-future direction or next steps.' },
+    { position: 5, label: 'Above', meaning: 'Conscious goals, aspirations, or ideals.' },
+    { position: 6, label: 'Below', meaning: 'Subconscious roots, foundations, or hidden motives.' },
+    { position: 7, label: 'Advice', meaning: 'Guidance on how to respond or proceed.' },
+    { position: 8, label: 'External', meaning: 'Outside influences, people, or environment.' },
+    { position: 9, label: 'Hopes/Fears', meaning: 'Inner desires, anxieties, or expectations.' },
+    { position: 10, label: 'Outcome', meaning: 'Likely outcome if current course continues.' }
+  ]), []);
 
   const spreadLabel = useMemo(() => {
     if (spreadType === 'ThreeCard') return 'Three Card';
@@ -74,10 +88,16 @@ export default function Tarot() {
     setStatus({ type: 'info', message: 'Consulting the oracle...' });
 
     try {
+      const provider = getPreferredAiProvider();
       const res = await fetch('/api/tarot/ai-interpret', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ spreadType: spread.spreadType, cards: spread.cards, userQuestion })
+        body: JSON.stringify({
+          spreadType: spread.spreadType,
+          cards: spread.cards,
+          userQuestion,
+          provider
+        })
       });
       if (!res.ok) throw new Error('Interpretation failed');
       const data = await res.json();
@@ -136,6 +156,9 @@ export default function Tarot() {
     }
   };
 
+  const getCardImage = (card) =>
+    card?.imageUrl || card?.image || card?.image_url || card?.imagePath || card?.image_path;
+
   const spreadGridClass =
     spread?.spreadType === 'CelticCross'
       ? 'grid-cols-5 grid-rows-4 gap-4'
@@ -190,31 +213,48 @@ export default function Tarot() {
           <div className="mt-8">
             <h2 className="mb-4 font-display text-2xl text-white">Your Spread</h2>
             <div className={`grid place-items-center ${spreadGridClass}`}>
-              {spread.cards.map((card) => (
-                <div
-                  key={card.position}
-                  className={`group relative aspect-[2/3] w-28 sm:w-32 md:w-36 perspective-1000 ${getCardSlotClass(card.position)}`}
-                >
-                  <div className="relative h-full w-full transform-style-3d transition-transform duration-700 hover:rotate-y-180">
-                    <div className="absolute h-full w-full rounded-xl border border-white/10 bg-indigo-900 shadow-xl backface-hidden flex items-center justify-center">
-                      <span className="text-2xl text-white/20">🔮</span>
-                    </div>
+              {spread.cards.map((card) => {
+                const cardImage = getCardImage(card);
 
-                    <div className="absolute h-full w-full rotate-y-180 rounded-xl border border-gold-400/50 bg-black/80 p-2 shadow-xl backface-hidden">
-                      <div className="flex h-full flex-col items-center justify-between text-center">
-                        <span className="text-[10px] text-gold-400">
-                          {card.positionLabel || `Position ${card.position}`}
-                        </span>
-                        <div>
-                          <div className="text-lg font-bold text-white">{card.name}</div>
-                          {card.isReversed && <div className="text-xs text-rose-400 uppercase tracking-wider">Reversed</div>}
+                return (
+                  <div
+                    key={card.position}
+                    data-testid="tarot-card"
+                    className={`group relative aspect-[2/3] w-28 sm:w-32 md:w-36 perspective-1000 ${getCardSlotClass(card.position)}`}
+                  >
+                    <div className="relative h-full w-full transform-style-3d transition-transform duration-700 hover:rotate-y-180">
+                      <div className="absolute h-full w-full rounded-xl border border-white/10 bg-indigo-900 shadow-xl backface-hidden flex items-center justify-center">
+                        <span className="text-2xl text-white/20">🔮</span>
+                      </div>
+
+                      <div className="absolute h-full w-full rotate-y-180 rounded-xl border border-gold-400/50 bg-black/80 p-2 shadow-xl backface-hidden">
+                        <div className="flex h-full flex-col items-center justify-between text-center">
+                          <span className="text-[10px] text-gold-400">
+                            {card.positionLabel || `Position ${card.position}`}
+                          </span>
+                          {card.positionMeaning && (
+                            <span className="text-[9px] text-white/60">{card.positionMeaning}</span>
+                          )}
+                          {cardImage && (
+                            <img
+                              src={cardImage}
+                              alt={card.name}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-20 w-full rounded-lg border border-white/10 object-cover"
+                            />
+                          )}
+                          <div>
+                            <div className="text-lg font-bold text-white">{card.name}</div>
+                            {card.isReversed && <div className="text-xs text-rose-400 uppercase tracking-wider">Reversed</div>}
+                          </div>
+                          <p className="text-[10px] text-white/70 line-clamp-4">{card.isReversed ? card.meaningRev : card.meaningUp}</p>
                         </div>
-                        <p className="text-[10px] text-white/70 line-clamp-4">{card.isReversed ? card.meaningRev : card.meaningUp}</p>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="mt-8 flex justify-center">
@@ -227,6 +267,22 @@ export default function Tarot() {
               </button>
             </div>
           </div>
+        )}
+
+        {spread?.spreadType === 'CelticCross' && (
+          <section className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-6">
+            <h3 className="font-display text-2xl text-white">Celtic Cross Positions</h3>
+            <p className="mt-2 text-sm text-white/60">Each position adds context to the story unfolding across the spread.</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {(spread.spreadMeta?.positions || celticCrossPositions).map((position) => (
+                <div key={position.position} className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                  <div className="text-xs uppercase tracking-[0.2em] text-gold-400">Position {position.position}</div>
+                  <div className="text-sm font-semibold text-white">{position.label}</div>
+                  <p className="mt-1 text-xs text-white/70">{position.meaning}</p>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {aiResult && (
@@ -254,7 +310,11 @@ export default function Tarot() {
                 </div>
               )}
               {history.map((record) => (
-                <article key={record.id} className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <article
+                  key={record.id}
+                  data-testid="tarot-history-entry"
+                  className="rounded-2xl border border-white/10 bg-black/30 p-4"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-xs uppercase tracking-[0.2em] text-white/40">{record.spreadType}</p>

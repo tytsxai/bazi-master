@@ -69,3 +69,7 @@
 - Marked feature_list.json test #14 (Favorites management flow) as passing. Current progress: 18/479 tests passing.
 - Note: init.sh fails prisma db push due to BaziRecordTrash data-loss warning (7 rows); needs --accept-data-loss or manual cleanup.
 - Next: continue Tarot/Zodiac functional tests and resolve init.sh Prisma warning.
+- Added AI provider preference selection with availability status in Profile and stored selection in user settings + localStorage; AI requests now pass preferred provider to backend and backend validates provider availability across REST + WebSocket AI endpoints.
+- Added reusable AI provider utility, new Playwright test (ai-provider.spec.js), and captured verification screenshots for the full login → provider selection → BaZi flow with AI interpretation.
+- Verified AI provider selection flow end-to-end via Playwright; marked feature_list.json test #15 as passing. Current progress: 19/479 tests passing.
+- Next: continue remaining Tarot/Zodiac functional tests and resolve init.sh Prisma data-loss warning if needed.
