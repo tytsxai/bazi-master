@@ -6,7 +6,15 @@ const screenshotPath = (name) => {
   return path.join(process.cwd(), '..', 'verification', `${stamp}-${name}.png`);
 };
 
-const apiBase = process.env.PW_API_BASE || 'http://127.0.0.1:4000';
+const resolvePort = (value) => {
+  const parsed = Number(value);
+  const port = Number.isFinite(parsed) ? Math.trunc(parsed) : NaN;
+  return Number.isFinite(port) && port > 0 ? port : null;
+};
+
+const backendPort = resolvePort(process.env.E2E_API_PORT) ?? resolvePort(process.env.BACKEND_PORT);
+const apiBase = process.env.PW_API_BASE
+  || (backendPort ? `http://127.0.0.1:${backendPort}` : 'http://127.0.0.1:4000');
 
 test('Security: Profile flow from /history matches backend data', async ({ page, request }) => {
   const consoleErrors = [];

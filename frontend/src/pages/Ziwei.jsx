@@ -77,6 +77,11 @@ export default function Ziwei() {
     const hostname = window.location.hostname;
     const port = window.location.port;
 
+    const configuredBackendPort = import.meta.env?.VITE_BACKEND_PORT;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && configuredBackendPort) {
+      return `${protocol}://${hostname}:${configuredBackendPort}/ws/ai`;
+    }
+
     if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '4000') {
       return `${protocol}://${hostname}:4000/ws/ai`;
     }

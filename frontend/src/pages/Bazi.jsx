@@ -933,7 +933,6 @@ export default function Bazi() {
             ...(clientId ? { 'X-Client-ID': clientId } : {}),
           },
           body: JSON.stringify(requestPayload),
-          keepalive: true,
         },
         { action: 'bazi_save', payload }
       );
@@ -1201,6 +1200,11 @@ export default function Bazi() {
     const host = window.location.host;
     const hostname = window.location.hostname;
     const port = window.location.port;
+
+    const configuredBackendPort = import.meta.env?.VITE_BACKEND_PORT;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && configuredBackendPort) {
+      return `${protocol}://${hostname}:${configuredBackendPort}/ws/ai`;
+    }
 
     // Local dev: frontend (any port) + backend (4000) without a reverse-proxy for websocket upgrades.
     if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '4000') {

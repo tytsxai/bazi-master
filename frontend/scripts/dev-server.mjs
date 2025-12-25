@@ -45,8 +45,15 @@ const ensureSqliteDatabaseUrl = () => {
   process.env.DATABASE_URL = `file:${sqlitePath}`;
 };
 
-const frontendPort = Number(process.env.E2E_WEB_PORT || process.env.PW_PORT || 3000);
-process.env.PORT = process.env.PORT || '4000';
+const resolvePort = (value) => {
+  const parsed = Number(value);
+  const port = Number.isFinite(parsed) ? Math.trunc(parsed) : NaN;
+  if (!Number.isFinite(port) || port <= 0) return null;
+  return port;
+};
+
+const frontendPort =
+  resolvePort(process.env.E2E_WEB_PORT) ?? resolvePort(process.env.PW_PORT) ?? 3000;
 
 const isWindows = process.platform === 'win32';
 const nodeCmd = isWindows ? 'node.exe' : 'node';
@@ -66,11 +73,63 @@ const checkPort = (port, host = '127.0.0.1') =>
 
 const forceRestart = process.env.E2E_SERVER === '1' || process.env.PW_SERVER === '1';
 
+const pickFreePort = async (host = '127.0.0.1') =>
+  new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', reject);
+    server.listen(0, host, () => {
+      const address = server.address();
+      server.close(() => {
+        if (!address || typeof address === 'string') {
+          reject(new Error('Unable to allocate a free TCP port'));
+          return;
+        }
+        resolve(address.port);
+      });
+    });
+  });
+
+const readExplicitBackendPort = () => {
+  const raw = process.env.E2E_API_PORT || process.env.BACKEND_PORT;
+  return resolvePort(raw);
+};
+
+const explicitBackendPort = readExplicitBackendPort();
+
+const pickBackendPort = async () => {
+  let port = await pickFreePort('127.0.0.1');
+  while (port === frontendPort) {
+    port = await pickFreePort('127.0.0.1');
+  }
+  return port;
+};
+
+const backendPort =
+  explicitBackendPort ?? (forceRestart
+    ? await pickBackendPort()
+    : resolvePort(process.env.PORT) ?? 4000);
+
+if (backendPort === frontendPort) {
+  console.error(`[dev-server] Backend port ${backendPort} conflicts with frontend port ${frontendPort}.`);
+  console.error('[dev-server] Set E2E_API_PORT or E2E_WEB_PORT to avoid the collision.');
+  process.exit(1);
+}
+
+process.env.BACKEND_PORT = String(backendPort);
+process.env.E2E_API_PORT = process.env.E2E_API_PORT || String(backendPort);
+process.env.PORT = String(backendPort);
+process.env.VITE_BACKEND_PORT = process.env.VITE_BACKEND_PORT || String(backendPort);
+
+process.env.AI_PROVIDER = process.env.AI_PROVIDER || 'mock';
+
+console.log(`[dev-server] Using ports: frontend=${frontendPort}, backend=${backendPort}`);
+
 const checkBackendHealth = async () => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 1000);
   try {
-    const res = await fetch('http://127.0.0.1:4000/health', { signal: controller.signal });
+    const res = await fetch(`http://127.0.0.1:${backendPort}/health`, { signal: controller.signal });
     if (!res.ok) return false;
     const data = await res.json().catch(() => null);
     return data?.status === 'ok';
@@ -146,28 +205,28 @@ const waitForPortOnHost = async (port, host, timeoutMs = 20_000) => {
 };
 
 const startBackendIfNeeded = async () => {
-  const isRunning = await checkPort(4000);
-  if (isRunning) {
-    if (forceRestart) {
-      if (killPort(4000)) {
-        console.warn('[dev-server] Force-restarting backend on port 4000.');
-      }
-      const closed = await waitForPortClosed(4000);
-      if (!closed) {
-        console.error('[dev-server] Unable to stop existing backend on port 4000.');
-        process.exit(1);
-      }
-    } else {
+  if (forceRestart) {
+    if (killPort(backendPort)) {
+      console.warn(`[dev-server] Force-restarting backend on port ${backendPort}.`);
+    }
+    const closed = await waitForPortClosed(backendPort, 10_000);
+    if (!closed) {
+      console.error(`[dev-server] Unable to stop existing backend on port ${backendPort}.`);
+      process.exit(1);
+    }
+  } else {
+    const isRunning = await checkPort(backendPort);
+    if (isRunning) {
       const healthy = await checkBackendHealth();
       if (healthy) {
-        console.log('[dev-server] Backend already running on port 4000.');
+        console.log(`[dev-server] Backend already running on port ${backendPort}.`);
         return null;
       }
-      const killed = killPort(4000);
+      const killed = killPort(backendPort);
       if (killed) {
-        console.warn('[dev-server] Restarting unresponsive backend on port 4000.');
+        console.warn(`[dev-server] Restarting unresponsive backend on port ${backendPort}.`);
       } else {
-        console.warn('[dev-server] Port 4000 in use; unable to terminate existing process.');
+        console.warn(`[dev-server] Port ${backendPort} in use; unable to terminate existing process.`);
       }
     }
   }
@@ -210,8 +269,56 @@ let backendProcess = null;
 let frontendProcess = null;
 let keepAliveTimer = null;
 let shuttingDown = false;
+let backendRestarting = false;
 let postgresStartedByScript = false;
 const postgresDataDir = path.join(rootDir, 'prisma', '.pgdata-e2e');
+
+const wireBackendExitHandler = () => {
+  if (!backendProcess) return;
+  backendProcess.on('exit', (code, signal) => {
+    if (shuttingDown) return;
+    const codeLabel = typeof code === 'number' ? String(code) : 'null';
+    const signalLabel = signal || 'null';
+    console.error(`[dev-server] Backend exited (code=${codeLabel}, signal=${signalLabel})`);
+    void restartBackend(`exit code=${codeLabel}, signal=${signalLabel}`);
+  });
+};
+
+const restartBackend = async (reason) => {
+  if (shuttingDown || backendRestarting) return;
+  backendRestarting = true;
+  try {
+    console.warn(`[dev-server] Restarting backend (${reason})...`);
+    let attempt = 0;
+    while (!shuttingDown) {
+      attempt += 1;
+      if (attempt > 1) {
+        const delayMs = Math.min(5000, 250 * 2 ** Math.min(5, attempt - 2));
+        console.warn(`[dev-server] Backend restart attempt ${attempt} in ${delayMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
+      backendProcess = await startBackendIfNeeded();
+
+      const backendListening = await waitForPort(backendPort, 30_000);
+      if (!backendListening) {
+        console.error(`[dev-server] Backend did not start listening on port ${backendPort} in time.`);
+        continue;
+      }
+
+      const backendHealthy = await waitForBackendHealth(30_000);
+      if (!backendHealthy) {
+        console.error('[dev-server] Backend /health did not become ready in time.');
+        continue;
+      }
+
+      wireBackendExitHandler();
+      return;
+    }
+  } finally {
+    backendRestarting = false;
+  }
+};
 
 const shutdown = () => {
   if (shuttingDown) return;
@@ -227,8 +334,14 @@ const shutdown = () => {
   }
 };
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+const shutdownAndExit = () => {
+  shutdown();
+  const timer = setTimeout(() => process.exit(0), 250);
+  timer.unref?.();
+};
+
+process.on('SIGINT', shutdownAndExit);
+process.on('SIGTERM', shutdownAndExit);
 process.on('exit', shutdown);
 
 if (
@@ -237,14 +350,14 @@ if (
   && process.env.PW_SKIP_RESET !== '1'
   && isPostgresProvider
 ) {
-  const backendRunning = await checkPort(4000);
+  const backendRunning = await checkPort(backendPort);
   if (backendRunning) {
-    if (killPort(4000)) {
+    if (killPort(backendPort)) {
       console.warn('[dev-server] Stopping existing backend before resetting E2E database.');
     }
-    const closed = await waitForPortClosed(4000, 10_000);
+    const closed = await waitForPortClosed(backendPort, 10_000);
     if (!closed) {
-      console.error('[dev-server] Unable to stop existing backend on port 4000 before DB reset.');
+      console.error(`[dev-server] Unable to stop existing backend on port ${backendPort} before DB reset.`);
       process.exit(1);
     }
   }
@@ -285,7 +398,7 @@ if (
   try {
     const prismaEnv = { ...process.env, DATABASE_URL: e2eDatabaseUrl };
     execSync(
-      `${nodeCmd} scripts/prisma.mjs migrate reset --force --skip-generate --schema=../prisma/schema.prisma`,
+      `${nodeCmd} scripts/prisma.mjs migrate reset --force --schema=../prisma/schema.prisma`,
       { cwd: backendDir, stdio: 'inherit', env: prismaEnv }
     );
   } catch {
@@ -302,13 +415,13 @@ if (isSqliteProvider) {
 }
 
 backendProcess = await startBackendIfNeeded();
-const backendListening = await waitForPort(4000, 20_000);
+const backendListening = await waitForPort(backendPort, 60_000);
 if (!backendListening) {
-  console.error('[dev-server] Backend did not start listening on port 4000 in time.');
+  console.error(`[dev-server] Backend did not start listening on port ${backendPort} in time.`);
   shutdown();
   process.exit(1);
 }
-const backendHealthy = await waitForBackendHealth(30_000);
+const backendHealthy = await waitForBackendHealth(60_000);
 if (!backendHealthy) {
   console.error('[dev-server] Backend /health did not become ready in time.');
   shutdown();
@@ -328,11 +441,7 @@ if (!keepAliveTimer) {
 }
 
 if (backendProcess) {
-  backendProcess.on('exit', (code, signal) => {
-    if (code && code !== 0) {
-      console.error(`[dev-server] Backend exited with code ${code} (${signal || 'signal'})`);
-    }
-  });
+  wireBackendExitHandler();
 }
 
 if (frontendProcess) {
