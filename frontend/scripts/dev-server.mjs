@@ -1,6 +1,7 @@
 import { execSync, spawn } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,8 +11,10 @@ const backendDir = path.join(rootDir, 'backend');
 const frontendDir = path.join(rootDir, 'frontend');
 
 const frontendPort = Number(process.env.PW_PORT || 3000);
+process.env.PORT = process.env.PORT || '4000';
 
 const isWindows = process.platform === 'win32';
+const nodeCmd = isWindows ? 'node.exe' : 'node';
 
 const checkPort = (port, host = '127.0.0.1') =>
   new Promise((resolve) => {
@@ -43,10 +46,20 @@ const checkBackendHealth = async () => {
   }
 };
 
+const waitForBackendHealth = async (timeoutMs = 30_000) => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const healthy = await checkBackendHealth();
+    if (healthy) return true;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
+};
+
 const killPort = (port) => {
   if (isWindows) return false;
   try {
-    const output = execSync(`lsof -ti :${port}`, { stdio: ['ignore', 'pipe', 'ignore'] })
+    const output = execSync(`lsof -tiTCP:${port} -sTCP:LISTEN`, { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
       .trim();
     if (!output) return false;
@@ -113,7 +126,6 @@ const startBackendIfNeeded = async () => {
       }
     }
   }
-  const nodeCmd = isWindows ? 'node.exe' : 'node';
   console.log('[dev-server] Starting backend server...');
   return run(nodeCmd, ['server.js'], { cwd: backendDir, env: process.env });
 };
@@ -149,19 +161,11 @@ const startFrontend = async () => {
   );
 };
 
-const backendProcess = await startBackendIfNeeded();
-const backendReady = await waitForPort(4000);
-if (!backendReady) {
-  console.warn('[dev-server] Backend did not become ready in time.');
-}
-const frontendProcess = await startFrontend();
+let backendProcess = null;
+let frontendProcess = null;
 let keepAliveTimer = null;
-if (!frontendProcess && !backendProcess) {
-  // Keep the process alive when reusing already-running services.
-  keepAliveTimer = setInterval(() => {}, 1000);
-}
-
 let shuttingDown = false;
+
 const shutdown = () => {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -176,6 +180,63 @@ const shutdown = () => {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 process.on('exit', shutdown);
+
+if (forceRestart) {
+  const backendRunning = await checkPort(4000);
+  if (backendRunning) {
+    if (killPort(4000)) {
+      console.warn('[dev-server] Stopping existing backend before resetting E2E database.');
+    }
+    const closed = await waitForPortClosed(4000, 10_000);
+    if (!closed) {
+      console.error('[dev-server] Unable to stop existing backend on port 4000 before DB reset.');
+      process.exit(1);
+    }
+  }
+
+  const e2eDbPath = path.join(rootDir, 'prisma', 'e2e.db');
+  process.env.DATABASE_URL = `file:${e2eDbPath}`;
+  console.log(`[dev-server] Resetting E2E database at ${e2eDbPath}`);
+  try {
+    fs.rmSync(e2eDbPath, { force: true });
+    fs.rmSync(`${e2eDbPath}-wal`, { force: true });
+    fs.rmSync(`${e2eDbPath}-shm`, { force: true });
+    execSync(
+      `${nodeCmd} scripts/prisma.mjs db push --force-reset --schema=../prisma/schema.prisma`,
+      { cwd: backendDir, stdio: 'inherit', env: process.env }
+    );
+  } catch {
+    console.error('[dev-server] Failed to reset E2E database.');
+    process.exit(1);
+  }
+}
+
+backendProcess = await startBackendIfNeeded();
+const backendListening = await waitForPort(4000, 20_000);
+if (!backendListening) {
+  console.error('[dev-server] Backend did not start listening on port 4000 in time.');
+  shutdown();
+  process.exit(1);
+}
+const backendHealthy = await waitForBackendHealth(30_000);
+if (!backendHealthy) {
+  console.error('[dev-server] Backend /health did not become ready in time.');
+  shutdown();
+  process.exit(1);
+}
+
+frontendProcess = await startFrontend();
+const frontendListening = await waitForPort(frontendPort, 30_000);
+if (!frontendListening) {
+  console.error(`[dev-server] Frontend did not start listening on port ${frontendPort} in time.`);
+  shutdown();
+  process.exit(1);
+}
+
+if (!frontendProcess && !backendProcess) {
+  // Keep the process alive when reusing already-running services.
+  keepAliveTimer = setInterval(() => {}, 1000);
+}
 
 if (backendProcess) {
   backendProcess.on('exit', (code, signal) => {

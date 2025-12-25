@@ -20,6 +20,38 @@ export default function Tarot() {
   const [userQuestion, setUserQuestion] = useState('');
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const wsRef = useRef(null);
+  const wsStatusRef = useRef({ done: false, errored: false });
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (wsRef.current) {
+        wsRef.current.close(1000, 'Component unmounted');
+        wsRef.current = null;
+      }
+    };
+  }, []);
+
+  const resolveWsUrl = () => {
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const host = window.location.host;
+    if (host.includes('localhost:3000') || host.includes('127.0.0.1:3000')) {
+      return `${protocol}://${window.location.hostname}:4000/ws/ai`;
+    }
+    return `${protocol}://${host}/ws/ai`;
+  };
+
+  const closeAiSocket = (code = 1000, reason = 'Client disconnect') => {
+    if (!wsRef.current) return;
+    try {
+      wsRef.current.close(code, reason);
+    } finally {
+      wsRef.current = null;
+    }
+  };
   const [deck, setDeck] = useState([]);
   const [deckLoading, setDeckLoading] = useState(false);
   const [deckError, setDeckError] = useState('');
@@ -150,33 +182,83 @@ export default function Tarot() {
       return;
     }
     if (isInterpreting) return;
+    closeAiSocket();
+    wsStatusRef.current = { done: false, errored: false };
+    setAiResult('');
     setIsInterpreting(true);
     setStatus({ type: 'info', message: 'Consulting the oracle...' });
 
     try {
-      const provider = getPreferredAiProvider();
-      const res = await fetch('/api/tarot/ai-interpret', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          spreadType: spread.spreadType,
-          cards: spread.cards,
-          userQuestion,
-          provider
-        })
-      });
-      if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Interpretation failed.');
-        throw new Error(message);
-      }
-      const data = await res.json();
-      setAiResult(data.content);
-      setStatus({ type: 'success', message: 'Interpretation received.' });
-      await loadHistory();
+      const ws = new WebSocket(resolveWsUrl());
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        const provider = getPreferredAiProvider();
+        const message = {
+          type: 'tarot_ai_request',
+          token,
+          provider,
+          payload: {
+            spreadType: spread.spreadType,
+            cards: spread.cards,
+            userQuestion
+          }
+        };
+        ws.send(JSON.stringify(message));
+      };
+
+      ws.onmessage = (event) => {
+        if (!isMountedRef.current) return;
+        let message;
+        try {
+          message = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+
+        if (message?.type === 'start') {
+          setAiResult('');
+          return;
+        }
+        if (message?.type === 'chunk') {
+          setAiResult((prev) => `${prev || ''}${message.content || ''}`);
+          return;
+        }
+        if (message?.type === 'done') {
+          wsStatusRef.current.done = true;
+          setIsInterpreting(false);
+          setStatus({ type: 'success', message: 'Interpretation received.' });
+          closeAiSocket(1000, 'Stream complete');
+          void loadHistory();
+          return;
+        }
+        if (message?.type === 'error') {
+          wsStatusRef.current.errored = true;
+          setIsInterpreting(false);
+          setStatus({ type: 'error', message: message.message || 'AI Interpretation failed.' });
+          closeAiSocket(1011, 'AI error');
+        }
+      };
+
+      ws.onerror = () => {
+        if (!isMountedRef.current) return;
+        wsStatusRef.current.errored = true;
+        setIsInterpreting(false);
+        setStatus({ type: 'error', message: 'WebSocket connection error.' });
+      };
+
+      ws.onclose = () => {
+        if (!isMountedRef.current) return;
+        const { done, errored } = wsStatusRef.current;
+        if (!done && !errored) {
+          setStatus({ type: 'error', message: 'Connection closed unexpectedly.' });
+        }
+        setIsInterpreting(false);
+        wsRef.current = null;
+      };
     } catch (e) {
-      setStatus({ type: 'error', message: e.message });
-    } finally {
       setIsInterpreting(false);
+      setStatus({ type: 'error', message: e.message || 'Connection error' });
     }
   };
 

@@ -56,6 +56,38 @@ export default function Ziwei() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [aiResult, setAiResult] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const wsRef = useRef(null);
+  const wsStatusRef = useRef({ done: false, errored: false });
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (wsRef.current) {
+        wsRef.current.close(1000, 'Component unmounted');
+        wsRef.current = null;
+      }
+    };
+  }, []);
+
+  const resolveWsUrl = () => {
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const host = window.location.host;
+    if (host.includes('localhost:3000') || host.includes('127.0.0.1:3000')) {
+      return `${protocol}://${window.location.hostname}:4000/ws/ai`;
+    }
+    return `${protocol}://${host}/ws/ai`;
+  };
+
+  const closeAiSocket = (code = 1000, reason = 'Client disconnect') => {
+    if (!wsRef.current) return;
+    try {
+      wsRef.current.close(code, reason);
+    } finally {
+      wsRef.current = null;
+    }
+  };
   const [confirmAiOpen, setConfirmAiOpen] = useState(false);
   const confirmAiCancelRef = useRef(null);
 
@@ -228,35 +260,85 @@ export default function Ziwei() {
       return;
     }
     if (aiLoading) return;
+    closeAiSocket();
+    wsStatusRef.current = { done: false, errored: false };
+    setAiResult('');
     setAiLoading(true);
     setStatus({ type: 'info', message: 'Consulting the Zi Wei atlas...' });
 
     try {
-      const provider = getPreferredAiProvider();
-      const res = await authFetch('/api/ziwei/ai-interpret', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          birthYear: Number(form.birthYear),
-          birthMonth: Number(form.birthMonth),
-          birthDay: Number(form.birthDay),
-          birthHour: Number(form.birthHour),
-          gender: form.gender,
-          chart: result,
+      const ws = new WebSocket(resolveWsUrl());
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        const provider = getPreferredAiProvider();
+        const message = {
+          type: 'ziwei_ai_request',
+          token,
           provider,
-        }),
-      });
-      if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'AI interpretation failed.');
-        throw new Error(message);
-      }
-      const data = await res.json();
-      setAiResult(data.content);
-      setStatus({ type: 'success', message: 'AI interpretation ready.' });
-    } catch (error) {
-      setStatus({ type: 'error', message: error.message || 'AI interpretation failed.' });
-    } finally {
+          payload: {
+            birthYear: Number(form.birthYear),
+            birthMonth: Number(form.birthMonth),
+            birthDay: Number(form.birthDay),
+            birthHour: Number(form.birthHour),
+            gender: form.gender,
+            chart: result
+          }
+        };
+        ws.send(JSON.stringify(message));
+      };
+
+      ws.onmessage = (event) => {
+        if (!isMountedRef.current) return;
+        let message;
+        try {
+          message = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+
+        if (message?.type === 'start') {
+          setAiResult('');
+          return;
+        }
+        if (message?.type === 'chunk') {
+          setAiResult((prev) => `${prev || ''}${message.content || ''}`);
+          return;
+        }
+        if (message?.type === 'done') {
+          wsStatusRef.current.done = true;
+          setAiLoading(false);
+          setStatus({ type: 'success', message: 'AI interpretation ready.' });
+          closeAiSocket(1000, 'Stream complete');
+          return;
+        }
+        if (message?.type === 'error') {
+          wsStatusRef.current.errored = true;
+          setAiLoading(false);
+          setStatus({ type: 'error', message: message.message || 'AI Interpretation failed.' });
+          closeAiSocket(1011, 'AI error');
+        }
+      };
+
+      ws.onerror = () => {
+        if (!isMountedRef.current) return;
+        wsStatusRef.current.errored = true;
+        setAiLoading(false);
+        setStatus({ type: 'error', message: 'WebSocket connection error.' });
+      };
+
+      ws.onclose = () => {
+        if (!isMountedRef.current) return;
+        const { done, errored } = wsStatusRef.current;
+        if (!done && !errored) {
+          setStatus({ type: 'error', message: 'Connection closed unexpectedly.' });
+        }
+        setAiLoading(false);
+        wsRef.current = null;
+      };
+    } catch (e) {
       setAiLoading(false);
+      setStatus({ type: 'error', message: e.message || 'Connection error' });
     }
   };
 

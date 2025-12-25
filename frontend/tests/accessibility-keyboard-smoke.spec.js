@@ -4,7 +4,8 @@ import path from 'path';
 const fillNumberField = async (page, label, value) => {
   const input = page.getByLabel(label);
   await input.focus();
-  await page.keyboard.press('Control+A');
+  const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+  await page.keyboard.press(`${modifier}+A`);
   await page.keyboard.type(String(value));
 };
 

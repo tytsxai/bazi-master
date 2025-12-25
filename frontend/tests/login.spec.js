@@ -32,6 +32,19 @@ test('User can log in with Google OAuth redirect', async ({ page }) => {
     };
     const encodedUser = Buffer.from(JSON.stringify(oauthUser)).toString('base64url');
 
+    await page.route('**/api/auth/me', async (route) => {
+        const auth = route.request().headers()['authorization'] || '';
+        if (auth.includes('oauth_token_')) {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ user: oauthUser }),
+            });
+            return;
+        }
+        await route.continue();
+    });
+
     await page.addInitScript(() => {
         localStorage.setItem('locale', 'en-US');
     });
@@ -67,6 +80,19 @@ test('User can log in with WeChat OAuth redirect', async ({ page }) => {
         name: 'WeChat User',
     };
     const encodedUser = Buffer.from(JSON.stringify(oauthUser)).toString('base64url');
+
+    await page.route('**/api/auth/me', async (route) => {
+        const auth = route.request().headers()['authorization'] || '';
+        if (auth.includes('wechat_token_')) {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ user: oauthUser }),
+            });
+            return;
+        }
+        await route.continue();
+    });
 
     await page.route('**/api/auth/wechat/redirect?**', async (route) => {
         const requestUrl = new URL(route.request().url());

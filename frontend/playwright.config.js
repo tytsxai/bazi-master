@@ -1,14 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const webPort = Number(process.env.PW_PORT || 3100);
+const fallbackPort = 3100 + Math.floor(Math.random() * 800);
+const webPort = Number(process.env.PW_PORT || fallbackPort);
 const baseURL = `http://127.0.0.1:${webPort}`;
 
 export default defineConfig({
     testDir: './tests',
-    fullyParallel: true,
+    fullyParallel: false,
     forbidOnly: !!process.env.CI,
     retries: process.env.CI ? 2 : 0,
-    workers: process.env.CI ? 1 : undefined,
+    workers: 1,
     reporter: 'line',
     expect: {
         timeout: 15000,
@@ -28,12 +29,15 @@ export default defineConfig({
     webServer: process.env.PW_NO_WEB_SERVER === '1' ? undefined : {
         command: 'node scripts/dev-server.mjs',
         url: baseURL,
-        reuseExistingServer: true,
+        reuseExistingServer: false,
         timeout: 120 * 1000,
         env: {
             ...process.env,
             PW_SERVER: '1',
             PW_PORT: String(webPort),
+            AI_PROVIDER: 'mock',
+            OPENAI_API_KEY: '',
+            ANTHROPIC_API_KEY: '',
         },
     },
 });

@@ -1734,6 +1734,7 @@ export default function History() {
                   type="checkbox"
                   checked={allFilteredSelected}
                   onChange={toggleSelectAll}
+                  aria-label="Select all"
                   className="h-4 w-4 rounded border-white/30 bg-black/40 text-gold-400"
                 />
                 <span className="uppercase tracking-[0.18em] text-white/60">Select all</span>

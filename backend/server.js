@@ -55,7 +55,7 @@ const readPrismaDatasourceInfo = () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const schemaPath = path.resolve(here, '..', 'prisma', 'schema.prisma');
     const raw = fs.readFileSync(schemaPath, 'utf8');
-    const datasourceMatch = raw.match(/datasource\s+db\s*{([\s\S]*?)\n}\s*/m);
+    const datasourceMatch = raw.match(/datasource\s+db\s*{([\s\S]*?)}/m);
     const block = datasourceMatch?.[1] ?? '';
     const provider = (block.match(/\bprovider\s*=\s*"([^"]+)"/)?.[1] ?? '')
       .trim()
@@ -76,6 +76,13 @@ const ensureDatabaseUrl = () => {
   if (process.env.DATABASE_URL) return;
   const nodeEnv = process.env.NODE_ENV || '';
   if (nodeEnv === 'production') return;
+
+  if (PRISMA_PROVIDER === 'postgresql') {
+    process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/bazi_master?schema=public';
+    return;
+  }
+
+  if (PRISMA_PROVIDER && PRISMA_PROVIDER !== 'sqlite') return;
 
   try {
     const here = path.dirname(fileURLToPath(import.meta.url));
@@ -365,21 +372,54 @@ const ensureSoftDeleteReady = (() => {
 
 const fetchDeletedRecordIds = async (userId) => {
   await ensureSoftDeleteReady();
-  const rows = await prisma.$queryRaw`SELECT recordId FROM BaziRecordTrash WHERE userId = ${userId}`;
+  const rows = await prisma.baziRecordTrash.findMany({
+    where: { userId },
+    select: { recordId: true },
+  });
   return rows.map((row) => row.recordId);
 };
 
 const isRecordSoftDeleted = async (userId, recordId) => {
   try {
     await ensureSoftDeleteReady();
-    const rows = await prisma.$queryRaw`
-      SELECT 1 as existsFlag FROM BaziRecordTrash WHERE userId = ${userId} AND recordId = ${recordId} LIMIT 1
-    `;
-    return rows.length > 0;
+    const row = await prisma.baziRecordTrash.findUnique({
+      where: {
+        userId_recordId: {
+          userId,
+          recordId,
+        },
+      },
+      select: { id: true },
+    });
+    return Boolean(row);
   } catch (error) {
     console.error('Soft delete check failed:', error);
     return false;
   }
+};
+
+const markRecordsSoftDeleted = async (userId, recordIds) => {
+  const uniqueIds = Array.from(
+    new Set((Array.isArray(recordIds) ? recordIds : []).filter((id) => Number.isInteger(id)))
+  );
+  if (!uniqueIds.length) return;
+
+  await ensureSoftDeleteReady();
+
+  const existing = await prisma.baziRecordTrash.findMany({
+    where: {
+      userId,
+      recordId: { in: uniqueIds },
+    },
+    select: { recordId: true },
+  });
+  const existingSet = new Set(existing.map((row) => row.recordId));
+  const missingIds = uniqueIds.filter((id) => !existingSet.has(id));
+  if (!missingIds.length) return;
+
+  await prisma.baziRecordTrash.createMany({
+    data: missingIds.map((recordId) => ({ userId, recordId })),
+  });
 };
 
 app.use(helmet());
@@ -390,8 +430,6 @@ app.use(cors({
     }
     const error = new Error('Not allowed by CORS');
     error.statusCode = 403;
-    return callback(error);
-    error.status = 403;
     return callback(error);
   },
   credentials: true,
@@ -1142,9 +1180,16 @@ const parsePreferences = (raw) => {
   }
 };
 
+const formatSettingsUpdatedAt = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+};
+
 const buildSettingsEtag = (row) => {
-  if (!row?.updatedAt) return null;
-  return `W/"${row.updatedAt}"`;
+  const value = formatSettingsUpdatedAt(row?.updatedAt);
+  if (!value) return null;
+  return `W/"${value}"`;
 };
 
 const parseIfMatchHeader = (headerValue) => {
@@ -2518,6 +2563,10 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+apiRouter.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 app.get('/ready', async (req, res) => {
   const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
   const ok = db.ok && (redis.ok || redis.status === 'disabled');
@@ -3089,10 +3138,10 @@ apiRouter.post('/password/reset', async (req, res) => {
 
 apiRouter.get('/user/settings', requireAuth, async (req, res) => {
   try {
-    const rows = await prisma.$queryRaw`
-      SELECT locale, preferences, updatedAt FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
-    `;
-    const row = Array.isArray(rows) ? rows[0] : null;
+    const row = await prisma.userSettings.findUnique({
+      where: { userId: req.user.id },
+      select: { locale: true, preferences: true, updatedAt: true },
+    });
     const etag = buildSettingsEtag(row);
     if (etag) {
       res.set('ETag', etag);
@@ -3101,7 +3150,7 @@ apiRouter.get('/user/settings', requireAuth, async (req, res) => {
       settings: {
         locale: row?.locale ?? null,
         preferences: parsePreferences(row?.preferences),
-        updatedAt: row?.updatedAt ?? null,
+        updatedAt: formatSettingsUpdatedAt(row?.updatedAt),
       },
       etag,
     });
@@ -3124,10 +3173,11 @@ apiRouter.put('/user/settings', requireAuth, async (req, res) => {
     const expectedUpdatedAt =
       typeof req.body?.expectedUpdatedAt === 'string' ? req.body.expectedUpdatedAt : null;
     const ifMatchValue = parseIfMatchHeader(req.headers['if-match']);
-    const rows = await prisma.$queryRaw`
-      SELECT locale, preferences, updatedAt FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
-    `;
-    const row = Array.isArray(rows) ? rows[0] : null;
+    const row = await prisma.userSettings.findUnique({
+      where: { userId: req.user.id },
+      select: { locale: true, preferences: true, updatedAt: true },
+    });
+    const updatedAtValue = formatSettingsUpdatedAt(row?.updatedAt);
     const currentEtag = buildSettingsEtag(row);
     const hasRow = Boolean(row);
     if (ifMatchValue === '*' && !hasRow) {
@@ -3137,24 +3187,24 @@ apiRouter.put('/user/settings', requireAuth, async (req, res) => {
         etag: null,
       });
     }
-    if (ifMatchValue && ifMatchValue !== '*' && (!hasRow || ifMatchValue !== row.updatedAt)) {
+    if (ifMatchValue && ifMatchValue !== '*' && (!hasRow || ifMatchValue !== updatedAtValue)) {
       return res.status(409).json({
         error: 'Settings have changed. Please refresh and try again.',
         settings: {
           locale: row?.locale ?? null,
           preferences: parsePreferences(row?.preferences),
-          updatedAt: row?.updatedAt ?? null,
+          updatedAt: updatedAtValue,
         },
         etag: currentEtag,
       });
     }
-    if (expectedUpdatedAt && (!hasRow || expectedUpdatedAt !== row.updatedAt)) {
+    if (expectedUpdatedAt && (!hasRow || expectedUpdatedAt !== updatedAtValue)) {
       return res.status(409).json({
         error: 'Settings have changed. Please refresh and try again.',
         settings: {
           locale: row?.locale ?? null,
           preferences: parsePreferences(row?.preferences),
-          updatedAt: row?.updatedAt ?? null,
+          updatedAt: updatedAtValue,
         },
         etag: currentEtag,
       });
@@ -3177,42 +3227,50 @@ apiRouter.put('/user/settings', requireAuth, async (req, res) => {
     const expectedMatch =
       expectedUpdatedAt || (ifMatchValue && ifMatchValue !== '*' ? ifMatchValue : null);
 
-    const updateResult = expectedMatch
-      ? await prisma.$executeRaw`
-          INSERT INTO UserSettings (userId, locale, preferences, createdAt, updatedAt)
-          VALUES (${req.user.id}, ${nextLocale}, ${preferencesJson}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          ON CONFLICT(userId)
-          DO UPDATE SET locale = excluded.locale, preferences = excluded.preferences, updatedAt = CURRENT_TIMESTAMP
-          WHERE UserSettings.updatedAt = ${expectedMatch}
-        `
-      : await prisma.$executeRaw`
-          INSERT INTO UserSettings (userId, locale, preferences, createdAt, updatedAt)
-          VALUES (${req.user.id}, ${nextLocale}, ${preferencesJson}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          ON CONFLICT(userId)
-          DO UPDATE SET locale = excluded.locale, preferences = excluded.preferences, updatedAt = CURRENT_TIMESTAMP
-        `;
-
-    if (expectedMatch && updateResult === 0) {
-      const refreshRows = await prisma.$queryRaw`
-        SELECT locale, preferences, updatedAt FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
-      `;
-      const refreshRow = Array.isArray(refreshRows) ? refreshRows[0] : null;
-      const refreshEtag = buildSettingsEtag(refreshRow);
-      return res.status(409).json({
-        error: 'Settings have changed. Please refresh and try again.',
-        settings: {
-          locale: refreshRow?.locale ?? null,
-          preferences: parsePreferences(refreshRow?.preferences),
-          updatedAt: refreshRow?.updatedAt ?? null,
+    if (!hasRow) {
+      await prisma.userSettings.create({
+        data: {
+          userId: req.user.id,
+          locale: nextLocale,
+          preferences: preferencesJson,
         },
-        etag: refreshEtag,
+      });
+    } else if (expectedMatch) {
+      const expectedDate = new Date(expectedMatch);
+      if (Number.isNaN(expectedDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid expectedUpdatedAt value' });
+      }
+      const result = await prisma.userSettings.updateMany({
+        where: { userId: req.user.id, updatedAt: expectedDate },
+        data: { locale: nextLocale, preferences: preferencesJson },
+      });
+      if (result.count === 0) {
+        const refreshRow = await prisma.userSettings.findUnique({
+          where: { userId: req.user.id },
+          select: { locale: true, preferences: true, updatedAt: true },
+        });
+        const refreshEtag = buildSettingsEtag(refreshRow);
+        return res.status(409).json({
+          error: 'Settings have changed. Please refresh and try again.',
+          settings: {
+            locale: refreshRow?.locale ?? null,
+            preferences: parsePreferences(refreshRow?.preferences),
+            updatedAt: formatSettingsUpdatedAt(refreshRow?.updatedAt),
+          },
+          etag: refreshEtag,
+        });
+      }
+    } else {
+      await prisma.userSettings.update({
+        where: { userId: req.user.id },
+        data: { locale: nextLocale, preferences: preferencesJson },
       });
     }
 
-    const updatedRows = await prisma.$queryRaw`
-      SELECT locale, preferences, updatedAt FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
-    `;
-    const updatedRow = Array.isArray(updatedRows) ? updatedRows[0] : null;
+    const updatedRow = await prisma.userSettings.findUnique({
+      where: { userId: req.user.id },
+      select: { locale: true, preferences: true, updatedAt: true },
+    });
     const updatedEtag = buildSettingsEtag(updatedRow);
     if (updatedEtag) {
       res.set('ETag', updatedEtag);
@@ -3222,7 +3280,7 @@ apiRouter.put('/user/settings', requireAuth, async (req, res) => {
       settings: {
         locale: updatedRow?.locale ?? nextLocale ?? null,
         preferences: parsePreferences(updatedRow?.preferences) ?? nextPreferences ?? null,
-        updatedAt: updatedRow?.updatedAt ?? null,
+        updatedAt: formatSettingsUpdatedAt(updatedRow?.updatedAt),
       },
       etag: updatedEtag,
     });
@@ -4091,15 +4149,11 @@ apiRouter.post('/bazi/records/import', requireAuth, async (req, res) => {
 
   const importSoftDeletedEntries = async () => {
     if (!softDeletedEntries.length) return;
-    await ensureSoftDeleteReady();
     for (const entry of softDeletedEntries) {
       try {
         const createdRecord = await prisma.baziRecord.create({ data: entry.record });
         created += 1;
-        await prisma.$executeRaw`
-          INSERT OR IGNORE INTO BaziRecordTrash (userId, recordId)
-          VALUES (${req.user.id}, ${createdRecord.id})
-        `;
+        await markRecordsSoftDeleted(req.user.id, [createdRecord.id]);
       } catch (entryError) {
         console.error('Import error (soft delete):', entryError);
         failedIndices.push(entry.index);
@@ -4175,13 +4229,7 @@ apiRouter.post('/bazi/records/bulk-delete', requireAuth, async (req, res) => {
     return res.status(404).json({ error: 'No matching records found' });
   }
 
-  await ensureSoftDeleteReady();
-  await prisma.$executeRaw(
-    Prisma.sql`
-      INSERT OR IGNORE INTO BaziRecordTrash (userId, recordId)
-      VALUES ${Prisma.join(existingIds.map((id) => Prisma.sql`(${req.user.id}, ${id})`))}
-    `
-  );
+  await markRecordsSoftDeleted(req.user.id, existingIds);
   trackClientDeletedRecords(req.user.id, clientId, existingIds);
 
   res.json({
@@ -4328,10 +4376,7 @@ apiRouter.delete('/bazi/records/:id', requireAuth, async (req, res) => {
     gender: record.gender,
   });
 
-  await ensureSoftDeleteReady();
-  await prisma.$executeRaw`
-    INSERT OR IGNORE INTO BaziRecordTrash (userId, recordId) VALUES (${req.user.id}, ${recordId})
-  `;
+  await markRecordsSoftDeleted(req.user.id, [recordId]);
   trackClientDeletedRecords(req.user.id, clientId, [recordId]);
   res.json({ status: 'ok', softDeleted: true });
 });
@@ -4346,16 +4391,20 @@ apiRouter.post('/bazi/records/:id/restore', requireAuth, async (req, res) => {
   if (!record) return res.status(404).json({ error: 'Record not found' });
 
   await ensureSoftDeleteReady();
-  const deletedRows = await prisma.$queryRaw`
-    SELECT id FROM BaziRecordTrash WHERE userId = ${req.user.id} AND recordId = ${recordId} LIMIT 1
-  `;
-  if (!deletedRows.length) {
+  const deletedRow = await prisma.baziRecordTrash.findUnique({
+    where: {
+      userId_recordId: {
+        userId: req.user.id,
+        recordId,
+      },
+    },
+    select: { id: true },
+  });
+  if (!deletedRow) {
     return res.status(404).json({ error: 'Record not deleted' });
   }
 
-  await prisma.$executeRaw`
-    DELETE FROM BaziRecordTrash WHERE userId = ${req.user.id} AND recordId = ${recordId}
-  `;
+  await prisma.baziRecordTrash.deleteMany({ where: { userId: req.user.id, recordId } });
   removeClientDeletedRecord(req.user.id, clientId, recordId);
 
   res.json({ status: 'ok', record: serializeRecordWithTimezone(record) });
@@ -5025,69 +5074,170 @@ server.on('upgrade', (req, socket, head) => {
       return;
     }
 
-    if (message?.type !== 'bazi_ai_request') {
-      sendWsJson(socket, { type: 'error', message: 'Unsupported request type.' });
-      return;
-    }
-
-    if (isBusy) {
-      sendWsJson(socket, { type: 'error', message: 'Request already in progress.' });
-      return;
-    }
-    isBusy = true;
-
-    let release = null;
-    try {
-      const token = message?.token;
-      const user = await authorizeToken(token);
-      release = acquireAiGuard(user.id);
-      if (!release) {
-        sendWsJson(socket, { type: 'error', message: AI_CONCURRENCY_ERROR });
-        return;
-      }
-      const payload = message?.payload;
-      if (!payload?.pillars) {
-        sendWsJson(socket, { type: 'error', message: 'Bazi data required.' });
-        sendClose(1003);
-        return;
-      }
-      let provider = null;
-      try {
-        provider = resolveAiProvider(message?.provider);
-      } catch (error) {
-        sendWsJson(socket, { type: 'error', message: error.message || 'Invalid AI provider.' });
-        return;
-      }
-
-      sendWsJson(socket, { type: 'start' });
-      const { system, user: userPrompt, fallback } = buildBaziPrompt(payload);
-
-      await generateAIContent({
-        system,
-        user: userPrompt,
-        fallback,
-        provider,
-        onChunk: (chunk) => {
-          if (!isClosed) {
-            sendWsJson(socket, { type: 'chunk', content: chunk });
-          }
+        if (!['bazi_ai_request', 'tarot_ai_request', 'iching_ai_request', 'ziwei_ai_request'].includes(message?.type)) {
+          sendWsJson(socket, { type: 'error', message: 'Unsupported request type.' });
+          return;
         }
-      });
-
-      if (!isClosed) {
-        sendWsJson(socket, { type: 'done' });
-        sendClose(1000);
-      }
-    } catch (error) {
-      sendWsJson(socket, { type: 'error', message: error.message || 'AI request failed.' });
-      sendClose(1011);
-    } finally {
-      if (release) {
-        release();
-      }
-      isBusy = false;
-    }
-  };
+    
+        if (isBusy) {
+          sendWsJson(socket, { type: 'error', message: 'Request already in progress.' });
+          return;
+        }
+        isBusy = true;
+    
+        let release = null;
+        try {
+          const token = message?.token;
+          const user = await authorizeToken(token);
+          release = acquireAiGuard(user.id);
+          if (!release) {
+            sendWsJson(socket, { type: 'error', message: AI_CONCURRENCY_ERROR });
+            return;
+          }
+          const payload = message?.payload;
+          let provider = null;
+          try {
+            provider = resolveAiProvider(message?.provider);
+          } catch (error) {
+            sendWsJson(socket, { type: 'error', message: error.message || 'Invalid AI provider.' });
+            return;
+          }
+    
+          let aiContext = null;
+          if (message.type === 'bazi_ai_request') {
+            if (!payload?.pillars) {
+              sendWsJson(socket, { type: 'error', message: 'Bazi data required.' });
+              sendClose(1003);
+              return;
+            }
+            aiContext = buildBaziPrompt(payload);
+          } else if (message.type === 'tarot_ai_request') {
+            if (!payload?.cards) {
+              sendWsJson(socket, { type: 'error', message: 'Cards data required.' });
+              sendClose(1003);
+              return;
+            }
+            const { spreadType, cards, userQuestion } = payload;
+            const normalizedSpread = spreadType || 'SingleCard';
+            const spreadConfig = getTarotSpreadConfig(normalizedSpread);
+            const positions = spreadConfig.positions || [];
+            const cardList = cards.map((card, index) => {
+              const positionLabel = card.positionLabel || positions[index]?.label;
+              const positionMeaning = card.positionMeaning || positions[index]?.meaning;
+              const positionText = [
+                positionLabel ? `${positionLabel}` : null,
+                positionMeaning ? `${positionMeaning}` : null
+              ].filter(Boolean).join(' — ');
+              return `${card.position}. ${positionText ? `${positionText} - ` : ''}${card.name} (${card.isReversed ? 'Reversed' : 'Upright'}) - ${card.isReversed ? card.meaningRev : card.meaningUp}`;
+            }).join('\n');
+    
+            const system = 'You are a tarot reader. Provide a concise reading in Markdown with sections: Interpretation and Advice. Use the position meanings for context. Keep under 220 words. Reference key cards by name.';
+            const userPrompt = `
+    Spread: ${normalizedSpread || 'Unknown'}
+    Question: ${userQuestion || 'General Reading'}
+    Cards:
+    ${cardList}
+            `.trim();
+            const fallback = () => {
+              const interpretation = 'The spread points to momentum building around your question, with key lessons emerging from the central cards.';
+              const advice = 'Reflect on the card themes and take one grounded action aligned with the most constructive card.';
+              return `
+    ## 🔮 Tarot Reading: ${normalizedSpread || 'Unknown'}
+    **Interpretation:** ${interpretation}
+    
+    **Advice:** ${advice}
+              `.trim();
+            };
+            aiContext = { system, user: userPrompt, fallback };
+          } else if (message.type === 'iching_ai_request') {
+            const { hexagram, resultingHexagram, changingLines, userQuestion, method, timeContext } = payload;
+            if (!hexagram) {
+              sendWsJson(socket, { type: 'error', message: 'Hexagram data required.' });
+              sendClose(1003);
+              return;
+            }
+            const lines = Array.isArray(changingLines) && changingLines.length > 0 ? changingLines.join(', ') : 'None';
+            const hexagramName = typeof hexagram === 'string' ? hexagram : (hexagram?.name || 'Unknown');
+            const resultName = resultingHexagram
+              ? (typeof resultingHexagram === 'string' ? resultingHexagram : (resultingHexagram?.name || 'Unknown'))
+              : 'None';
+            const timeLine = timeContext
+              ? `Time: ${timeContext.year}-${String(timeContext.month).padStart(2, '0')}-${String(timeContext.day).padStart(2, '0')} ${String(timeContext.hour).padStart(2, '0')}:${String(timeContext.minute).padStart(2, '0')}`
+              : null;
+            const methodLine = method ? `Method: ${method}` : null;
+    
+            const system = 'You are an I Ching interpreter. Provide a concise interpretation in Markdown with sections: Interpretation and Advice. Mention the primary and resulting hexagrams when available. Keep under 200 words.';
+            const userPrompt = `
+    Question: ${userQuestion || 'General Guidance'}
+    ${methodLine || ''}
+    ${timeLine || ''}
+    Hexagram: ${hexagramName}
+    Resulting Hexagram: ${resultName}
+    Changing Lines: ${lines}
+            `.trim();
+            const fallback = () => {
+              const interpretation = 'The primary hexagram points to steady progress through mindful adaptation, while the resulting hexagram signals how the situation may evolve.';
+              const advice = 'Align with your core values while remaining flexible about timing and approach.';
+              return `
+    ## ☯️ I Ching Interpretation
+    **Interpretation:** ${interpretation}
+    
+    **Advice:** ${advice}
+              `.trim();
+            };
+            aiContext = { system, user: userPrompt, fallback };
+          } else if (message.type === 'ziwei_ai_request') {
+            const { birthYear, birthMonth, birthDay, birthHour, gender, chart: chartPayload } = payload;
+            let chart = chartPayload;
+            let birthMeta = { birthYear, birthMonth, birthDay, birthHour, gender };
+            if (!chart || typeof chart !== 'object') {
+              const payloadMeta = {
+                birthYear: Number(birthYear),
+                birthMonth: Number(birthMonth),
+                birthDay: Number(birthDay),
+                birthHour: Number(birthHour),
+                gender
+              };
+              const result = calculateZiweiChart(payloadMeta);
+              const timeMeta = buildBirthTimeMeta(payloadMeta);
+              chart = { ...result, ...timeMeta };
+              birthMeta = payloadMeta;
+            }
+            aiContext = buildZiweiPrompt({ chart, birth: birthMeta });
+          }
+    
+          sendWsJson(socket, { type: 'start' });
+          const content = await generateAIContent({ system: aiContext.system, user: aiContext.user, fallback: aiContext.fallback, provider });
+          await streamContent(content || '');
+    
+          // Optional: Persistence for Tarot and Iching (following existing logic)
+          if (message.type === 'tarot_ai_request') {
+            try {
+              await prisma.tarotRecord.create({
+                data: {
+                  userId: user.id,
+                  spreadType: payload.spreadType || 'SingleCard',
+                  cards: JSON.stringify(payload.cards),
+                  userQuestion: payload.userQuestion,
+                  aiInterpretation: content
+                }
+              });
+            } catch (e) { console.error('Failed to save tarot record:', e); }
+          }
+    
+          if (!isClosed) {
+            sendWsJson(socket, { type: 'done' });
+            sendClose(1000);
+          }
+        } catch (error) {
+          sendWsJson(socket, { type: 'error', message: error.message || 'AI request failed.' });
+          sendClose(1011);
+        } finally {
+          if (release) {
+            release();
+          }
+          isBusy = false;
+        }  };
 
   sendWsJson(socket, { type: 'connected' });
 

@@ -37,7 +37,7 @@ test('Security: Bazi full analysis from / matches backend data', async ({ page }
   expect(loginResponse.ok()).toBeTruthy();
   await expect(page).toHaveURL(/\/profile/, { timeout: 15000 });
 
-  await page.getByRole('link', { name: /BaZi/i }).click();
+  await page.getByRole('link', { name: 'BaZi', exact: true }).click();
   await expect(page).toHaveURL(/\/bazi/);
 
   await page.getByLabel(/Birth Year|出生年份/).fill('1994');

@@ -768,6 +768,10 @@ export default function Bazi() {
 
   const handleCalculate = async (event) => {
     event.preventDefault();
+    const nextErrors = getFieldErrors(formData, t);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
     const payload = buildPayload();
     await performCalculation(payload);
   };
@@ -778,6 +782,10 @@ export default function Bazi() {
       return;
     }
     if (isFullLoading) return;
+
+    const nextErrors = getFieldErrors(formData, t);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0 && !overridePayload) return;
 
     setAiResult(null);
     setIsFullLoading(true);
@@ -881,16 +889,16 @@ export default function Bazi() {
         ...buildPayload(),
         result: fullResult
           ? {
-              pillars: fullResult.pillars,
-              fiveElements: fullResult.fiveElements,
-              tenGods: fullResult.tenGods,
-              luckCycles: fullResult.luckCycles,
-            }
+            pillars: fullResult.pillars,
+            fiveElements: fullResult.fiveElements,
+            tenGods: fullResult.tenGods,
+            luckCycles: fullResult.luckCycles,
+          }
           : baseResult
             ? {
-                pillars: baseResult.pillars,
-                fiveElements: baseResult.fiveElements,
-              }
+              pillars: baseResult.pillars,
+              fiveElements: baseResult.fiveElements,
+            }
             : null,
       };
     const fingerprint = JSON.stringify(payload);
@@ -935,6 +943,17 @@ export default function Bazi() {
       }
 
       if (!res.ok) {
+        if (res.status === 409) {
+          const data = await res.json().catch(() => ({}));
+          if (data.record) {
+            runIfMounted(() => {
+              setSavedRecord(data.record);
+              pushToast({ type: 'success', message: 'Record already saved.' });
+            });
+            lastSavedFingerprintRef.current = fingerprint;
+            return;
+          }
+        }
         const message = await readErrorMessage(res, 'Save failed.');
         runIfMounted(() => pushToast({ type: 'error', message }));
         return;
@@ -1178,13 +1197,14 @@ export default function Bazi() {
   };
 
   const resolveWsUrl = () => {
-    if (typeof window === 'undefined') return 'ws://localhost:4000/ws/ai';
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const hostname = window.location.hostname;
-    if (import.meta.env?.DEV && window.location.port === '3000') {
-      return `${protocol}://${hostname}:4000/ws/ai`;
+    const host = window.location.host;
+    // In production or when proxied correctly, host is enough.
+    // If running frontend on 3000 and backend on 4000 without proxy:
+    if (host.includes('localhost:3000') || host.includes('127.0.0.1:3000')) {
+      return `${protocol}://${window.location.hostname}:4000/ws/ai`;
     }
-    return `${protocol}://${window.location.host}/ws/ai`;
+    return `${protocol}://${host}/ws/ai`;
   };
 
   const closeAiSocket = (code = 1000, reason = 'Client disconnect') => {
@@ -1827,9 +1847,8 @@ export default function Bazi() {
                 data-testid="bazi-ziwei-status"
                 role={ziweiStatus.type === 'error' ? 'alert' : 'status'}
                 aria-live={ziweiStatus.type === 'error' ? 'assertive' : 'polite'}
-                className={`mt-4 text-sm ${
-                  ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
-                }`}
+                className={`mt-4 text-sm ${ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
+                  }`}
               >
                 {ziweiStatus.message || (ziweiStatus.type === 'loading' ? 'Calculating…' : '')}
               </p>
