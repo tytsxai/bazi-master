@@ -139,3 +139,5 @@
 - Started frontend/backend dev servers and re-ran pre-work Playwright checks with PW_NO_WEB_SERVER=1 (bazi-calculation.spec.js, iching.spec.js); both passed after ensuring servers were up.
 - Verified guest profile redirect security flow via Playwright (guest-profile-redirect.spec.js) with screenshots; marked feature_list.json test #31 as passing. Current progress: 54/479 tests passing.
 - Next: continue remaining Security & Access Control tests (e.g., protected routes for history/favorites/profile, admin access, etc.).
+- Verified guest history access control: added Playwright screenshots for guest /history redirect and re-ran security-guest-history.spec.js; marked feature_list.json test #32 as passing. Current progress: 55/479 tests passing.
+- Next: continue remaining Security & Access Control tests (guest access to favorites/profile, protected route redirects, admin access).
