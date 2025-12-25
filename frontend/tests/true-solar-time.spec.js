@@ -73,7 +73,7 @@ test('Bazi calculation applies true solar time correction from location', async 
   await page.screenshot({ path: screenshotPath('solar-step-6-favorited') });
 
   await page.goto('/history');
-  await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   await expect(page.getByText(uniqueLocation)).toBeVisible();
   await page.screenshot({ path: screenshotPath('solar-step-7-history') });
 
