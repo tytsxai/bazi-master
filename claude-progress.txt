@@ -121,3 +121,18 @@
 - Added Playwright data cleanup cascade test for user deletion (data-cleanup-user-deletion.spec.js) with verification screenshots.
 - Verified data cleanup cascade flow end-to-end via Playwright; marked feature_list.json test #27 as passing. Current progress: 50/479 tests passing.
 - Next: continue remaining functional tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases) and resolve Docker/Postgres startup for init.sh if needed.
+- Init.sh still fails at docker-compose because Docker daemon (colima) is not running; prisma client generation succeeds.
+- Ran pre-work Playwright checks: bazi-calculation.spec.js and iching.spec.js passed.
+- Added Playwright form validation flow covering login/register/BaZi/I Ching/Zodiac rising, with screenshots and console error checks (tests/form-validation.spec.js).
+- Verified form validation flow end-to-end via Playwright; marked feature_list.json test #28 as passing. Current progress: 51/479 tests passing.
+- Next: continue remaining functional tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases).
+- Ran init.sh; Prisma client generated but Docker daemon (colima) not running so docker-compose could not start Postgres/Redis.
+- Verified pre-work Playwright tests: bazi-calculation.spec.js and iching.spec.js passed.
+- Ran export-import-full.spec.js Playwright flow; verified full export/import preserves counts and captured screenshots.
+- Marked feature_list.json test #29 (Export then import full dataset and verify counts) as passing. Current progress: 52/479 tests passing.
+- Next: continue remaining functional tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases) and resolve Docker/Postgres startup if needed.
+- Ran init.sh; docker daemon was down, restarted Colima and brought up Postgres/Redis via docker-compose.
+- Pre-work Playwright checks: bazi-calculation + iching; resolved DB connection failure by restarting backend after Postgres started.
+- Added Playwright failure handling flow with network interruption + retry for BaZi (tests/failure-handling.spec.js) and captured verification screenshots.
+- Verified failure handling flow end-to-end via Playwright; marked feature_list.json test #30 as passing. Current progress: 53/479 tests passing.
+- Next: continue remaining functional tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases).
