@@ -146,3 +146,8 @@
 - Added verification screenshots to admin-access.spec.js and verified admin/non-admin access flow via Playwright.
 - Marked feature_list.json test "[A. Security & Access Control] User role cannot access admin-only areas (if any) and gets 403/redirect" as passing. Current progress: 56/479 tests passing.
 - Next: continue remaining Security & Access Control API tests (401/403 for unauthenticated endpoints).
+- Ran init.sh successfully; Postgres/Redis running via docker-compose.
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js) with PW_PORT=3000; both passed.
+- Added Playwright security test for unauthenticated /api/bazi/full-analysis returning 401 with screenshots.
+- Verified security unauthenticated full-analysis flow via Playwright; marked feature_list.json test #34 as passing. Current progress: 57/479 tests passing.
+- Next: continue remaining Security & Access Control API tests (401/403 for unauthenticated endpoints).
