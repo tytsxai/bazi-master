@@ -41,3 +41,27 @@ The backend container is configured to automatically run `prisma migrate deploy`
 - **Frontend**: Served via Nginx. API requests to `/api/*` are proxied to the backend container.
 - **Backend**: Runs as a lightweight Node.js container.
 - **Scaling**: The backend is stateless (using Redis for sessions) and can be scaled horizontally if needed (though `docker-compose.prod.yml` defines one replica).
+
+## Data Backup & Restore
+Scripts are provided in the `scripts/` directory for managing database backups.
+
+### Backup
+Run this on the host machine (via cron or manually):
+```bash
+./scripts/backup-db.sh
+```
+Backups are saved to `./backups/` as gzipped SQL files.
+
+### Restore
+**WARNING**: This overwrites the current database.
+```bash
+./scripts/restore-db.sh ./backups/bazi_master_YYYYMMDD_HHMMSS.sql.gz
+```
+
+## CI/CD Pipeline
+A GitHub Actions workflow is included in `.github/workflows/ci.yml`. It automatically:
+1. Installs Backend & Frontend dependencies.
+2. Runs Linting checks.
+3. Executes Unit & Integration tests.
+
+Ensure this passes before deploying to production.

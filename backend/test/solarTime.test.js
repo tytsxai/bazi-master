@@ -51,8 +51,11 @@ describe('solar time helpers', () => {
       longitude: 30,
     });
     assert.ok(result?.applied);
-    assert.equal(result.correctionMinutes, 120);
-    assert.equal(result.corrected.hour, 14);
+    assert.equal(result.longitudeCorrection, 120);
+    assert.equal(result.eotCorrection, -3.71);
+    assert.equal(result.correctionMinutes, 116.29);
+    assert.equal(result.corrected.hour, 13);
+    assert.equal(result.corrected.minute, 56);
   });
 
   test('computeTrueSolarTime returns null for invalid inputs', () => {

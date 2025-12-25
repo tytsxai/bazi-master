@@ -4772,6 +4772,7 @@ apiRouter.post('/iching/divine', (req, res) => {
   }
 
   const resultingHexagram = applyChangingLines(hexagram, changingLines);
+  const detailedLines = getDetailedLines(hexagram, changingLines);
 
   res.json({
     method,
@@ -4780,6 +4781,7 @@ apiRouter.post('/iching/divine', (req, res) => {
     hexagram,
     changingLines,
     resultingHexagram,
+    detailedLines,
   });
 });
 

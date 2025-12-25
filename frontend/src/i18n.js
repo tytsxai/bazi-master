@@ -190,6 +190,34 @@ const resources = {
         createBaziFirst: 'Create a BaZi chart first to unlock Zi Wei quick charts.',
         saveBaziFirst: 'Save a BaZi record first to generate Zi Wei charts.',
         calculating: 'Calculating...'
+      },
+      favorites: {
+        title: 'Favorites',
+        subtitle: 'Curated destiny charts you saved for quick access.',
+        savedCount: '{{count}} saved',
+        availableToAdd: '{{count}} available to add',
+        noFavorites: 'No favorites yet',
+        noFavoritesDesc: 'Save a record to keep it handy here.',
+        addFromHistory: 'Add from history',
+        addFromHistoryDesc: 'Pick from your saved records to add them to favorites.',
+        allFavorited: 'All saved records are favorited',
+        noHistoryYet: 'No saved history yet',
+        noHistoryYetDesc: 'Complete a reading first, then add it here.',
+        view: 'View',
+        hide: 'Hide',
+        share: 'Share',
+        remove: 'Remove',
+        removing: 'Removing...',
+        adding: 'Adding...',
+        add: 'Add to favorites',
+        shareSuccess: 'Shared successfully.',
+        shareFailed: 'Share failed. Copying instead.',
+        copied: 'Copied to clipboard.',
+        copyFailed: 'Unable to copy share text.',
+        loadError: 'Unable to load favorites.',
+        recordsLoadError: 'Unable to load records.',
+        removeError: 'Unable to remove favorite.',
+        addError: 'Unable to add favorite.'
       }
     }
   },
@@ -379,8 +407,36 @@ const resources = {
         generateZiwei: '生成紫微命盘',
         ziweiReady: '已根据你最近的八字记录生成紫微命盘。',
         createBaziFirst: '请先创建八字记录以解锁紫微快速排盘。',
-        saveBaziFirst: '请先保存八字记录以生成紫微命盘。',
-        calculating: '计算中…'
+        saveBaziFirst: 'Save a BaZi record first to generate Zi Wei charts.',
+        calculating: 'Calculating...'
+      },
+      favorites: {
+        title: '收藏夹',
+        subtitle: '你收藏的命盘记录，方便快速查看。',
+        savedCount: '{{count}} 条已收藏',
+        availableToAdd: '{{count}} 条可添加',
+        noFavorites: '暂无收藏',
+        noFavoritesDesc: '保存一条记录，它将出现在这里。',
+        addFromHistory: '从历史中添加',
+        addFromHistoryDesc: '从你保存的记录中选择并加入收藏。',
+        allFavorited: '所有记录已收藏',
+        noHistoryYet: '暂无历史记录',
+        noHistoryYetDesc: '先进行一次排盘，然后再添加到此处。',
+        view: '查看',
+        hide: '收起',
+        share: '分享',
+        remove: '移除',
+        removing: '移除中…',
+        adding: '添加中…',
+        add: '加入收藏',
+        shareSuccess: '分享成功。',
+        shareFailed: '分享失败，已尝试复制到剪贴板。',
+        copied: '已复制到剪贴板。',
+        copyFailed: '无法复制分享文本。',
+        loadError: '无法加载收藏夹。',
+        recordsLoadError: '无法加载历史记录。',
+        removeError: '无法移除收藏。',
+        addError: '无法添加收藏。'
       }
     }
   }

@@ -15,3 +15,4 @@ frontend/test-results/
 test-results/
 verification/
 frontend/.vite/
+prisma/.pgdata-e2e/

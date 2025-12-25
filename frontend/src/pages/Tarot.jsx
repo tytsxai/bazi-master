@@ -38,9 +38,13 @@ export default function Tarot() {
   const resolveWsUrl = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const host = window.location.host;
-    if (host.includes('localhost:3000') || host.includes('127.0.0.1:3000')) {
-      return `${protocol}://${window.location.hostname}:4000/ws/ai`;
+    const hostname = window.location.hostname;
+    const port = window.location.port;
+
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '4000') {
+      return `${protocol}://${hostname}:4000/ws/ai`;
     }
+
     return `${protocol}://${host}/ws/ai`;
   };
 

@@ -55,7 +55,7 @@ export default function Favorites() {
       return;
     }
     if (!res.ok) {
-      setStatus(await readErrorMessage(res, 'Unable to load favorites.'));
+      setStatus(await readErrorMessage(res, t('favorites.loadError')));
       return;
     }
     const data = await res.json();
@@ -70,7 +70,7 @@ export default function Favorites() {
       return;
     }
     if (!res.ok) {
-      setStatus(await readErrorMessage(res, 'Unable to load records.'));
+      setStatus(await readErrorMessage(res, t('favorites.recordsLoadError')));
       return;
     }
     const data = await res.json();
@@ -131,7 +131,7 @@ export default function Favorites() {
       return;
     }
     if (!res.ok) {
-      const message = await readErrorMessage(res, 'Unable to remove favorite.');
+      const message = await readErrorMessage(res, t('favorites.removeError'));
       setStatus(message);
       setFavorites((prev) => {
         if (prev.some((item) => item.id === rollbackFavorite.id)) return prev;
@@ -188,7 +188,7 @@ export default function Favorites() {
       return;
     }
     if (!res.ok) {
-      const message = await readErrorMessage(res, 'Unable to add favorite.');
+      const message = await readErrorMessage(res, t('favorites.addError'));
       setStatus(message);
       setFavorites((prev) => prev.filter((item) => item.id !== tempId));
       setPendingAddIds((prev) => {
@@ -229,18 +229,18 @@ export default function Favorites() {
           text: shareText,
           url: shareUrl || undefined,
         });
-        setShareStatus('Shared successfully.');
+        setShareStatus(t('favorites.shareSuccess'));
         return;
       }
     } catch (error) {
-      setShareStatus('Share failed. Copying instead.');
+      setShareStatus(t('favorites.shareFailed'));
     }
 
     try {
       await navigator.clipboard.writeText(shareText);
-      setShareStatus('Copied to clipboard.');
+      setShareStatus(t('favorites.copied'));
     } catch (error) {
-      setShareStatus('Unable to copy share text.');
+      setShareStatus(t('favorites.copyFailed'));
     }
   };
 
@@ -251,10 +251,10 @@ export default function Favorites() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-3xl text-gold-400">{t('nav.favorites')}</h1>
-            <p className="mt-3 text-white/70">Curated destiny charts you saved for quick access.</p>
+            <p className="mt-3 text-white/70">{t('favorites.subtitle')}</p>
           </div>
           <div className="text-xs text-white/60">
-            {favorites.length} saved · {unfavoritedRecords.length} available to add
+            {t('favorites.savedCount', { count: favorites.length })} · {t('favorites.availableToAdd', { count: unfavoritedRecords.length })}
           </div>
         </div>
         {status && (
@@ -294,7 +294,7 @@ export default function Favorites() {
                         onClick={() => setExpandedId(isExpanded ? null : favorite.id)}
                         className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-gold-400/60 hover:text-gold-100"
                       >
-                        {isExpanded ? 'Hide' : 'View'}
+                        {isExpanded ? t('favorites.hide') : t('favorites.view')}
                       </button>
                       <button
                         type="button"
@@ -302,7 +302,7 @@ export default function Favorites() {
                         data-share-url={buildShareUrl(record)}
                         className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-emerald-400/60 hover:text-emerald-200"
                       >
-                        Share
+                        {t('favorites.share')}
                       </button>
                       <button
                         type="button"
@@ -310,40 +310,40 @@ export default function Favorites() {
                         disabled={pendingDeleteIds.has(favorite.id)}
                         className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-rose-400/60 hover:text-rose-200"
                       >
-                        {pendingDeleteIds.has(favorite.id) ? 'Removing...' : 'Remove'}
+                        {pendingDeleteIds.has(favorite.id) ? t('favorites.removing') : t('favorites.remove')}
                       </button>
                     </div>
                   </div>
                   <div className="mt-3 grid gap-3 text-xs text-white/70 sm:grid-cols-2">
                     <div>
-                      <p className="text-white/50">Month Pillar</p>
+                      <p className="text-white/50">{t('bazi.month')}</p>
                       <p>{record.pillars.month.stem} · {record.pillars.month.branch}</p>
                     </div>
                     <div>
-                      <p className="text-white/50">Hour Pillar</p>
+                      <p className="text-white/50">{t('bazi.hour')}</p>
                       <p>{record.pillars.hour.stem} · {record.pillars.hour.branch}</p>
                     </div>
                   </div>
                   {isExpanded && (
                     <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-white/10 p-4 text-xs text-white/70 sm:grid-cols-2">
                       <div>
-                        <p className="text-white/50">Year Pillar</p>
+                        <p className="text-white/50">{t('bazi.year')}</p>
                         <p>{record.pillars.year.stem} · {record.pillars.year.branch}</p>
                       </div>
                       <div>
-                        <p className="text-white/50">Day Pillar</p>
+                        <p className="text-white/50">{t('bazi.day')}</p>
                         <p>{record.pillars.day.stem} · {record.pillars.day.branch}</p>
                       </div>
                       <div>
-                        <p className="text-white/50">Elements</p>
+                        <p className="text-white/50">{t('bazi.fiveElements')}</p>
                         <p>
-                          Wood {record.fiveElements.Wood} · Fire {record.fiveElements.Fire} · Earth {record.fiveElements.Earth}
+                          {t('bazi.fiveElements').includes('五行') ? '木' : 'Wood'} {record.fiveElements.Wood} · {t('bazi.fiveElements').includes('五行') ? '火' : 'Fire'} {record.fiveElements.Fire} · {t('bazi.fiveElements').includes('五行') ? '土' : 'Earth'} {record.fiveElements.Earth}
                         </p>
                       </div>
                       <div>
-                        <p className="text-white/50">Elements</p>
+                        <p className="text-white/50">{t('bazi.fiveElements')}</p>
                         <p>
-                          Metal {record.fiveElements.Metal} · Water {record.fiveElements.Water}
+                          {t('bazi.fiveElements').includes('五行') ? '金' : 'Metal'} {record.fiveElements.Metal} · {t('bazi.fiveElements').includes('五行') ? '水' : 'Water'} {record.fiveElements.Water}
                         </p>
                       </div>
                     </div>
@@ -355,15 +355,15 @@ export default function Favorites() {
         ) : (
           <div className="mt-6 rounded-2xl border border-dashed border-white/20 bg-white/5 p-6 text-sm text-white/60">
             <div className="grid gap-2">
-              <p className="text-sm font-semibold text-white">No favorites yet</p>
-              <p className="text-white/60">Save a record to keep it handy here.</p>
+              <p className="text-sm font-semibold text-white">{t('favorites.noFavorites')}</p>
+              <p className="text-white/60">{t('favorites.noFavoritesDesc')}</p>
             </div>
           </div>
         )}
 
         <div className="mt-10 border-t border-white/10 pt-6">
-          <h2 className="text-lg text-white">Add from history</h2>
-          <p className="mt-2 text-sm text-white/60">Pick from your saved records to add them to favorites.</p>
+          <h2 className="text-lg text-white">{t('favorites.addFromHistory')}</h2>
+          <p className="mt-2 text-sm text-white/60">{t('favorites.addFromHistoryDesc')}</p>
           {unfavoritedRecords.length ? (
             <div className="mt-4 grid gap-3" data-testid="favorites-add-list">
               {unfavoritedRecords.map((record) => (
@@ -387,7 +387,7 @@ export default function Favorites() {
                     disabled={pendingAddIds.has(record.id)}
                     className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-gold-400/60 hover:text-gold-100"
                   >
-                    {pendingAddIds.has(record.id) ? 'Adding...' : 'Add to favorites'}
+                    {pendingAddIds.has(record.id) ? t('favorites.adding') : t('favorites.add')}
                   </button>
                 </div>
               ))}
@@ -396,12 +396,12 @@ export default function Favorites() {
             <div className="mt-4 rounded-2xl border border-dashed border-white/20 bg-white/5 p-4 text-sm text-white/60">
               <div className="grid gap-2">
                 <p className="text-sm font-semibold text-white">
-                  {records.length ? 'All saved records are favorited' : 'No saved history yet'}
+                  {records.length ? t('favorites.allFavorited') : t('favorites.noHistoryYet')}
                 </p>
                 <p className="text-white/60">
                   {records.length
-                    ? 'You have already added every saved record to favorites.'
-                    : 'Complete a reading first, then add it here.'}
+                    ? t('favorites.allFavoritedDesc', { defaultValue: 'You have already added every saved record to favorites.' })
+                    : t('favorites.noHistoryYetDesc')}
                 </p>
               </div>
             </div>

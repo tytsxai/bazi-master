@@ -1199,11 +1199,15 @@ export default function Bazi() {
   const resolveWsUrl = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const host = window.location.host;
-    // In production or when proxied correctly, host is enough.
-    // If running frontend on 3000 and backend on 4000 without proxy:
-    if (host.includes('localhost:3000') || host.includes('127.0.0.1:3000')) {
-      return `${protocol}://${window.location.hostname}:4000/ws/ai`;
+    const hostname = window.location.hostname;
+    const port = window.location.port;
+
+    // Local dev: frontend (any port) + backend (4000) without a reverse-proxy for websocket upgrades.
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '4000') {
+      return `${protocol}://${hostname}:4000/ws/ai`;
     }
+
+    // Production / reverse-proxied deployments.
     return `${protocol}://${host}/ws/ai`;
   };
 

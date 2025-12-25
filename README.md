@@ -15,8 +15,16 @@ BaZi Master is a global divination platform centered on BaZi (八字), with Taro
 1. Install dependencies and verify tools:
    - Node.js 18+, npm
    - PostgreSQL, Redis
-2. Run the init script:
-   - `./init.sh`
+
+## Development Setup
+
+See `init.sh` for a quick start script or run:
+```bash
+./init.sh
+```
+
+## Production Deployment
+For production evaluation, deployment guides, and operational scripts, please refer to [PRODUCTION.md](./PRODUCTION.md).
 3. Start services in separate terminals:
    - `cd backend && npm run dev`
    - `cd frontend && npm run dev`
