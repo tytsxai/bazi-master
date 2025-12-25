@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "start": "NODE_ENV=production node server.js",
+    "start": "NODE_ENV=production node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma && NODE_ENV=production node server.js",
     "test": "NODE_ENV=test node --test",
     "postinstall": "node scripts/prisma.mjs generate --schema=../prisma/schema.prisma",
     "prisma:generate": "node scripts/prisma.mjs generate --schema=../prisma/schema.prisma",

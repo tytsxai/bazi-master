@@ -23,9 +23,12 @@ test('AI streaming via WebSocket flow (connect, stream, disconnect)', async ({ p
   await page.addInitScript(() => {
     localStorage.setItem('locale', 'en-US');
     localStorage.setItem('bazi_ai_provider', 'mock');
-    localStorage.removeItem('bazi_token');
-    localStorage.removeItem('bazi_user');
-    localStorage.removeItem('bazi_last_activity');
+    if (!localStorage.getItem('e2e_ai_streaming_init')) {
+      localStorage.setItem('e2e_ai_streaming_init', '1');
+      localStorage.removeItem('bazi_token');
+      localStorage.removeItem('bazi_user');
+      localStorage.removeItem('bazi_last_activity');
+    }
   });
 
   await page.goto('/');
@@ -36,11 +39,18 @@ test('AI streaming via WebSocket flow (connect, stream, disconnect)', async ({ p
   await expect(page).toHaveURL(/\/login/);
   await page.screenshot({ path: screenshotPath('ai-streaming-step-2-login') });
 
+  const loginResponse = page.waitForResponse(
+    (resp) => resp.url().includes('/api/auth/login') && resp.request().method() === 'POST'
+  );
   await page.fill('input[type="email"]', 'test@example.com');
   await page.fill('input[type="password"]', 'password123');
   await page.click('button[type="submit"]');
+  const loginResult = await loginResponse;
+  expect(loginResult.ok()).toBeTruthy();
   await expect(page).toHaveURL(/\/profile/);
   await expect(page.getByTestId('header-user-name')).toHaveText('Test User');
+  const tokenValue = await page.evaluate(() => localStorage.getItem('bazi_token'));
+  expect(tokenValue).toBeTruthy();
   await page.screenshot({ path: screenshotPath('ai-streaming-step-3-profile') });
 
   await page.goto('/bazi');

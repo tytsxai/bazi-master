@@ -3,6 +3,7 @@ import net from 'node:net';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { ensureLocalPostgres, stopLocalPostgres } from '../../backend/scripts/local-postgres.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -165,6 +166,8 @@ let backendProcess = null;
 let frontendProcess = null;
 let keepAliveTimer = null;
 let shuttingDown = false;
+let postgresStartedByScript = false;
+const postgresDataDir = path.join(rootDir, 'prisma', '.pgdata-e2e');
 
 const shutdown = () => {
   if (shuttingDown) return;
@@ -175,13 +178,16 @@ const shutdown = () => {
   }
   if (frontendProcess) frontendProcess.kill('SIGTERM');
   if (backendProcess) backendProcess.kill('SIGTERM');
+  if (postgresStartedByScript) {
+    stopLocalPostgres({ dataDir: postgresDataDir, mode: 'fast' });
+  }
 };
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 process.on('exit', shutdown);
 
-if (forceRestart) {
+if (forceRestart && process.env.PW_SKIP_RESET !== '1') {
   const backendRunning = await checkPort(4000);
   if (backendRunning) {
     if (killPort(4000)) {
@@ -194,13 +200,17 @@ if (forceRestart) {
     }
   }
 
-  const e2eDbPath = path.join(rootDir, 'prisma', 'e2e.db');
-  process.env.DATABASE_URL = `file:${e2eDbPath}`;
-  console.log(`[dev-server] Resetting E2E database at ${e2eDbPath}`);
+  const pgPort = Number(process.env.PG_E2E_PORT || 5433);
+  const pgDbName = process.env.PG_E2E_DB || 'bazi_master_e2e';
+  const { url, started } = await ensureLocalPostgres({
+    dataDir: postgresDataDir,
+    port: pgPort,
+    dbName: pgDbName,
+  });
+  postgresStartedByScript = started;
+  process.env.DATABASE_URL = url;
+  console.log(`[dev-server] Resetting E2E PostgreSQL database ${pgDbName} on 127.0.0.1:${pgPort}`);
   try {
-    fs.rmSync(e2eDbPath, { force: true });
-    fs.rmSync(`${e2eDbPath}-wal`, { force: true });
-    fs.rmSync(`${e2eDbPath}-shm`, { force: true });
     execSync(
       `${nodeCmd} scripts/prisma.mjs db push --force-reset --schema=../prisma/schema.prisma`,
       { cwd: backendDir, stdio: 'inherit', env: process.env }

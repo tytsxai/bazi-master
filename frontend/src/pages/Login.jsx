@@ -36,74 +36,73 @@ export default function Login() {
   const [sessionNotice, setSessionNotice] = useState('');
 
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const passwordStrengthHint = 'Password must be at least 8 characters and include letters and numbers.';
 
-  const validate = (nextEmail, nextPassword) => {
+  const validate = (nextEmail, nextPassword, t) => {
     const nextErrors = {};
 
     if (!nextEmail.trim()) {
-      nextErrors.email = 'Email is required.';
+      nextErrors.email = t('login.errors.emailRequired');
     } else if (!emailPattern.test(nextEmail)) {
-      nextErrors.email = 'Enter a valid email address.';
+      nextErrors.email = t('login.errors.emailInvalid');
     }
 
     if (!nextPassword) {
-      nextErrors.password = 'Password is required.';
+      nextErrors.password = t('login.errors.passwordRequired');
     }
 
     return nextErrors;
   };
 
-  const validatePasswordStrength = (value) => {
+  const validatePasswordStrength = (value, t) => {
     const trimmed = value.trim();
-    if (trimmed.length < 8) return passwordStrengthHint;
-    if (!/[A-Za-z]/.test(trimmed) || !/\d/.test(trimmed)) return passwordStrengthHint;
+    if (trimmed.length < 8) return t('login.errors.passwordStrength');
+    if (!/[A-Za-z]/.test(trimmed) || !/\d/.test(trimmed)) return t('login.errors.passwordStrength');
     return '';
   };
 
-  const validateRegister = (payload) => {
+  const validateRegister = (payload, t) => {
     const nextErrors = {};
     const nameValue = payload.name.trim();
     if (!payload.email.trim()) {
-      nextErrors.email = 'Email is required.';
+      nextErrors.email = t('login.errors.emailRequired');
     } else if (!emailPattern.test(payload.email)) {
-      nextErrors.email = 'Enter a valid email address.';
+      nextErrors.email = t('login.errors.emailInvalid');
     }
     if (!payload.password) {
-      nextErrors.password = 'Password is required.';
+      nextErrors.password = t('login.errors.passwordRequired');
     } else {
-      const strengthError = validatePasswordStrength(payload.password);
+      const strengthError = validatePasswordStrength(payload.password, t);
       if (strengthError) nextErrors.password = strengthError;
     }
     const confirmValue = payload.confirm.trim();
     if (confirmValue && confirmValue !== payload.password) {
-      nextErrors.confirm = 'Passwords do not match.';
+      nextErrors.confirm = t('login.errors.passwordsNotMatch');
     }
     if (nameValue.length > 0 && nameValue.length < 2) {
-      nextErrors.name = 'Name must be at least 2 characters.';
+      nextErrors.name = t('login.errors.nameTooShort');
     }
     return nextErrors;
   };
 
-  const validateResetRequest = (nextEmail) => {
+  const validateResetRequest = (nextEmail, t) => {
     const nextErrors = {};
     if (!nextEmail.trim()) {
-      nextErrors.email = 'Email is required.';
+      nextErrors.email = t('login.errors.emailRequired');
     } else if (!emailPattern.test(nextEmail)) {
-      nextErrors.email = 'Enter a valid email address.';
+      nextErrors.email = t('login.errors.emailInvalid');
     }
     return nextErrors;
   };
 
-  const validateResetConfirm = (nextToken, nextPassword) => {
+  const validateResetConfirm = (nextToken, nextPassword, t) => {
     const nextErrors = {};
     if (!nextToken.trim()) {
-      nextErrors.token = 'Reset code is required.';
+      nextErrors.token = t('login.errors.tokenRequired');
     }
     if (!nextPassword) {
-      nextErrors.password = 'New password is required.';
+      nextErrors.password = t('login.errors.newPasswordRequired');
     } else {
-      const strengthError = validatePasswordStrength(nextPassword);
+      const strengthError = validatePasswordStrength(nextPassword, t);
       if (strengthError) nextErrors.password = strengthError;
     }
     return nextErrors;
@@ -180,9 +179,9 @@ export default function Login() {
     const message =
       error instanceof Error && error.message
         ? error.message
-        : 'Login failed. Please try again.';
+        : t('login.errors.loginFailed');
     if (message.toLowerCase() === 'login failed') {
-      return 'Incorrect email or password.';
+      return t('login.errors.loginFailed');
     }
     return message;
   };
@@ -317,7 +316,7 @@ export default function Login() {
     event.preventDefault();
     if (isSubmittingRef.current) return;
     setLoginError('');
-    const nextErrors = validate(email, password);
+    const nextErrors = validate(email, password, t);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
     try {
@@ -342,7 +341,7 @@ export default function Login() {
       password: registerPassword,
       confirm: registerConfirm,
     };
-    const nextErrors = validateRegister(payload);
+    const nextErrors = validateRegister(payload, t);
     setRegisterErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -387,7 +386,7 @@ export default function Login() {
 
   const handleRequestReset = async (event) => {
     event.preventDefault();
-    const nextErrors = validateResetRequest(resetEmail);
+    const nextErrors = validateResetRequest(resetEmail, t);
     setResetErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
     try {
@@ -405,7 +404,7 @@ export default function Login() {
       const data = await res.json();
       setResetStatus({
         type: 'success',
-        message: data?.message || 'If an account exists for that email, a reset link has been sent.',
+        message: data?.message || t('login.ui.resetSent'),
       });
     } catch (error) {
       setResetStatus({
@@ -419,7 +418,7 @@ export default function Login() {
 
   const handleConfirmReset = async (event) => {
     event.preventDefault();
-    const nextErrors = validateResetConfirm(resetToken, resetPassword);
+    const nextErrors = validateResetConfirm(resetToken, resetPassword, t);
     setResetErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
     try {
@@ -436,7 +435,7 @@ export default function Login() {
       }
       setResetStatus({
         type: 'success',
-        message: 'Password updated. You can log in now.',
+        message: t('login.ui.passwordUpdated'),
       });
       setResetPassword('');
       setResetToken('');
@@ -473,8 +472,8 @@ export default function Login() {
             : mode === 'register'
               ? t('login.registerTitle', { defaultValue: 'Create account' })
               : mode === 'request'
-                ? 'Reset password'
-                : 'Set new password'}
+                ? t('login.ui.resetPassword')
+                : t('login.ui.setNewPassword')}
         </h1>
         {sessionNotice && (
           <div
@@ -585,18 +584,18 @@ export default function Login() {
                 className="underline decoration-white/40 underline-offset-4"
                 onClick={() => switchMode('request')}
               >
-                Forgot password?
+                {t('login.ui.forgotPassword')}
               </button>
               <button
                 type="button"
                 className="underline decoration-white/40 underline-offset-4"
                 onClick={() => switchMode('reset')}
               >
-                Have a reset code?
+                {t('login.ui.haveCode')}
               </button>
             </div>
             <div className="mt-4 flex items-center justify-between text-xs text-white/70">
-              <span>New here?</span>
+              <span>{t('login.ui.newHere')}</span>
               <button
                 type="button"
                 className="underline decoration-white/40 underline-offset-4"
@@ -605,7 +604,7 @@ export default function Login() {
                   navigate(search ? `/register?${search}` : '/register');
                 }}
               >
-                Create an account
+                {t('login.registerTitle', { defaultValue: 'Create an account' })}
               </button>
             </div>
             <p className="mt-4 text-xs text-white/60">
@@ -623,7 +622,7 @@ export default function Login() {
             ) : null}
             <div className="mt-6">
               <label htmlFor="register-name" className="block text-sm text-white/80">
-                Display name (optional)
+                {t('login.ui.displayName')}
               </label>
               <input
                 id="register-name"
@@ -685,7 +684,7 @@ export default function Login() {
                 onChange={(event) => {
                   const value = event.target.value;
                   setRegisterPassword(value);
-                  if (registerErrors.password && !validatePasswordStrength(value)) {
+                  if (registerErrors.password && !validatePasswordStrength(value, t)) {
                     setRegisterErrors((prev) => ({ ...prev, password: undefined }));
                   }
                 }}
@@ -703,7 +702,7 @@ export default function Login() {
             </div>
             <div className="mt-4">
               <label htmlFor="register-confirm" className="block text-sm text-white/80">
-                Confirm password
+                {t('login.ui.confirmPassword')}
               </label>
               <input
                 id="register-confirm"
@@ -727,7 +726,7 @@ export default function Login() {
                 </span>
               )}
             </div>
-            <p className="mt-3 text-xs text-white/60">{passwordStrengthHint}</p>
+            <p className="mt-3 text-xs text-white/60">{t('login.errors.passwordStrength')}</p>
             {registerStatus && (
               <p className="mt-3 text-xs text-rose-200" role="alert">
                 {registerStatus}
@@ -751,7 +750,7 @@ export default function Login() {
                   navigate(search ? `/login?${search}` : '/login');
                 }}
               >
-                Back to login
+                {t('login.ui.backToLogin')}
               </button>
             </div>
           </>
@@ -766,7 +765,7 @@ export default function Login() {
             ) : null}
             <div className="mt-6">
               <label htmlFor="reset-email" className="block text-sm text-white/80">
-                Email
+                {t('login.email')}
               </label>
               <input
                 id="reset-email"
@@ -806,7 +805,7 @@ export default function Login() {
               className="mt-6 w-full rounded-full bg-gold-400 px-4 py-2 text-sm font-semibold text-mystic-900 shadow-lg shadow-gold-400/30 disabled:cursor-not-allowed disabled:opacity-70"
               disabled={isResetSubmitting}
             >
-              {isResetSubmitting ? 'Sending...' : 'Send reset link'}
+              {isResetSubmitting ? 'Sending...' : t('login.ui.sendResetLink')}
             </button>
             <p className="mt-4 text-xs text-white/60">
               For this demo, reset codes are logged on the server.
@@ -820,14 +819,14 @@ export default function Login() {
                   navigate(search ? `/login?${search}` : '/login');
                 }}
               >
-                Back to login
+                {t('login.ui.backToLogin')}
               </button>
               <button
                 type="button"
                 className="underline decoration-white/40 underline-offset-4"
                 onClick={() => switchMode('reset')}
               >
-                Have a reset code?
+                {t('login.ui.haveCode')}
               </button>
             </div>
           </>
@@ -881,7 +880,7 @@ export default function Login() {
                   setResetPassword(value);
                   setResetStatus(null);
                   if (resetErrors.password && value) {
-                    setResetErrors((prev) => ({ ...prev, password: undefined }));
+                    setErrors((prev) => ({ ...prev, password: undefined }));
                   }
                 }}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
@@ -910,7 +909,7 @@ export default function Login() {
               className="mt-6 w-full rounded-full bg-gold-400 px-4 py-2 text-sm font-semibold text-mystic-900 shadow-lg shadow-gold-400/30 disabled:cursor-not-allowed disabled:opacity-70"
               disabled={isResetSubmitting}
             >
-              {isResetSubmitting ? 'Updating...' : 'Update password'}
+              {isResetSubmitting ? 'Updating...' : t('login.ui.updatePassword')}
             </button>
             <p className="mt-4 text-xs text-white/60">
               For this demo, reset codes are logged on the server.
@@ -924,7 +923,7 @@ export default function Login() {
                   navigate(search ? `/login?${search}` : '/login');
                 }}
               >
-                Back to login
+                {t('login.ui.backToLogin')}
               </button>
               <button
                 type="button"

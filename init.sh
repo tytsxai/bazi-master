@@ -26,21 +26,20 @@ if [ -d "$ROOT_DIR/backend" ]; then
   echo "Checking backend dependencies..."
   (cd "$ROOT_DIR/backend" && npm install)
   
-  # Ensure Prisma DB is ready
-  echo "Ensuring Database is synced..."
+  echo "Ensuring Postgres/Redis are running (docker-compose)..."
+  if command -v docker >/dev/null 2>&1; then
+    (cd "$ROOT_DIR" && docker compose up -d postgres redis)
+  else
+    echo "ERROR: docker is required for local setup (PostgreSQL/Redis)."
+    exit 1
+  fi
+
+  # Ensure Prisma migrations are applied
+  echo "Applying Prisma migrations..."
   if [ -z "${DATABASE_URL:-}" ]; then
-    export DATABASE_URL="file:$ROOT_DIR/prisma/dev.db"
+    export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/bazi_master?schema=public"
   fi
-  if ! (cd "$ROOT_DIR/backend" && npx prisma db push --schema=../prisma/schema.prisma); then
-    echo "Prisma db push reported potential data loss."
-    if [ "${PRISMA_ACCEPT_DATA_LOSS:-}" = "true" ]; then
-      echo "Re-running with --accept-data-loss (PRISMA_ACCEPT_DATA_LOSS=true)."
-      (cd "$ROOT_DIR/backend" && npx prisma db push --accept-data-loss --schema=../prisma/schema.prisma)
-    else
-      echo "Set PRISMA_ACCEPT_DATA_LOSS=true to proceed (this may delete data), or resolve the warning manually."
-      exit 1
-    fi
-  fi
+  (cd "$ROOT_DIR/backend" && node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma)
 fi
 
 if [ -d "$ROOT_DIR/frontend" ]; then
