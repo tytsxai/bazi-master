@@ -1,0 +1,4 @@
+- Read app_spec.txt and generated feature_list.json with 479 detailed test cases covering all required categories and long-form flows.
+- Created init.sh for environment setup guidance.
+- Added README.md and base project directories: frontend/, backend/, prisma/, docs/.
+- Initialized git repository and committed initial setup.
