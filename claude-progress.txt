@@ -115,3 +115,9 @@
 - Added cache validation flow: exposed /api/system/cache-status (non-prod, auth) and cache verification hooks for Redis session and BaZi calculation cache.
 - Added Playwright cache-validation.spec.js with cache status checks, cache hit/miss validation, and screenshots; updated Playwright webServer env to set REDIS_URL.
 - Verified cache validation flow end-to-end via Playwright; marked feature_list.json test #26 as passing. Current progress: 49/479 tests passing.
+- Init.sh still fails to start Docker-based Postgres because Docker daemon (colima) is not running; ran Playwright via manual dev-server instead.
+- Fixed backend crash by defining missing sendLiveness handler on /health endpoint.
+- Ensured account deletion clears auth state by calling logout() after successful delete in Profile.
+- Added Playwright data cleanup cascade test for user deletion (data-cleanup-user-deletion.spec.js) with verification screenshots.
+- Verified data cleanup cascade flow end-to-end via Playwright; marked feature_list.json test #27 as passing. Current progress: 50/479 tests passing.
+- Next: continue remaining functional tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases) and resolve Docker/Postgres startup for init.sh if needed.

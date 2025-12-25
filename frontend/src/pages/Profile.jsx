@@ -26,7 +26,7 @@ const useUnsavedChangesWarning = (shouldBlock, message = UNSAVED_WARNING_MESSAGE
 
 export default function Profile() {
   const { t, i18n } = useTranslation();
-  const { user, token, refreshUser, setProfileName, isAuthenticated } = useAuth();
+  const { user, token, refreshUser, setProfileName, isAuthenticated, logout } = useAuth();
   const authFetch = useAuthFetch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -351,6 +351,7 @@ export default function Profile() {
         const message = await readApiErrorMessage(res, 'Failed to delete account');
         throw new Error(message);
       }
+      logout();
       setConfirmDeleteOpen(false);
       navigate('/login?reason=deleted');
     } catch (error) {

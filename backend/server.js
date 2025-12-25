@@ -6,6 +6,7 @@ import path from 'path';
 import cors from 'cors';
 import compression from 'compression';
 import helmet from 'helmet';
+import { PrismaClient } from '@prisma/client';
 import { pathToFileURL, fileURLToPath } from 'url';
 import swaggerUi from 'swagger-ui-express';
 import { PrismaClient, Prisma } from '@prisma/client';
@@ -45,7 +46,7 @@ import {
   parseTimezoneOffsetMinutes,
   buildBirthTimeMeta,
 } from './timezone.js';
-import { getServerConfig, getSessionConfig } from './env.js';
+import { getServerConfig as getServerConfigFromEnv, getSessionConfig as getSessionConfigFromEnv } from './env.js';
 import { initRedis, createRedisMirror } from './redis.js';
 import { createSessionStore } from './sessionStore.js';
 import { cleanupUserInMemory, deleteUserCascade } from './userCleanup.js';
@@ -100,7 +101,7 @@ ensureDatabaseUrl();
 const prisma = new PrismaClient();
 const app = express();
 app.disable('x-powered-by');
-const { sessionIdleMs: SESSION_IDLE_MS } = getSessionConfig();
+const { sessionIdleMs: SESSION_IDLE_MS } = getSessionConfigFromEnv();
 const {
   port: PORT,
   jsonBodyLimit: JSON_BODY_LIMIT,
@@ -117,8 +118,6 @@ const {
   availableProviders: AVAILABLE_PROVIDERS,
   resetTokenTtlMs: RESET_TOKEN_TTL_MS,
   resetRequestMinDurationMs: RESET_REQUEST_MIN_DURATION_MS,
-  googleClientId: GOOGLE_CLIENT_ID,
-  googleClientSecret: GOOGLE_CLIENT_SECRET,
   googleRedirectUri: GOOGLE_REDIRECT_URI,
   frontendUrl: FRONTEND_URL,
   adminEmails: ADMIN_EMAILS,
@@ -132,7 +131,7 @@ const {
   shutdownTimeoutMs: SHUTDOWN_TIMEOUT_MS,
   corsAllowedOrigins: CORS_ALLOWED_ORIGINS,
   nodeEnv: NODE_ENV,
-} = getServerConfig();
+} = getServerConfigFromEnv();
 
 const IS_PRODUCTION = NODE_ENV === 'production';
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -440,20 +439,13 @@ app.use(compression());
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 // Health Check Endpoint (Probes)
-app.get('/health', async (req, res) => {
-  try {
-    // Basic liveness check + DB connectivity
-    await prisma.$queryRaw`SELECT 1`;
-    res.json({
-      status: 'ok',
-      service: 'bazi-master-backend',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime()
-    });
-  } catch (error) {
-    console.error('Health check failed:', error);
-    res.status(503).json({ status: 'error', message: 'Service unhealthy' });
-  }
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'bazi-master-backend',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
 });
 
 void ensureSoftDeleteReady().catch((error) => {
@@ -1340,7 +1332,7 @@ const ALLOW_RUNTIME_SCHEMA_SYNC =
 const SHOULD_SEED_DEFAULT_USER =
   !IS_PRODUCTION && process.env.SEED_DEFAULT_USER !== 'false';
 const PASSWORD_RESET_DEBUG_LOG =
-  !IS_PRODUCTION && process.env.PASSWORD_RESET_DEBUG_LOG !== 'false';
+  !IS_PRODUCTION && process.env.PASSWORD_RESET_DEBUG_LOG === 'true';
 const sessionStore = createSessionStore({ ttlMs: SESSION_IDLE_MS });
 const createSessionToken = (userId) => {
   const issuedAt = Date.now();
@@ -2607,10 +2599,6 @@ const checkRedis = async () => {
     return { ok: false, error: error?.message || 'redis_check_failed' };
   }
 };
-
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
-});
 
 apiRouter.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
