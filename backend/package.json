@@ -5,14 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
+    "test": "NODE_ENV=test node --test",
     "prisma:generate": "prisma generate --schema=../prisma/schema.prisma",
     "prisma:push": "prisma db push --schema=../prisma/schema.prisma"
   },
   "dependencies": {
     "@prisma/client": "^5.10.2",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "express": "^4.21.1",
-    "lunar-javascript": "^1.7.7"
+    "helmet": "^7.1.0",
+    "lunar-javascript": "^1.7.7",
+    "redis": "^4.6.14",
+    "swagger-ui-express": "^5.0.0"
   },
   "devDependencies": {
     "prisma": "^5.10.2"

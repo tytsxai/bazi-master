@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import { useAuthFetch } from '../auth/useAuthFetch.js';
+import { readApiErrorMessage } from '../utils/apiError.js';
 
 const buildShareUrl = (record) => {
   if (!record?.id) return '';
@@ -41,6 +42,10 @@ export default function Favorites() {
   const [status, setStatus] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [shareStatus, setShareStatus] = useState(null);
+  const [pendingAddIds, setPendingAddIds] = useState(() => new Set());
+  const [pendingDeleteIds, setPendingDeleteIds] = useState(() => new Set());
+
+  const readErrorMessage = (res, fallback) => readApiErrorMessage(res, fallback);
 
   const loadFavorites = async () => {
     const res = await authFetch('/api/favorites', {
@@ -50,7 +55,7 @@ export default function Favorites() {
       return;
     }
     if (!res.ok) {
-      setStatus('Unable to load favorites.');
+      setStatus(await readErrorMessage(res, 'Unable to load favorites.'));
       return;
     }
     const data = await res.json();
@@ -65,7 +70,7 @@ export default function Favorites() {
       return;
     }
     if (!res.ok) {
-      setStatus('Unable to load records.');
+      setStatus(await readErrorMessage(res, 'Unable to load records.'));
       return;
     }
     const data = await res.json();
@@ -88,46 +93,127 @@ export default function Favorites() {
     [records, favoriteRecordIds],
   );
 
-  const handleDelete = async (id) => {
-    const res = await authFetch(`/api/favorites/${id}`, {
+  const handleDelete = async (favorite) => {
+    if (!favorite) return;
+    setStatus(null);
+    const rollbackFavorite = favorite;
+    const rollbackIndex = favorites.findIndex((item) => item.id === favorite.id);
+    const shouldRestoreExpanded = expandedId === favorite.id;
+
+    setPendingDeleteIds((prev) => {
+      const next = new Set(prev);
+      next.add(favorite.id);
+      return next;
+    });
+    setFavorites((prev) => prev.filter((item) => item.id !== favorite.id));
+    if (shouldRestoreExpanded) setExpandedId(null);
+
+    const res = await authFetch(`/api/favorites/${favorite.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) {
+      setFavorites((prev) => {
+        if (prev.some((item) => item.id === rollbackFavorite.id)) return prev;
+        const next = [...prev];
+        const insertIndex = rollbackIndex >= 0 ? Math.min(rollbackIndex, next.length) : 0;
+        next.splice(insertIndex, 0, rollbackFavorite);
+        return next;
+      });
+      if (shouldRestoreExpanded) {
+        setExpandedId((current) => (current == null ? rollbackFavorite.id : current));
+      }
+      setPendingDeleteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(rollbackFavorite.id);
+        return next;
+      });
       return;
     }
-    if (res.ok) {
-      setFavorites((prev) => prev.filter((favorite) => favorite.id !== id));
+    if (!res.ok) {
+      const message = await readErrorMessage(res, 'Unable to remove favorite.');
+      setStatus(message);
+      setFavorites((prev) => {
+        if (prev.some((item) => item.id === rollbackFavorite.id)) return prev;
+        const next = [...prev];
+        const insertIndex = rollbackIndex >= 0 ? Math.min(rollbackIndex, next.length) : 0;
+        next.splice(insertIndex, 0, rollbackFavorite);
+        return next;
+      });
+      if (shouldRestoreExpanded) {
+        setExpandedId((current) => (current == null ? rollbackFavorite.id : current));
+      }
     }
+    setPendingDeleteIds((prev) => {
+      const next = new Set(prev);
+      next.delete(rollbackFavorite.id);
+      return next;
+    });
   };
 
-  const handleAdd = async (recordId) => {
+  const handleAdd = async (record) => {
+    if (!record?.id) return;
     setStatus(null);
+    if (favorites.some((item) => item.recordId === record.id)) return;
+
+    const tempId = `temp-${record.id}-${Date.now()}`;
+    const optimisticFavorite = {
+      id: tempId,
+      recordId: record.id,
+      record,
+      createdAt: new Date().toISOString(),
+    };
+    setPendingAddIds((prev) => {
+      const next = new Set(prev);
+      next.add(record.id);
+      return next;
+    });
+    setFavorites((prev) => [optimisticFavorite, ...prev]);
+
     const res = await authFetch('/api/favorites', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ recordId }),
+      body: JSON.stringify({ recordId: record.id }),
     });
     if (res.status === 401) {
+      setFavorites((prev) => prev.filter((item) => item.id !== tempId));
+      setPendingAddIds((prev) => {
+        const next = new Set(prev);
+        next.delete(record.id);
+        return next;
+      });
       return;
     }
     if (!res.ok) {
-      const err = await res.json();
-      setStatus(err.error || 'Unable to add favorite.');
+      const message = await readErrorMessage(res, 'Unable to add favorite.');
+      setStatus(message);
+      setFavorites((prev) => prev.filter((item) => item.id !== tempId));
+      setPendingAddIds((prev) => {
+        const next = new Set(prev);
+        next.delete(record.id);
+        return next;
+      });
       return;
     }
     const data = await res.json();
     if (data.favorite) {
       setFavorites((prev) => {
-        if (prev.some((favorite) => favorite.id === data.favorite.id)) return prev;
-        return [data.favorite, ...prev];
+        const replaced = prev.map((item) => (item.id === tempId ? data.favorite : item));
+        if (replaced.some((item) => item.id === data.favorite.id)) return replaced;
+        return [data.favorite, ...replaced];
       });
     } else {
+      setFavorites((prev) => prev.filter((item) => item.id !== tempId));
       loadFavorites();
     }
+    setPendingAddIds((prev) => {
+      const next = new Set(prev);
+      next.delete(record.id);
+      return next;
+    });
   };
 
   const handleShare = async (record) => {
@@ -182,12 +268,17 @@ export default function Favorites() {
           </p>
         )}
         {favorites.length ? (
-          <div className="mt-6 grid gap-4">
+          <div className="mt-6 grid gap-4" data-testid="favorites-list">
             {favorites.map((favorite) => {
               const record = favorite.record;
               const isExpanded = expandedId === favorite.id;
               return (
-                <div key={favorite.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div
+                  key={favorite.id}
+                  data-testid="favorite-record-card"
+                  data-record-id={record?.id}
+                  className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-sm text-white">
@@ -215,10 +306,11 @@ export default function Favorites() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDelete(favorite.id)}
+                        onClick={() => handleDelete(favorite)}
+                        disabled={pendingDeleteIds.has(favorite.id)}
                         className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-rose-400/60 hover:text-rose-200"
                       >
-                        Remove
+                        {pendingDeleteIds.has(favorite.id) ? 'Removing...' : 'Remove'}
                       </button>
                     </div>
                   </div>
@@ -273,9 +365,14 @@ export default function Favorites() {
           <h2 className="text-lg text-white">Add from history</h2>
           <p className="mt-2 text-sm text-white/60">Pick from your saved records to add them to favorites.</p>
           {unfavoritedRecords.length ? (
-            <div className="mt-4 grid gap-3">
+            <div className="mt-4 grid gap-3" data-testid="favorites-add-list">
               {unfavoritedRecords.map((record) => (
-                <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div
+                  key={record.id}
+                  data-testid="favorite-add-card"
+                  data-record-id={record.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4"
+                >
                   <div>
                     <p className="text-sm text-white">
                       {record.birthYear}-{record.birthMonth}-{record.birthDay} · {record.birthHour}:00
@@ -286,10 +383,11 @@ export default function Favorites() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleAdd(record.id)}
+                    onClick={() => handleAdd(record)}
+                    disabled={pendingAddIds.has(record.id)}
                     className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-gold-400/60 hover:text-gold-100"
                   >
-                    Add to favorites
+                    {pendingAddIds.has(record.id) ? 'Adding...' : 'Add to favorites'}
                   </button>
                 </div>
               ))}

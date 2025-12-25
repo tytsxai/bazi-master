@@ -1,0 +1,55 @@
+import { test, expect } from '@playwright/test';
+import path from 'path';
+
+const buildScreenshotPath = (name) => {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return path.join(process.cwd(), 'verification', `${stamp}-${name}.png`);
+};
+
+test('[J] Data cleanup: I Ching time divination from /history matches backend data', async ({ page }) => {
+  const consoleErrors = [];
+
+  page.on('pageerror', (error) => consoleErrors.push(error.message));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.addInitScript(() => {
+    localStorage.setItem('locale', 'en-US');
+  });
+
+  await page.goto('/login');
+  await page.fill('input[type="email"]', 'test@example.com');
+  await page.fill('input[type="password"]', 'password123');
+  await page.click('button[type="submit"]');
+  await expect(page).toHaveURL(/\/profile/);
+
+  await page.goto('/history');
+  await expect(page.getByRole('heading', { name: /History/i })).toBeVisible();
+  await page.screenshot({ path: buildScreenshotPath('data-cleanup-history-step-1') });
+
+  const responsePromise = page.waitForResponse(
+    (resp) => resp.url().includes('/api/iching/divine') && resp.request().method() === 'POST'
+  );
+
+  await page.getByRole('button', { name: 'Reveal Time Hexagram' }).click();
+  const response = await responsePromise;
+  expect(response.ok()).toBeTruthy();
+  const data = await response.json();
+
+  await expect(page.getByTestId('iching-time-hexagram-name')).toHaveText(data.hexagram.name);
+  await expect(page.getByTestId('iching-time-resulting-name')).toHaveText(
+    data.resultingHexagram?.name || '—'
+  );
+
+  const changingLines = data.changingLines?.length ? data.changingLines.join(', ') : 'None';
+  await expect(page.getByTestId('iching-time-changing-lines')).toHaveText(changingLines);
+
+  if (data.timeContext?.iso) {
+    await expect(page.getByTestId('iching-time-iso')).toHaveText(data.timeContext.iso);
+  }
+
+  await page.screenshot({ path: buildScreenshotPath('data-cleanup-history-step-2-iching-time') });
+
+  expect(consoleErrors).toEqual([]);
+});

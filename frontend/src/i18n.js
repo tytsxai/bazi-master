@@ -7,6 +7,11 @@ const resources = {
       nav: {
         home: 'Home',
         login: 'Login',
+        bazi: 'BaZi',
+        tarot: 'Tarot',
+        iching: 'I Ching',
+        zodiac: 'Zodiac',
+        ziwei: 'Zi Wei',
         profile: 'Profile',
         history: 'History',
         favorites: 'Favorites',
@@ -22,7 +27,10 @@ const resources = {
         title: 'Welcome Back',
         email: 'Email',
         password: 'Password',
-        submit: 'Sign In'
+        submit: 'Sign In',
+        registerTitle: 'Create account',
+        registerSubmit: 'Create account',
+        sessionExpired: 'Your session expired. Please sign in again to continue.'
       },
       protected: {
         title: 'Sacred Archive',
@@ -36,6 +44,7 @@ const resources = {
         birthDay: 'Birth Day',
         birthHour: 'Birth Hour (0-23)',
         gender: 'Gender',
+        genderPlaceholder: 'Select gender',
         genderFemale: 'Female',
         genderMale: 'Male',
         birthLocation: 'Birth Location',
@@ -54,6 +63,12 @@ const resources = {
         favoriteReady: 'Favorite saved. View it in Favorites.',
         loginRequired: 'Please log in to access this feature.',
         saveFirst: 'Save the record before favoriting.',
+        fullRequired: 'Request full analysis before asking AI.',
+        aiInterpret: 'Open AI',
+        aiOpen: 'Open AI dialog',
+        aiThinking: 'Consulting the oracle...',
+        aiReady: 'AI interpretation ready.',
+        aiAnalysis: 'AI BaZi Analysis',
         fourPillars: 'Four Pillars',
         fiveElements: 'Five Elements',
         tenGods: 'Ten Gods',
@@ -73,6 +88,17 @@ const resources = {
         month: 'Month',
         day: 'Day',
         hour: 'Hour'
+      },
+      history: {
+        detailsTitle: 'BaZi Record',
+        recordHeading: 'Record #{{id}}',
+        detailsSubtitle: 'Review your saved chart details and time context.',
+        viewDetails: 'View details',
+        backToHistory: 'Back to history',
+        recordLoading: 'Loading record...',
+        recordInvalid: 'Invalid record id.',
+        recordMissing: 'Record not found.',
+        recordLoadError: 'Unable to load record.'
       }
     }
   },
@@ -81,6 +107,11 @@ const resources = {
       nav: {
         home: '首页',
         login: '登录',
+        bazi: 'BaZi',
+        tarot: '塔罗',
+        iching: '周易',
+        zodiac: '星座',
+        ziwei: '紫微',
         profile: '个人中心',
         history: '历史记录',
         favorites: '收藏',
@@ -96,7 +127,10 @@ const resources = {
         title: '欢迎回来',
         email: '邮箱',
         password: '密码',
-        submit: '登录'
+        submit: '登录',
+        registerTitle: '创建账号',
+        registerSubmit: '创建账号',
+        sessionExpired: '登录已过期，请重新登录以继续操作。'
       },
       protected: {
         title: '圣典档案',
@@ -110,6 +144,7 @@ const resources = {
         birthDay: '出生日',
         birthHour: '出生时辰 (0-23)',
         gender: '性别',
+        genderPlaceholder: '请选择性别',
         genderFemale: '女性',
         genderMale: '男性',
         birthLocation: '出生地',
@@ -128,6 +163,12 @@ const resources = {
         favoriteReady: '收藏成功，可在收藏页查看。',
         loginRequired: '请先登录以使用此功能。',
         saveFirst: '请先保存记录再收藏。',
+        fullRequired: '请先生成完整解读后再请求 AI。',
+        aiInterpret: '打开 AI 解读',
+        aiOpen: '打开 AI 解读窗口',
+        aiThinking: 'AI 解读生成中…',
+        aiReady: 'AI 解读已生成。',
+        aiAnalysis: 'AI 八字解读',
         fourPillars: '四柱',
         fiveElements: '五行分布',
         tenGods: '十神概览',
@@ -147,6 +188,17 @@ const resources = {
         month: '月柱',
         day: '日柱',
         hour: '时柱'
+      },
+      history: {
+        detailsTitle: '八字记录',
+        recordHeading: '记录 #{{id}}',
+        detailsSubtitle: '查看已保存的命盘详情与时间校准信息。',
+        viewDetails: '查看详情',
+        backToHistory: '返回历史',
+        recordLoading: '正在加载记录…',
+        recordInvalid: '记录编号无效。',
+        recordMissing: '未找到记录。',
+        recordLoadError: '无法加载记录。'
       }
     }
   }

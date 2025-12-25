@@ -117,4 +117,21 @@ const computeTrueSolarTime = ({
   };
 };
 
-export { normalizeLocationKey, resolveLocationCoordinates, computeTrueSolarTime };
+const listKnownLocations = () => {
+  const seen = new Set();
+  const locations = [];
+  for (const location of KNOWN_LOCATIONS.values()) {
+    if (!location) continue;
+    const key = `${location.name ?? ''}|${location.latitude ?? ''}|${location.longitude ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    locations.push({
+      name: location.name ?? null,
+      latitude: location.latitude,
+      longitude: location.longitude,
+    });
+  }
+  return locations.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+};
+
+export { normalizeLocationKey, resolveLocationCoordinates, computeTrueSolarTime, listKnownLocations };

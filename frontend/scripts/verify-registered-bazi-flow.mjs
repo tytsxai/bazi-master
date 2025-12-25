@@ -74,7 +74,7 @@ try {
   await shot('step-3-login-filled');
   await page.getByRole('button', { name: 'Sign In' }).click();
 
-  await expect(page.getByRole('button', { name: new RegExp(name) })).toBeVisible();
+  await expect(page.getByTestId('header-user-name')).toHaveText(name);
   await shot('step-4-logged-in');
 
   await page.goto(`${baseUrl}bazi`, { waitUntil: 'networkidle' });

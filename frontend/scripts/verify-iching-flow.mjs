@@ -80,6 +80,7 @@ try {
   await shot('iching-step-6-divined');
 
   await page.getByRole('button', { name: 'Reveal AI Interpretation' }).click();
+  await page.getByRole('dialog', { name: 'Request AI interpretation?' }).getByRole('button', { name: 'Request AI' }).click();
   await expect(page.getByRole('heading', { name: 'Oracle Reflection' })).toBeVisible();
   await shot('iching-step-7-ai');
 
@@ -93,6 +94,7 @@ try {
   await shot('iching-step-9-history-refresh');
 
   await page.getByRole('button', { name: 'Delete' }).first().click();
+  await page.getByRole('dialog', { name: 'Delete this reading?' }).getByRole('button', { name: 'Delete' }).click();
   await shot('iching-step-10-history-deleted');
 
   await page.getByRole('button', { name: new RegExp('Logout') }).click();

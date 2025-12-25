@@ -1,24 +1,40 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 export default function Header() {
   const { t, i18n } = useTranslation();
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, user, logout, profileName } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const lastNavClickRef = useRef(0);
+  const isGuest = !isAuthenticated || !user;
+  const userName = user?.name || user?.email || '';
+  const profileDisplayName = profileName?.trim() || '';
+  const mobileDisplayName = profileDisplayName || userName;
+  const showProfileName = profileDisplayName && profileDisplayName !== userName;
+  const formatDisplayName = (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return '';
+    return trimmed;
+  };
+  const headerDisplayName = formatDisplayName(userName);
+  const mobileDisplayShort = mobileDisplayName;
 
   const currentLocale = i18n.resolvedLanguage || i18n.language;
+  const NAV_CLICK_DELAY = 400;
 
   const primaryLinks = [
     { path: '/', label: t('nav.home') },
     { path: '/bazi', label: t('nav.bazi', { defaultValue: 'BaZi' }) },
     { path: '/tarot', label: t('nav.tarot', { defaultValue: 'Tarot' }) },
     { path: '/iching', label: t('nav.iching', { defaultValue: 'I Ching' }) },
-    { path: '/zodiac', label: t('nav.zodiac', { defaultValue: 'Zodiac' }) }
+    { path: '/zodiac', label: t('nav.zodiac', { defaultValue: 'Zodiac' }) },
+    { path: '/ziwei', label: t('nav.ziwei', { defaultValue: 'Zi Wei' }), requiresAuth: true }
   ];
+  const visiblePrimaryLinks = primaryLinks.filter((link) => !link.requiresAuth || !isGuest);
 
   const toggleLocale = () => {
     const next = currentLocale === 'zh-CN' ? 'en-US' : 'zh-CN';
@@ -36,13 +52,46 @@ export default function Header() {
 
   const isActive = (path) => (path === '/' ? location.pathname === '/' : location.pathname.startsWith(path));
 
+  const handleSafeNavClick = (event) => {
+    const now = Date.now();
+
+    if (now - lastNavClickRef.current < NAV_CLICK_DELAY) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    lastNavClickRef.current = now;
+    closeMenu();
+  };
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    const handleViewportChange = () => {
+      if (mediaQuery.matches) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    handleViewportChange();
+    mediaQuery.addEventListener('change', handleViewportChange);
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleViewportChange);
+    };
+  }, []);
+
   const NavLinks = ({ mobile = false }) => (
     <>
-      {primaryLinks.map((link) => (
+      {visiblePrimaryLinks.map((link) => (
         <Link
           key={link.path}
           to={link.path}
-          onClick={closeMenu}
+          onClick={handleSafeNavClick}
           className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
             isActive(link.path) ? 'text-gold-400' : 'text-white/80'
           }`}
@@ -50,11 +99,11 @@ export default function Header() {
           {link.label}
         </Link>
       ))}
-      {isAuthenticated && (
+      {!isGuest && (
         <>
           <Link
             to="/profile"
-            onClick={closeMenu}
+            onClick={handleSafeNavClick}
             className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
               isActive('/profile') ? 'text-gold-400' : 'text-white/80'
             }`}
@@ -63,7 +112,7 @@ export default function Header() {
           </Link>
           <Link
             to="/history"
-            onClick={closeMenu}
+            onClick={handleSafeNavClick}
             className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
               isActive('/history') ? 'text-gold-400' : 'text-white/80'
             }`}
@@ -72,7 +121,7 @@ export default function Header() {
           </Link>
           <Link
             to="/favorites"
-            onClick={closeMenu}
+            onClick={handleSafeNavClick}
             className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
               isActive('/favorites') ? 'text-gold-400' : 'text-white/80'
             }`}
@@ -89,28 +138,43 @@ export default function Header() {
       <a href="#main-content" className="skip-link">
         {t('nav.skip')}
       </a>
-      <Link to="/" className="font-display text-xl tracking-widest text-gold-400 z-50 relative" onClick={closeMenu}>
+      <Link
+        to="/"
+        className="font-display text-xl tracking-widest text-gold-400 z-50 relative"
+        onClick={handleSafeNavClick}
+      >
         BaZi Master
       </Link>
 
       {/* Desktop Navigation */}
-      <nav className="hidden md:flex items-center gap-4 text-sm">
+      <nav className="hidden lg:flex items-center gap-4 text-sm">
         <NavLinks />
-        {!isAuthenticated ? (
+        {isGuest ? (
           <Link
             to="/login"
+            onClick={handleSafeNavClick}
             className="rounded-full border border-gold-400/60 px-4 py-1 text-gold-400 transition hover:bg-gold-400/20"
           >
             {t('nav.login')}
           </Link>
         ) : (
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-full border border-gold-400/60 px-4 py-1 text-gold-400 transition hover:bg-gold-400/20"
-          >
-            {t('nav.logout')} · {user?.name}
-          </button>
+          <>
+            <span data-testid="header-user-name" className="text-xs text-white/70">
+              {headerDisplayName}
+            </span>
+            {showProfileName ? (
+              <span data-testid="header-profile-name" className="text-xs text-gold-200/80">
+                {profileDisplayName}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-full border border-gold-400/60 px-4 py-1 text-gold-400 transition hover:bg-gold-400/20"
+            >
+              {t('nav.logout')}
+            </button>
+          </>
         )}
         <button
           type="button"
@@ -124,9 +188,9 @@ export default function Header() {
 
       {/* Mobile Menu Button */}
       <button
-        className="mobile-menu-btn md:hidden z-50 relative"
+        className="mobile-menu-btn lg:hidden z-50 relative"
         onClick={() => setIsMenuOpen(!isMenuOpen)}
-        aria-label="Toggle menu"
+        aria-label="Toggle Menu"
       >
         <span className="text-2xl">{isMenuOpen ? '✕' : '☰'}</span>
       </button>
@@ -136,10 +200,10 @@ export default function Header() {
         <nav className="mobile-nav">
           <NavLinks mobile />
           <div className="flex flex-col gap-4 mt-2">
-            {!isAuthenticated ? (
+            {isGuest ? (
               <Link
                 to="/login"
-                onClick={closeMenu}
+                onClick={handleSafeNavClick}
                 className="text-center rounded-full border border-gold-400/60 px-4 py-3 text-gold-400 transition hover:bg-gold-400/20"
               >
                 {t('nav.login')}
@@ -148,9 +212,11 @@ export default function Header() {
               <button
                 type="button"
                 onClick={handleLogout}
+                aria-label={mobileDisplayName ? `${t('nav.logout')} ${mobileDisplayName}` : t('nav.logout')}
                 className="text-center rounded-full border border-gold-400/60 px-4 py-3 text-gold-400 transition hover:bg-gold-400/20"
               >
-                {t('nav.logout')} · {user?.name}
+                {t('nav.logout')}
+                {mobileDisplayShort ? ` · ${mobileDisplayShort}` : ''}
               </button>
             )}
             <button

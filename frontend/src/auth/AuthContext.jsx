@@ -1,11 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { readApiErrorMessage } from '../utils/apiError.js';
 
 const AuthContext = createContext(null);
 
 const TOKEN_KEY = 'bazi_token';
 const USER_KEY = 'bazi_user';
 const LAST_ACTIVITY_KEY = 'bazi_last_activity';
+const TOKEN_ORIGIN_KEY = 'bazi_token_origin';
+const RETRY_ACTION_KEY = 'bazi_retry_action';
+const SESSION_EXPIRED_KEY = 'bazi_session_expired';
+const PROFILE_NAME_KEY = 'bazi_profile_name';
 const SESSION_IDLE_MS = 30 * 60 * 1000;
+const isBackendToken = (value) =>
+  typeof value === 'string' && /^token_\\d+_\\d+_[A-Za-z0-9]+$/.test(value);
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY));
@@ -13,7 +20,41 @@ export function AuthProvider({ children }) {
     const raw = localStorage.getItem(USER_KEY);
     return raw ? JSON.parse(raw) : null;
   });
+  const [profileName, setProfileNameState] = useState(() => {
+    const stored = localStorage.getItem(PROFILE_NAME_KEY);
+    return stored ? stored.trim() : '';
+  });
   const idleTimeoutRef = useRef(null);
+
+  const setRetryAction = useCallback((action) => {
+    if (!action) return;
+    try {
+      const payload = { ...action, createdAt: Date.now() };
+      localStorage.setItem(RETRY_ACTION_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage failures (private mode).
+    }
+  }, []);
+
+  const getRetryAction = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(RETRY_ACTION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.action) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const clearRetryAction = useCallback(() => {
+    try {
+      localStorage.removeItem(RETRY_ACTION_KEY);
+    } catch {
+      // Ignore storage failures.
+    }
+  }, []);
 
   const clearIdleTimeout = useCallback(() => {
     if (idleTimeoutRef.current) {
@@ -28,22 +69,65 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, [clearIdleTimeout]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(({ preserveRetry = false } = {}) => {
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    if (storedToken) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${storedToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: storedToken })
+      }).catch(() => {
+        // Ignore logout network errors.
+      });
+    }
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_ORIGIN_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(LAST_ACTIVITY_KEY);
+    localStorage.removeItem('bazi_session_expired');
+    localStorage.removeItem(PROFILE_NAME_KEY);
     sessionStorage.clear();
+    if (!preserveRetry) {
+      clearRetryAction();
+    }
     clearSessionState();
-  }, [clearSessionState]);
+  }, [clearRetryAction, clearSessionState]);
+
+  const setProfileName = useCallback((value) => {
+    const next = typeof value === 'string' ? value.trim() : '';
+    if (next) {
+      localStorage.setItem(PROFILE_NAME_KEY, next);
+    } else {
+      localStorage.removeItem(PROFILE_NAME_KEY);
+    }
+    setProfileNameState(next);
+  }, []);
+
+  const expireSession = useCallback(() => {
+    try {
+      localStorage.setItem(SESSION_EXPIRED_KEY, '1');
+    } catch {
+      // Ignore storage failures.
+    }
+    logout();
+    if (typeof window !== 'undefined') {
+      const redirectPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+      const params = new URLSearchParams({ reason: 'session_expired' });
+      if (redirectPath && redirectPath !== '/login') {
+        params.set('next', redirectPath);
+      }
+      window.location.assign(`/login?${params.toString()}`);
+    }
+  }, [logout]);
 
   const scheduleIdleTimeout = useCallback(
     (remainingMs) => {
       clearIdleTimeout();
       idleTimeoutRef.current = setTimeout(() => {
-        logout();
+        expireSession();
       }, remainingMs);
     },
-    [clearIdleTimeout, logout]
+    [clearIdleTimeout, expireSession]
   );
 
   const recordActivity = useCallback(
@@ -55,16 +139,62 @@ export function AuthProvider({ children }) {
     [scheduleIdleTimeout]
   );
 
-  const readErrorMessage = async (response, fallback) => {
-    const text = await response.text();
-    if (!text) return fallback;
+  const refreshUser = useCallback(async () => {
+    const storedToken = token || localStorage.getItem(TOKEN_KEY);
+    if (!storedToken) return null;
+    const storedOrigin = localStorage.getItem(TOKEN_ORIGIN_KEY);
+    const shouldEnforceAuth = storedOrigin === 'backend' || isBackendToken(storedToken);
     try {
-      const parsed = JSON.parse(text);
-      return parsed?.error || parsed?.message || fallback;
-    } catch {
-      return text;
+      const res = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${storedToken}` },
+        cache: 'no-store',
+      });
+      if (res.status === 401) {
+        if (shouldEnforceAuth) {
+          logout();
+        }
+        return null;
+      }
+      if (!res.ok) {
+        return null;
+      }
+      const data = await res.json();
+      if (data?.user) {
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        setUser(data.user);
+        return data.user;
+      }
+    } catch (error) {
+      console.error('Failed to refresh user', error);
     }
-  };
+    return null;
+  }, [token, logout]);
+
+  const refreshProfileName = useCallback(async () => {
+    if (!token) return null;
+    try {
+      const res = await fetch('/api/user/settings', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        const storedOrigin = localStorage.getItem(TOKEN_ORIGIN_KEY);
+        if (storedOrigin === 'backend' || isBackendToken(token)) {
+          expireSession();
+        }
+        return null;
+      }
+      if (!res.ok) {
+        return null;
+      }
+      const data = await res.json();
+      const nextProfileName = data?.settings?.preferences?.profileName || '';
+      setProfileName(nextProfileName);
+      return nextProfileName;
+    } catch (error) {
+      console.error('Failed to refresh profile name', error);
+    }
+    return null;
+  }, [expireSession, setProfileName, token]);
 
   const login = async (email, password = 'password') => {
     // Determine if we are in "demo" mode or real mode. 
@@ -72,20 +202,22 @@ export function AuthProvider({ children }) {
     // No, let's Stick to the plan: Real API.
 
     try {
-      const res = await fetch('/api/login', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Login failed');
+        const message = await readApiErrorMessage(res, 'Login failed');
         throw new Error(message);
       }
 
       const data = await res.json();
       localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      localStorage.removeItem('bazi_session_expired');
       setToken(data.token);
       setUser(data.user);
       recordActivity();
@@ -105,6 +237,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!token) {
       clearIdleTimeout();
+      setProfileName('');
       return;
     }
 
@@ -112,7 +245,7 @@ export function AuthProvider({ children }) {
     const lastActivity = lastActivityRaw ? Number(lastActivityRaw) : Date.now();
     const elapsed = Date.now() - lastActivity;
     if (elapsed >= SESSION_IDLE_MS) {
-      logout();
+      expireSession();
       return;
     }
 
@@ -128,44 +261,124 @@ export function AuthProvider({ children }) {
       events.forEach((eventName) => window.removeEventListener(eventName, handleActivity));
       clearIdleTimeout();
     };
-  }, [token, clearIdleTimeout, logout, recordActivity, scheduleIdleTimeout]);
+  }, [token, clearIdleTimeout, expireSession, recordActivity, scheduleIdleTimeout]);
 
   useEffect(() => {
-    const handleStorage = (event) => {
-      if (event.storageArea !== localStorage) return;
-      if (![TOKEN_KEY, USER_KEY, LAST_ACTIVITY_KEY].includes(event.key)) return;
-
+    const syncFromStorage = () => {
       const storedToken = localStorage.getItem(TOKEN_KEY);
+      const storedOrigin = localStorage.getItem(TOKEN_ORIGIN_KEY);
       const storedUserRaw = localStorage.getItem(USER_KEY);
       const storedUser = storedUserRaw ? JSON.parse(storedUserRaw) : null;
 
       if (!storedToken) {
         clearSessionState();
+        setProfileName('');
         return;
+      }
+      if (!storedOrigin && isBackendToken(storedToken)) {
+        localStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
       }
 
       if (storedToken !== token) {
         setToken(storedToken);
       }
       setUser(storedUser);
+      const storedProfileName = localStorage.getItem(PROFILE_NAME_KEY);
+      setProfileNameState(storedProfileName ? storedProfileName.trim() : '');
 
       const lastActivityRaw = localStorage.getItem(LAST_ACTIVITY_KEY);
       const lastActivity = lastActivityRaw ? Number(lastActivityRaw) : Date.now();
       const elapsed = Date.now() - lastActivity;
       if (elapsed >= SESSION_IDLE_MS) {
-        logout();
+        expireSession();
         return;
       }
       scheduleIdleTimeout(SESSION_IDLE_MS - elapsed);
     };
 
+    const handleStorage = (event) => {
+      if (event.storageArea !== localStorage) return;
+      if (event.key && ![TOKEN_KEY, USER_KEY, LAST_ACTIVITY_KEY].includes(event.key)) return;
+      syncFromStorage();
+    };
+
+    const handleVisibility = () => {
+      if (!document.hidden) syncFromStorage();
+    };
+
+    const intervalId = setInterval(syncFromStorage, 2000);
+
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, [clearSessionState, logout, scheduleIdleTimeout, token]);
+    window.addEventListener('focus', syncFromStorage);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('focus', syncFromStorage);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [clearSessionState, expireSession, scheduleIdleTimeout, token, setProfileName]);
+
+  useEffect(() => {
+    if (!token) return;
+    let isMounted = true;
+    const controller = new AbortController();
+    const loadProfileName = async () => {
+      try {
+        const res = await fetch('/api/user/settings', {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (res.status === 401) {
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        const nextProfileName = data?.settings?.preferences?.profileName || '';
+        if (isMounted) {
+          setProfileName(nextProfileName);
+        }
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.error('Failed to load profile name', error);
+        }
+      }
+    };
+    loadProfileName();
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [expireSession, setProfileName, token]);
 
   const value = useMemo(
-    () => ({ token, user, isAuthenticated: Boolean(token), login, logout }),
-    [token, user, login, logout]
+    () => ({
+      token,
+      user,
+      profileName,
+      isAuthenticated: Boolean(token),
+      login,
+      logout,
+      refreshUser,
+      refreshProfileName,
+      setProfileName,
+      setRetryAction,
+      getRetryAction,
+      clearRetryAction,
+    }),
+    [
+      token,
+      user,
+      profileName,
+      login,
+      logout,
+      refreshUser,
+      refreshProfileName,
+      setProfileName,
+      setRetryAction,
+      getRetryAction,
+      clearRetryAction,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

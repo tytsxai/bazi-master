@@ -1,0 +1,158 @@
+import { execSync, spawn } from 'node:child_process';
+import net from 'node:net';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..', '..');
+const backendDir = path.join(rootDir, 'backend');
+const frontendDir = path.join(rootDir, 'frontend');
+
+const isWindows = process.platform === 'win32';
+
+const checkPort = (port, host = '127.0.0.1') =>
+  new Promise((resolve) => {
+    const socket = new net.Socket();
+    const finalize = (result) => {
+      socket.destroy();
+      resolve(result);
+    };
+    socket.setTimeout(500);
+    socket.once('error', () => finalize(false));
+    socket.once('timeout', () => finalize(false));
+    socket.connect(port, host, () => finalize(true));
+  });
+
+const forceRestart = process.env.PW_SERVER === '1';
+
+const checkBackendHealth = async () => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1000);
+  try {
+    const res = await fetch('http://127.0.0.1:4000/health', { signal: controller.signal });
+    if (!res.ok) return false;
+    const data = await res.json().catch(() => null);
+    return data?.status === 'ok';
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const killPort = (port) => {
+  if (isWindows) return false;
+  try {
+    const output = execSync(`lsof -ti :${port}`, { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+    if (!output) return false;
+    const pids = output.split(/\s+/).filter(Boolean);
+    pids.forEach((pid) => {
+      try {
+        process.kill(Number(pid), 'SIGTERM');
+      } catch {
+        // Ignore kill failures.
+      }
+    });
+    return pids.length > 0;
+  } catch {
+    return false;
+  }
+};
+
+const run = (command, args, options) =>
+  spawn(command, args, { stdio: 'inherit', ...options });
+
+const waitForPort = async (port, timeoutMs = 15000) => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const available = await checkPort(port);
+    if (available) return true;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
+};
+
+const startBackendIfNeeded = async () => {
+  const isRunning = await checkPort(4000);
+  if (isRunning) {
+    if (forceRestart) {
+      if (killPort(4000)) {
+        console.warn('[dev-server] Force-restarting backend on port 4000.');
+      }
+    } else {
+    const healthy = await checkBackendHealth();
+    if (healthy) {
+      console.log('[dev-server] Backend already running on port 4000.');
+      return null;
+    }
+    const killed = killPort(4000);
+      if (killed) {
+        console.warn('[dev-server] Restarting unresponsive backend on port 4000.');
+      } else {
+        console.warn('[dev-server] Port 4000 in use; unable to terminate existing process.');
+      }
+    }
+  }
+  const nodeCmd = isWindows ? 'node.exe' : 'node';
+  console.log('[dev-server] Starting backend server...');
+  return run(nodeCmd, ['server.js'], { cwd: backendDir, env: process.env });
+};
+
+const startFrontend = async () => {
+  if (forceRestart) {
+    const running = await checkPort(3000);
+    if (running && killPort(3000)) {
+      console.warn('[dev-server] Force-restarting frontend on port 3000.');
+    }
+  }
+  const viteCmd = path.join(
+    frontendDir,
+    'node_modules',
+    '.bin',
+    isWindows ? 'vite.cmd' : 'vite'
+  );
+  console.log('[dev-server] Starting frontend dev server...');
+  return run(
+    viteCmd,
+    ['--port', '3000', '--strictPort', '--host', '127.0.0.1'],
+    { cwd: frontendDir, env: process.env }
+  );
+};
+
+const backendProcess = await startBackendIfNeeded();
+const backendReady = await waitForPort(4000);
+if (!backendReady) {
+  console.warn('[dev-server] Backend did not become ready in time.');
+}
+const frontendProcess = await startFrontend();
+
+let shuttingDown = false;
+const shutdown = () => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  if (frontendProcess) frontendProcess.kill('SIGTERM');
+  if (backendProcess) backendProcess.kill('SIGTERM');
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+process.on('exit', shutdown);
+
+if (backendProcess) {
+  backendProcess.on('exit', (code, signal) => {
+    if (code && code !== 0) {
+      console.error(`[dev-server] Backend exited with code ${code} (${signal || 'signal'})`);
+    }
+  });
+}
+
+frontendProcess.on('exit', (code) => {
+  if (code && code !== 0) {
+    console.error(`[dev-server] Frontend exited with code ${code}`);
+  }
+  shutdown();
+  process.exit(code ?? 0);
+});

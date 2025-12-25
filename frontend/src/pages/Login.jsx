@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext.jsx';
+import Breadcrumbs from '../components/Breadcrumbs.jsx';
+import { readApiErrorMessage } from '../utils/apiError.js';
+
+const SESSION_EXPIRED_KEY = 'bazi_session_expired';
 
 export default function Login() {
   const { t } = useTranslation();
@@ -16,14 +20,23 @@ export default function Login() {
   const [oauthError, setOauthError] = useState('');
   const [loginError, setLoginError] = useState('');
   const isSubmittingRef = useRef(false);
+  const [registerName, setRegisterName] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerConfirm, setRegisterConfirm] = useState('');
+  const [registerErrors, setRegisterErrors] = useState({});
+  const [registerStatus, setRegisterStatus] = useState('');
+  const [isRegisterSubmitting, setIsRegisterSubmitting] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetToken, setResetToken] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [resetErrors, setResetErrors] = useState({});
   const [resetStatus, setResetStatus] = useState(null);
   const [isResetSubmitting, setIsResetSubmitting] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState('');
 
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const passwordStrengthHint = 'Password must be at least 8 characters and include letters and numbers.';
 
   const validate = (nextEmail, nextPassword) => {
     const nextErrors = {};
@@ -38,6 +51,37 @@ export default function Login() {
       nextErrors.password = 'Password is required.';
     }
 
+    return nextErrors;
+  };
+
+  const validatePasswordStrength = (value) => {
+    const trimmed = value.trim();
+    if (trimmed.length < 8) return passwordStrengthHint;
+    if (!/[A-Za-z]/.test(trimmed) || !/\d/.test(trimmed)) return passwordStrengthHint;
+    return '';
+  };
+
+  const validateRegister = (payload) => {
+    const nextErrors = {};
+    const nameValue = payload.name.trim();
+    if (!payload.email.trim()) {
+      nextErrors.email = 'Email is required.';
+    } else if (!emailPattern.test(payload.email)) {
+      nextErrors.email = 'Enter a valid email address.';
+    }
+    if (!payload.password) {
+      nextErrors.password = 'Password is required.';
+    } else {
+      const strengthError = validatePasswordStrength(payload.password);
+      if (strengthError) nextErrors.password = strengthError;
+    }
+    const confirmValue = payload.confirm.trim();
+    if (confirmValue && confirmValue !== payload.password) {
+      nextErrors.confirm = 'Passwords do not match.';
+    }
+    if (nameValue.length > 0 && nameValue.length < 2) {
+      nextErrors.name = 'Name must be at least 2 characters.';
+    }
     return nextErrors;
   };
 
@@ -58,23 +102,52 @@ export default function Login() {
     }
     if (!nextPassword) {
       nextErrors.password = 'New password is required.';
+    } else {
+      const strengthError = validatePasswordStrength(nextPassword);
+      if (strengthError) nextErrors.password = strengthError;
     }
     return nextErrors;
-  };
-
-  const resolveRedirectPath = (from) => {
-    if (!from) return '/profile';
-    if (typeof from === 'string') return from;
-    if (from.pathname) {
-      return `${from.pathname}${from.search || ''}${from.hash || ''}`;
-    }
-    return '/profile';
   };
 
   const sanitizeNextPath = (value) => {
     if (!value || typeof value !== 'string') return null;
     if (!value.startsWith('/') || value.startsWith('//')) return null;
     return value;
+  };
+
+  const getStateRedirectPath = () => {
+    const from = location.state?.from;
+    if (!from) return null;
+    if (typeof from === 'string') return sanitizeNextPath(from);
+    if (from.pathname) {
+      return sanitizeNextPath(`${from.pathname}${from.search || ''}${from.hash || ''}`);
+    }
+    return null;
+  };
+
+  const buildAuthSearch = () => {
+    const params = new URLSearchParams();
+    const currentParams = new URLSearchParams(location.search);
+    const nextParam = sanitizeNextPath(currentParams.get('next')) || getStateRedirectPath();
+    const reason = currentParams.get('reason');
+    if (reason) params.set('reason', reason);
+    if (nextParam) params.set('next', nextParam);
+    return params.toString();
+  };
+
+  const resolveRedirectPath = (from, search = '') => {
+    if (from) {
+      if (typeof from === 'string') return from;
+      if (from.pathname) {
+        return `${from.pathname}${from.search || ''}${from.hash || ''}`;
+      }
+    }
+    if (search) {
+      const params = new URLSearchParams(search);
+      const nextParam = sanitizeNextPath(params.get('next'));
+      if (nextParam) return nextParam;
+    }
+    return '/profile';
   };
 
   const decodeUserParam = (value) => {
@@ -89,16 +162,7 @@ export default function Login() {
     }
   };
 
-  const readErrorMessage = async (response, fallback) => {
-    const text = await response.text();
-    if (!text) return fallback;
-    try {
-      const parsed = JSON.parse(text);
-      return parsed?.error || parsed?.message || fallback;
-    } catch {
-      return text;
-    }
-  };
+  const readErrorMessage = (response, fallback) => readApiErrorMessage(response, fallback);
 
   const switchMode = (nextMode) => {
     setMode(nextMode);
@@ -107,6 +171,9 @@ export default function Login() {
     setIsResetSubmitting(false);
     setOauthError('');
     setLoginError('');
+    setRegisterErrors({});
+    setRegisterStatus('');
+    setIsRegisterSubmitting(false);
   };
 
   const getLoginErrorMessage = (error) => {
@@ -156,14 +223,66 @@ export default function Login() {
 
   const loginErrorAnnouncement =
     loginError || oauthError || getFirstErrorMessage(errors);
+  const registerErrorAnnouncement =
+    Object.values(registerErrors).find(Boolean) || registerStatus;
   const resetErrorAnnouncement =
     (resetStatus?.type === 'error' ? resetStatus.message : '') || getFirstErrorMessage(resetErrors);
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    const next = resolveRedirectPath(location.state?.from);
+    const next = resolveRedirectPath(location.state?.from, location.search);
     navigate(next, { replace: true });
   }, [isAuthenticated, location.state, navigate]);
+
+  useEffect(() => {
+    if (location.pathname === '/register') {
+      setMode('register');
+    } else if (location.pathname === '/login') {
+      setMode('login');
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    let reason = params.get('reason');
+    if (!reason) {
+      try {
+        const hasExpiredFlag = localStorage.getItem(SESSION_EXPIRED_KEY) === '1';
+        if (hasExpiredFlag) {
+          const nextFromState = sanitizeNextPath(location.state?.from);
+          const nextValue = params.get('next') || nextFromState || '';
+          const forcedParams = new URLSearchParams();
+          forcedParams.set('reason', 'session_expired');
+          if (nextValue) {
+            forcedParams.set('next', nextValue);
+          }
+          params.forEach((value, key) => {
+            if (key === 'reason' || key === 'next') return;
+            forcedParams.append(key, value);
+          });
+          const search = forcedParams.toString();
+          const target = `/login?${search}`;
+          navigate(target, { replace: true, state: location.state });
+          if (`${location.pathname}${location.search || ''}` !== target) {
+            window.location.replace(target);
+          }
+          reason = 'session_expired';
+        }
+      } catch {
+        // Ignore storage failures.
+      }
+    }
+    if (reason === 'session_expired') {
+      setSessionNotice(t('login.sessionExpired'));
+      try {
+        localStorage.removeItem(SESSION_EXPIRED_KEY);
+      } catch {
+        // Ignore storage failures.
+      }
+    } else {
+      setSessionNotice('');
+    }
+  }, [location.search, location.state, navigate, t]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -185,7 +304,7 @@ export default function Login() {
     }
     localStorage.setItem('bazi_last_activity', String(Date.now()));
 
-    const nextPath = sanitizeNextPath(nextParam) || resolveRedirectPath(location.state?.from);
+    const nextPath = sanitizeNextPath(nextParam) || resolveRedirectPath(location.state?.from, location.search);
     window.location.replace(nextPath);
   }, [location.search, location.state, navigate]);
 
@@ -208,15 +327,54 @@ export default function Login() {
     }
   };
 
+  const handleRegister = async (event) => {
+    event.preventDefault();
+    if (isRegisterSubmitting) return;
+    setRegisterStatus('');
+    const payload = {
+      name: registerName,
+      email: registerEmail,
+      password: registerPassword,
+      confirm: registerConfirm,
+    };
+    const nextErrors = validateRegister(payload);
+    setRegisterErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    try {
+      setIsRegisterSubmitting(true);
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: payload.name.trim() || null,
+          email: payload.email.trim(),
+          password: payload.password,
+        }),
+      });
+      if (!res.ok) {
+        const message = await readErrorMessage(res, 'Unable to register.');
+        setRegisterStatus(message);
+        return;
+      }
+      await res.json();
+      await login(payload.email.trim(), payload.password);
+    } catch (error) {
+      setRegisterStatus(error?.message || 'Unable to register.');
+    } finally {
+      setIsRegisterSubmitting(false);
+    }
+  };
+
   const handleGoogleLogin = () => {
-    const nextPath = resolveRedirectPath(location.state?.from);
+    const nextPath = resolveRedirectPath(location.state?.from, location.search);
     const params = new URLSearchParams();
     if (nextPath) params.set('next', nextPath);
     window.location.assign(`/api/auth/google?${params.toString()}`);
   };
 
   const handleWeChatLogin = () => {
-    const nextPath = resolveRedirectPath(location.state?.from);
+    const nextPath = resolveRedirectPath(location.state?.from, location.search);
     const params = new URLSearchParams();
     if (nextPath) params.set('next', nextPath);
     window.location.assign(`/api/auth/wechat/redirect?${params.toString()}`);
@@ -288,20 +446,47 @@ export default function Login() {
   };
 
   return (
-    <main id="main-content" tabIndex={-1} className="responsive-container flex min-h-[70vh] items-center justify-center">
+    <main id="main-content" tabIndex={-1} className="responsive-container flex min-h-[70vh] flex-col items-center justify-center gap-4">
+      <div className="w-full max-w-md">
+        <Breadcrumbs />
+      </div>
       <form
-        onSubmit={mode === 'login' ? handleSubmit : mode === 'request' ? handleRequestReset : handleConfirmReset}
+        onSubmit={
+          mode === 'login'
+            ? handleSubmit
+            : mode === 'register'
+              ? handleRegister
+              : mode === 'request'
+                ? handleRequestReset
+                : handleConfirmReset
+        }
         className="glass-card w-full max-w-md rounded-3xl border border-white/10 p-8 shadow-glass"
       >
         <h1 className="font-display text-3xl text-gold-400">
-          {mode === 'login' ? t('login.title') : mode === 'request' ? 'Reset password' : 'Set new password'}
+          {mode === 'login'
+            ? t('login.title')
+            : mode === 'register'
+              ? t('login.registerTitle', { defaultValue: 'Create account' })
+              : mode === 'request'
+                ? 'Reset password'
+                : 'Set new password'}
         </h1>
+        {sessionNotice && (
+          <div
+            role="status"
+            className="mt-4 rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-100"
+          >
+            {sessionNotice}
+          </div>
+        )}
 
         {mode === 'login' && (
           <>
-            <div className="sr-only" role="alert" aria-live="assertive">
-              {loginErrorAnnouncement}
-            </div>
+            {loginErrorAnnouncement ? (
+              <div className="sr-only" role="alert" aria-live="assertive">
+                {loginErrorAnnouncement}
+              </div>
+            ) : null}
             <div className="mt-6">
               <label htmlFor="email" className="block text-sm text-white/80">
                 {t('login.email')}
@@ -405,17 +590,175 @@ export default function Login() {
                 Have a reset code?
               </button>
             </div>
+            <div className="mt-4 flex items-center justify-between text-xs text-white/70">
+              <span>New here?</span>
+              <button
+                type="button"
+                className="underline decoration-white/40 underline-offset-4"
+                onClick={() => {
+                  const search = buildAuthSearch();
+                  navigate(search ? `/register?${search}` : '/register');
+                }}
+              >
+                Create an account
+              </button>
+            </div>
             <p className="mt-4 text-xs text-white/60">
               Demo access only: use any email and password to continue.
             </p>
           </>
         )}
 
+        {mode === 'register' && (
+          <>
+            {registerErrorAnnouncement ? (
+              <div className="sr-only" role="alert" aria-live="assertive">
+                {registerErrorAnnouncement}
+              </div>
+            ) : null}
+            <div className="mt-6">
+              <label htmlFor="register-name" className="block text-sm text-white/80">
+                Display name (optional)
+              </label>
+              <input
+                id="register-name"
+                type="text"
+                value={registerName}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setRegisterName(value);
+                  if (registerErrors.name && value.trim().length >= 2) {
+                    setRegisterErrors((prev) => ({ ...prev, name: undefined }));
+                  }
+                }}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
+                placeholder="Star Seeker"
+                aria-invalid={Boolean(registerErrors.name)}
+                aria-describedby={registerErrors.name ? 'register-name-error' : undefined}
+              />
+              {registerErrors.name && (
+                <span id="register-name-error" className="mt-2 block text-xs text-rose-200">
+                  {registerErrors.name}
+                </span>
+              )}
+            </div>
+            <div className="mt-4">
+              <label htmlFor="register-email" className="block text-sm text-white/80">
+                {t('login.email')}
+              </label>
+              <input
+                id="register-email"
+                type="email"
+                value={registerEmail}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setRegisterEmail(value);
+                  if (registerErrors.email && emailPattern.test(value)) {
+                    setRegisterErrors((prev) => ({ ...prev, email: undefined }));
+                  }
+                }}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
+                placeholder="seer@example.com"
+                required
+                aria-invalid={Boolean(registerErrors.email)}
+                aria-describedby={registerErrors.email ? 'register-email-error' : undefined}
+              />
+              {registerErrors.email && (
+                <span id="register-email-error" className="mt-2 block text-xs text-rose-200">
+                  {registerErrors.email}
+                </span>
+              )}
+            </div>
+            <div className="mt-4">
+              <label htmlFor="register-password" className="block text-sm text-white/80">
+                {t('login.password')}
+              </label>
+              <input
+                id="register-password"
+                type="password"
+                value={registerPassword}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setRegisterPassword(value);
+                  if (registerErrors.password && !validatePasswordStrength(value)) {
+                    setRegisterErrors((prev) => ({ ...prev, password: undefined }));
+                  }
+                }}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
+                placeholder="••••••••"
+                required
+                aria-invalid={Boolean(registerErrors.password)}
+                aria-describedby={registerErrors.password ? 'register-password-error' : undefined}
+              />
+              {registerErrors.password && (
+                <span id="register-password-error" className="mt-2 block text-xs text-rose-200">
+                  {registerErrors.password}
+                </span>
+              )}
+            </div>
+            <div className="mt-4">
+              <label htmlFor="register-confirm" className="block text-sm text-white/80">
+                Confirm password
+              </label>
+              <input
+                id="register-confirm"
+                type="password"
+                value={registerConfirm}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setRegisterConfirm(value);
+                  if (registerErrors.confirm && value === registerPassword) {
+                    setRegisterErrors((prev) => ({ ...prev, confirm: undefined }));
+                  }
+                }}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
+                placeholder="••••••••"
+                aria-invalid={Boolean(registerErrors.confirm)}
+                aria-describedby={registerErrors.confirm ? 'register-confirm-error' : undefined}
+              />
+              {registerErrors.confirm && (
+                <span id="register-confirm-error" className="mt-2 block text-xs text-rose-200">
+                  {registerErrors.confirm}
+                </span>
+              )}
+            </div>
+            <p className="mt-3 text-xs text-white/60">{passwordStrengthHint}</p>
+            {registerStatus && (
+              <p className="mt-3 text-xs text-rose-200" role="alert">
+                {registerStatus}
+              </p>
+            )}
+            <button
+              type="submit"
+              className="mt-6 w-full rounded-full bg-gold-400 px-4 py-2 text-sm font-semibold text-mystic-900 shadow-lg shadow-gold-400/30 disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={isRegisterSubmitting}
+            >
+              {isRegisterSubmitting
+                ? `${t('login.registerSubmit', { defaultValue: 'Create account' })}...`
+                : t('login.registerSubmit', { defaultValue: 'Create account' })}
+            </button>
+            <div className="mt-4 flex items-center justify-between text-xs text-white/70">
+              <button
+                type="button"
+                className="underline decoration-white/40 underline-offset-4"
+                onClick={() => {
+                  const search = buildAuthSearch();
+                  navigate(search ? `/login?${search}` : '/login');
+                }}
+              >
+                Back to login
+              </button>
+            </div>
+          </>
+        )}
+
         {mode === 'request' && (
           <>
-            <div className="sr-only" role="alert" aria-live="assertive">
-              {resetErrorAnnouncement}
-            </div>
+            {resetErrorAnnouncement ? (
+              <div className="sr-only" role="alert" aria-live="assertive">
+                {resetErrorAnnouncement}
+              </div>
+            ) : null}
             <div className="mt-6">
               <label htmlFor="reset-email" className="block text-sm text-white/80">
                 Email
@@ -467,7 +810,10 @@ export default function Login() {
               <button
                 type="button"
                 className="underline decoration-white/40 underline-offset-4"
-                onClick={() => switchMode('login')}
+                onClick={() => {
+                  const search = buildAuthSearch();
+                  navigate(search ? `/login?${search}` : '/login');
+                }}
               >
                 Back to login
               </button>
@@ -484,9 +830,11 @@ export default function Login() {
 
         {mode === 'reset' && (
           <>
-            <div className="sr-only" role="alert" aria-live="assertive">
-              {resetErrorAnnouncement}
-            </div>
+            {resetErrorAnnouncement ? (
+              <div className="sr-only" role="alert" aria-live="assertive">
+                {resetErrorAnnouncement}
+              </div>
+            ) : null}
             <div className="mt-6">
               <label htmlFor="reset-token" className="block text-sm text-white/80">
                 Reset code
@@ -566,7 +914,10 @@ export default function Login() {
               <button
                 type="button"
                 className="underline decoration-white/40 underline-offset-4"
-                onClick={() => switchMode('login')}
+                onClick={() => {
+                  const search = buildAuthSearch();
+                  navigate(search ? `/login?${search}` : '/login');
+                }}
               >
                 Back to login
               </button>

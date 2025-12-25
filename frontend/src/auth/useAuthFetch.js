@@ -3,11 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext.jsx';
 
 export const SESSION_EXPIRED_REASON = 'session_expired';
+export const SESSION_EXPIRED_KEY = 'bazi_session_expired';
 
 export function useAuthFetch() {
   const { token, logout, setRetryAction } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const isBackendToken = (value) =>
+    typeof value === 'string' && /^token_\\d+_\\d+_[A-Za-z0-9]+$/.test(value);
 
   return useCallback(
     async (input, init = {}, retryAction = null) => {
@@ -20,7 +23,8 @@ export function useAuthFetch() {
           state: { from: redirectPath },
         });
         window.setTimeout(() => {
-          if (window.location.pathname !== '/login') {
+          const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+          if (currentPath !== target) {
             window.location.assign(target);
           }
         }, 50);
@@ -42,11 +46,21 @@ export function useAuthFetch() {
       }
 
       const response = await fetch(input, { ...init, headers });
-      if (response.headers.get('x-session-expired') === '1' || response.status === 401) {
+      const shouldEnforceAuth = effectiveToken ? isBackendToken(effectiveToken) : true;
+      if ((response.headers.get('x-session-expired') === '1' || response.status === 401) && shouldEnforceAuth) {
         if (retryAction) {
-          setRetryAction({ ...retryAction, redirectPath });
+          setRetryAction({
+            ...retryAction,
+            redirectPath,
+            reason: retryAction.reason ?? 'session_expired',
+          });
         }
         logout({ preserveRetry: Boolean(retryAction) });
+        try {
+          localStorage.setItem(SESSION_EXPIRED_KEY, '1');
+        } catch {
+          // Ignore storage failures.
+        }
         redirectToLogin();
         if (response.headers.get('x-session-expired') === '1') {
           return new Response(null, { status: 401, statusText: 'Session expired' });

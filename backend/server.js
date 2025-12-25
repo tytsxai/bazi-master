@@ -19,7 +19,7 @@ import {
   deriveChangingLinesFromTimeContext,
 } from './iching.js';
 import { calculateRisingSign } from './zodiac.js';
-import { resolveLocationCoordinates, computeTrueSolarTime } from './solarTime.js';
+import { resolveLocationCoordinates, computeTrueSolarTime, listKnownLocations } from './solarTime.js';
 import { validateBaziInput } from './validation.js';
 import { buildSearchOr, parseSearchTerms, recordMatchesQuery } from './search.js';
 import { createAiGuard, createInFlightDeduper } from './lib/concurrency.js';
@@ -27,6 +27,7 @@ import {
   buildBaziCacheKey,
   buildFiveElementsPercent,
   getCachedBaziCalculation,
+  getCachedBaziCalculationAsync,
   invalidateBaziCalculationCache,
   normalizeBaziResult,
   primeBaziCalculationCache,
@@ -43,9 +44,13 @@ import {
 import { getServerConfig, getSessionConfig } from './env.js';
 import { initRedis, createRedisMirror } from './redis.js';
 import { createSessionStore } from './sessionStore.js';
+import { cleanupUserInMemory, deleteUserCascade } from './userCleanup.js';
+import { deleteBaziRecordHard } from './recordCleanup.js';
+import { hashPassword, isHashedPassword, verifyPassword } from './passwords.js';
 
 const prisma = new PrismaClient();
 const app = express();
+app.disable('x-powered-by');
 const { sessionIdleMs: SESSION_IDLE_MS } = getSessionConfig();
 const {
   port: PORT,
@@ -62,6 +67,7 @@ const {
   aiTimeoutMs: AI_TIMEOUT_MS,
   availableProviders: AVAILABLE_PROVIDERS,
   resetTokenTtlMs: RESET_TOKEN_TTL_MS,
+  resetRequestMinDurationMs: RESET_REQUEST_MIN_DURATION_MS,
   googleClientId: GOOGLE_CLIENT_ID,
   googleClientSecret: GOOGLE_CLIENT_SECRET,
   googleRedirectUri: GOOGLE_REDIRECT_URI,
@@ -78,9 +84,35 @@ const {
   corsAllowedOrigins: CORS_ALLOWED_ORIGINS,
   nodeEnv: NODE_ENV,
 } = getServerConfig();
-console.log('--- SERVER STARTING: FIX APPLIED ---');
+
+const IS_PRODUCTION = NODE_ENV === 'production';
+const DATABASE_URL = process.env.DATABASE_URL || '';
+const IS_SQLITE =
+  !DATABASE_URL || DATABASE_URL.startsWith('file:') || DATABASE_URL.includes('sqlite');
+const STRIP_SEARCH_MODE = IS_SQLITE;
+
+const parseTrustProxy = (raw) => {
+  if (raw === undefined || raw === null || raw === '') return null;
+  if (typeof raw === 'number') return raw;
+  const value = String(raw).trim().toLowerCase();
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (value === '1') return 1;
+  if (value === '0') return 0;
+  const asNumber = Number(value);
+  if (Number.isFinite(asNumber)) return asNumber;
+  return null;
+};
+
+const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
+if (trustProxy !== null) {
+  app.set('trust proxy', trustProxy);
+} else if (IS_PRODUCTION) {
+  app.set('trust proxy', 1);
+}
 
 const applySqlitePragmas = async () => {
+  if (!IS_SQLITE) return;
   try {
     await prisma.$queryRawUnsafe('PRAGMA journal_mode=WAL;');
     await prisma.$queryRawUnsafe('PRAGMA busy_timeout=5000;');
@@ -90,11 +122,49 @@ const applySqlitePragmas = async () => {
 };
 
 void applySqlitePragmas();
-
 const RATE_LIMIT_ENABLED =
-  NODE_ENV === 'production' || process.env.FORCE_RATE_LIMIT === 'true';
+  IS_PRODUCTION || process.env.FORCE_RATE_LIMIT === 'true';
 const AI_GUARD_ENABLED =
-  NODE_ENV === 'production' || process.env.FORCE_AI_GUARD === 'true';
+  IS_PRODUCTION || process.env.FORCE_AI_GUARD === 'true';
+
+const registerProcessHandlers = () => {
+  const triggerFatal = (label, payload) => {
+    console.error(`[process] ${label}:`, payload);
+    if (!IS_PRODUCTION) return;
+    process.exitCode = 1;
+    try {
+      process.kill(process.pid, 'SIGTERM');
+    } catch {
+      process.exit(1);
+    }
+  };
+
+  process.on('unhandledRejection', (reason) => {
+    triggerFatal('unhandledRejection', reason);
+  });
+  process.on('uncaughtException', (error) => {
+    triggerFatal('uncaughtException', error);
+  });
+};
+
+registerProcessHandlers();
+
+const stripInsensitiveMode = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripInsensitiveMode(item));
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce((acc, [key, val]) => {
+      if (key === 'mode') return acc;
+      acc[key] = stripInsensitiveMode(val);
+      return acc;
+    }, {});
+  }
+  return value;
+};
+
+const normalizePrismaWhere = (where) =>
+  STRIP_SEARCH_MODE ? stripInsensitiveMode(where) : where;
 
 const normalizeOrigin = (value) => {
   if (!value || typeof value !== 'string') return '';
@@ -155,7 +225,55 @@ const isAllowedOrigin = (origin) => {
   return false;
 };
 
+const isLocalUrl = (value) => {
+  if (!value || typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.hostname === 'localhost'
+      || url.hostname === '127.0.0.1'
+      || url.hostname === '::1'
+    );
+  } catch {
+    return false;
+  }
+};
+
+const validateProductionConfig = () => {
+  if (!IS_PRODUCTION) return { errors: [], warnings: [] };
+  const errors = [];
+  const warnings = [];
+
+  if (!DATABASE_URL) {
+    errors.push('DATABASE_URL is required in production.');
+  }
+  if (IS_SQLITE && process.env.ALLOW_SQLITE_PROD !== 'true') {
+    errors.push('SQLite detected in production. Set DATABASE_URL for PostgreSQL or ALLOW_SQLITE_PROD=true to override.');
+  }
+  if (!FRONTEND_URL || isLocalUrl(FRONTEND_URL)) {
+    errors.push('FRONTEND_URL must be a non-localhost URL in production.');
+  }
+  if (!process.env.BACKEND_BASE_URL || isLocalUrl(process.env.BACKEND_BASE_URL)) {
+    errors.push('BACKEND_BASE_URL must be a non-localhost URL in production.');
+  }
+  if (ADMIN_EMAILS.size === 0) {
+    warnings.push('ADMIN_EMAILS is empty; admin-only endpoints will be inaccessible.');
+  }
+  if (ADMIN_EMAILS.has('admin@example.com')) {
+    warnings.push('ADMIN_EMAILS contains admin@example.com; remove for production.');
+  }
+  if ((GOOGLE_CLIENT_ID && !GOOGLE_CLIENT_SECRET) || (!GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET)) {
+    warnings.push('Google OAuth config is incomplete; enable both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.');
+  }
+  if ((WECHAT_APP_ID && !WECHAT_APP_SECRET) || (!WECHAT_APP_ID && WECHAT_APP_SECRET)) {
+    warnings.push('WeChat OAuth config is incomplete; enable both WECHAT_APP_ID and WECHAT_APP_SECRET.');
+  }
+
+  return { errors, warnings };
+};
+
 const ensureSoftDeleteTables = async () => {
+  if (IS_PRODUCTION || !IS_SQLITE || process.env.ALLOW_RUNTIME_SCHEMA_SYNC === 'false') return;
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS BaziRecordTrash (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -250,11 +368,24 @@ app.use((req, res, next) => {
 
 const rateLimitStore = new Map();
 const deletedClientIndex = new Map();
+const clientRecordIndex = new Map();
+let lastRateLimitCleanup = 0;
+const maybeCleanupRateLimitStore = (now) => {
+  if (!RATE_LIMIT_ENABLED) return;
+  if (!Number.isFinite(RATE_LIMIT_WINDOW_MS) || RATE_LIMIT_WINDOW_MS <= 0) return;
+  if (now - lastRateLimitCleanup < RATE_LIMIT_WINDOW_MS * 2) return;
+  lastRateLimitCleanup = now;
+  for (const [key, entry] of rateLimitStore.entries()) {
+    if (!entry || now >= entry.resetAt) {
+      rateLimitStore.delete(key);
+    }
+  }
+};
 
 const getRateLimitKey = (req) => {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.trim()) {
-    return forwarded.split(',')[0].trim();
+  const trustProxyEnabled = Boolean(req.app?.get('trust proxy'));
+  if (trustProxyEnabled && Array.isArray(req.ips) && req.ips.length > 0) {
+    return req.ips[0];
   }
   return req.ip || req.connection?.remoteAddress || 'unknown';
 };
@@ -296,12 +427,34 @@ const getClientDeletedSet = (userId, clientId) => {
   return userMap.get(clientId) || null;
 };
 
+const getClientRecordSet = (userId, clientId) => {
+  if (!userId || !clientId) return null;
+  const userMap = clientRecordIndex.get(userId);
+  if (!userMap) return null;
+  return userMap.get(clientId) || null;
+};
+
 const trackClientDeletedRecords = (userId, clientId, recordIds) => {
   if (!userId || !clientId || !recordIds?.length) return;
   let userMap = deletedClientIndex.get(userId);
   if (!userMap) {
     userMap = new Map();
     deletedClientIndex.set(userId, userMap);
+  }
+  let recordSet = userMap.get(clientId);
+  if (!recordSet) {
+    recordSet = new Set();
+    userMap.set(clientId, recordSet);
+  }
+  recordIds.forEach((id) => recordSet.add(id));
+};
+
+const trackClientRecords = (userId, clientId, recordIds) => {
+  if (!userId || !clientId || !recordIds?.length) return;
+  let userMap = clientRecordIndex.get(userId);
+  if (!userMap) {
+    userMap = new Map();
+    clientRecordIndex.set(userId, userMap);
   }
   let recordSet = userMap.get(clientId);
   if (!recordSet) {
@@ -327,6 +480,22 @@ const removeClientDeletedRecord = (userId, clientId, recordId) => {
   }
 };
 
+const removeClientRecord = (userId, clientId, recordId) => {
+  if (!userId || !clientId || !recordId) return;
+  const recordSet = getClientRecordSet(userId, clientId);
+  if (!recordSet) return;
+  recordSet.delete(recordId);
+  if (recordSet.size === 0) {
+    const userMap = clientRecordIndex.get(userId);
+    if (userMap) {
+      userMap.delete(clientId);
+      if (userMap.size === 0) {
+        clientRecordIndex.delete(userId);
+      }
+    }
+  }
+};
+
 const CLIENT_DELETE_SCOPE_ENABLED = NODE_ENV !== 'production';
 
 app.use((req, res, next) => {
@@ -341,6 +510,7 @@ app.use((req, res, next) => {
   }
 
   const now = Date.now();
+  maybeCleanupRateLimitStore(now);
   const key = getRateLimitKey(req);
   if (isLocalAddress(key)) {
     return next();
@@ -392,6 +562,13 @@ const fetchWithTimeout = async (url, options, timeoutMs = AI_TIMEOUT_MS) => {
   } finally {
     clearTimeout(timeout);
   }
+};
+
+const ensureMinDuration = async (startedAtMs, minDurationMs) => {
+  if (!Number.isFinite(minDurationMs) || minDurationMs <= 0) return;
+  const elapsed = Date.now() - startedAtMs;
+  if (elapsed >= minDurationMs) return;
+  await new Promise((resolve) => setTimeout(resolve, minDurationMs - elapsed));
 };
 
 const WS_PATH = '/ws/ai';
@@ -595,7 +772,7 @@ Strength Notes: ${strength || 'Not provided'}
   `.trim();
 
   const fallback = () => `
-## 🔮 AI BaZi Analysis
+## 🔮 BaZi Insight
 **Summary:** A ${pillars?.day?.elementStem || 'balanced'} Day Master chart with notable elemental distribution.
 
 **Key Patterns:**
@@ -608,7 +785,51 @@ Focus on balancing elements that are lower in count and lean into favorable cycl
   return { system, user, fallback };
 };
 
+const buildZiweiPrompt = ({ chart, birth }) => {
+  const lunar = chart?.lunar || {};
+  const mingPalace = chart?.mingPalace || {};
+  const shenPalace = chart?.shenPalace || {};
+  const transformations = Array.isArray(chart?.fourTransformations)
+    ? chart.fourTransformations
+      .map((item) => `${item.type?.toUpperCase?.() || item.type} ${item.starCn || item.starName || item.starKey}`)
+      .filter(Boolean)
+      .slice(0, 6)
+      .join(', ')
+    : 'None';
+  const mingStars = Array.isArray(mingPalace?.stars?.major)
+    ? mingPalace.stars.major.map((star) => star.cn || star.name || star.key).filter(Boolean).join(', ')
+    : '';
+  const shenStars = Array.isArray(shenPalace?.stars?.major)
+    ? shenPalace.stars.major.map((star) => star.cn || star.name || star.key).filter(Boolean).join(', ')
+    : '';
+
+  const system = 'You are a Zi Wei Dou Shu interpreter. Provide a concise interpretation in Markdown with sections: Overview, Key Palaces, Transformations, Guidance. Keep under 220 words.';
+  const user = `
+Birth: ${birth?.birthYear || '?'}-${birth?.birthMonth || '?'}-${birth?.birthDay || '?'} ${birth?.birthHour ?? '?'}h
+Gender: ${birth?.gender || 'Unknown'}
+Lunar: ${lunar.year || '?'}年 ${lunar.month || '?'}月 ${lunar.day || '?'}日 ${lunar.isLeap ? '(Leap)' : ''}
+Ming Palace: ${mingPalace?.palace?.cn || mingPalace?.palace?.name || 'Unknown'} · ${mingPalace?.branch?.name || 'Unknown'}
+Ming Major Stars: ${mingStars || 'None'}
+Shen Palace: ${shenPalace?.palace?.cn || shenPalace?.palace?.name || 'Unknown'} · ${shenPalace?.branch?.name || 'Unknown'}
+Shen Major Stars: ${shenStars || 'None'}
+Four Transformations: ${transformations}
+  `.trim();
+  const fallback = () => `
+## 🌌 Zi Wei Interpretation
+**Overview:** Your chart highlights distinct strengths rooted in the Ming and Shen palaces, with transformations signaling key growth themes.
+
+**Key Palaces:** Focus on the Ming palace qualities and how the Shen palace supports your life direction.
+
+**Transformations:** Notice where your chart emphasizes momentum or restraint.
+
+**Guidance:** Align daily decisions with the strongest palace energies and lean into balanced actions.
+  `.trim();
+
+  return { system, user, fallback };
+};
+
 const ensureUserSettingsTable = async () => {
+  if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
     await prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS UserSettings (
@@ -625,18 +846,64 @@ const ensureUserSettingsTable = async () => {
   }
 };
 
+const ensureZiweiHistoryTable = async () => {
+  if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
+  try {
+    await prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS ZiweiRecord (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER NOT NULL,
+        birthYear INTEGER NOT NULL,
+        birthMonth INTEGER NOT NULL,
+        birthDay INTEGER NOT NULL,
+        birthHour INTEGER NOT NULL,
+        gender TEXT NOT NULL,
+        chart TEXT NOT NULL,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+  } catch (error) {
+    console.error('Failed to ensure ZiweiRecord table:', error);
+  }
+};
+
+const ensureBaziRecordUpdatedAt = async () => {
+  if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
+  try {
+    const columns = await prisma.$queryRawUnsafe('PRAGMA table_info(BaziRecord);');
+    const hasUpdatedAt = Array.isArray(columns)
+      && columns.some((column) => column?.name === 'updatedAt');
+    if (hasUpdatedAt) return;
+
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE BaziRecord ADD COLUMN updatedAt DATETIME'
+    );
+    await prisma.$executeRawUnsafe(
+      'UPDATE BaziRecord SET updatedAt = createdAt WHERE updatedAt IS NULL'
+    );
+  } catch (error) {
+    console.error('Failed to ensure BaziRecord updatedAt column:', error);
+  }
+};
+
 const ensureDefaultUser = async () => {
   const email = 'test@example.com';
   const password = 'password123';
   const name = 'Test User';
+  if (!SHOULD_SEED_DEFAULT_USER) return;
   try {
     const existing = await prisma.user.findUnique({ where: { email } });
     if (!existing) {
-      await prisma.user.create({ data: { email, password, name } });
+      const hashed = await hashPassword(password);
+      if (!hashed) return;
+      await prisma.user.create({ data: { email, password: hashed, name } });
       return;
     }
-    if (existing.password !== password || existing.name !== name) {
-      await prisma.user.update({ where: { email }, data: { password, name } });
+    const passwordMatches = await verifyPassword(password, existing.password);
+    if (!passwordMatches || existing.name !== name || !isHashedPassword(existing.password)) {
+      const hashed = await hashPassword(password);
+      if (!hashed) return;
+      await prisma.user.update({ where: { email }, data: { password: hashed, name } });
     }
   } catch (error) {
     console.error('Failed to ensure default user:', error);
@@ -764,13 +1031,50 @@ const buildBaziSubmitKey = (userId, payload) => {
 };
 
 // --- Mappings & Constants ---
+const ALLOW_RUNTIME_SCHEMA_SYNC =
+  !IS_PRODUCTION && IS_SQLITE && process.env.ALLOW_RUNTIME_SCHEMA_SYNC !== 'false';
+const SHOULD_SEED_DEFAULT_USER =
+  !IS_PRODUCTION && process.env.SEED_DEFAULT_USER !== 'false';
+const PASSWORD_RESET_DEBUG_LOG =
+  !IS_PRODUCTION && process.env.PASSWORD_RESET_DEBUG_LOG !== 'false';
 const sessionStore = createSessionStore({ ttlMs: SESSION_IDLE_MS });
+const createSessionToken = (userId) => {
+  const issuedAt = Date.now();
+  const nonce = crypto.randomBytes(16).toString('hex');
+  return `token_${userId}_${issuedAt}_${nonce}`;
+};
 const resetTokenStore = new Map();
 const resetTokenByUser = new Map();
+const cleanupUserMemory = (userId) => {
+  cleanupUserInMemory(userId, {
+    sessionStore,
+    resetTokenStore,
+    resetTokenByUser,
+    deletedClientIndex,
+    clientRecordIndex,
+  });
+};
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const oauthStateStore = new Map();
 const WECHAT_STATE_TTL_MS = 10 * 60 * 1000;
 const wechatStateStore = new Map();
+const pruneOauthStateStore = (now = Date.now()) => {
+  for (const [key, entry] of oauthStateStore.entries()) {
+    if (!entry?.createdAt || now - entry.createdAt > OAUTH_STATE_TTL_MS) {
+      oauthStateStore.delete(key);
+    }
+  }
+};
+const pruneResetTokenStore = (now = Date.now()) => {
+  for (const [token, entry] of resetTokenStore.entries()) {
+    if (!entry?.expiresAt || now > entry.expiresAt) {
+      resetTokenStore.delete(token);
+      if (resetTokenByUser.get(entry?.userId) === token) {
+        resetTokenByUser.delete(entry.userId);
+      }
+    }
+  }
+};
 
 const initializeRedisMirrors = async () => {
   const client = await initRedis();
@@ -792,6 +1096,7 @@ const sanitizeNextPath = (raw) => {
 };
 
 const buildOauthState = (nextPath) => {
+  pruneOauthStateStore();
   const state = crypto.randomBytes(24).toString('hex');
   oauthStateStore.set(state, { createdAt: Date.now(), nextPath });
   return state;
@@ -824,6 +1129,7 @@ const isAdminUser = (user) => {
 
 const authorizeToken = createAuthorizeToken({ prisma, sessionStore, isAdminUser });
 const requireAuth = createRequireAuth({ authorizeToken });
+const requireAuthStrict = createRequireAuth({ authorizeToken, allowSessionExpiredSilent: false });
 const getBearerToken = (req) => {
   const auth = req.headers.authorization || '';
   if (!auth.startsWith('Bearer ')) return null;
@@ -861,6 +1167,7 @@ const consumeWeChatState = (state) => {
 };
 
 const createResetToken = (userId) => {
+  pruneResetTokenStore();
   const existingToken = resetTokenByUser.get(userId);
   if (existingToken) {
     resetTokenStore.delete(existingToken);
@@ -1404,6 +1711,18 @@ const serializeIchingRecord = (record) => ({
   timeContext: parseJsonValue(record.timeContext),
 });
 
+const serializeZiweiRecord = (record) => ({
+  id: record.id,
+  userId: record.userId,
+  birthYear: record.birthYear,
+  birthMonth: record.birthMonth,
+  birthDay: record.birthDay,
+  birthHour: record.birthHour,
+  gender: record.gender,
+  chart: parseJsonValue(record.chart),
+  createdAt: record.createdAt,
+});
+
 const serializeRecordWithTimezone = (record) => {
   const base = serializeRecord(record);
   const meta = buildBirthTimeMeta({
@@ -1480,7 +1799,7 @@ const coerceInt = (value) => {
 
  
 
-const buildImportRecord = (raw, userId) => {
+const buildImportRecord = async (raw, userId) => {
   if (!raw || typeof raw !== 'object') return null;
   const birthYear = coerceInt(raw.birthYear);
   const birthMonth = coerceInt(raw.birthMonth);
@@ -1495,7 +1814,13 @@ const buildImportRecord = (raw, userId) => {
   let luckCycles = parseJsonField(raw.luckCycles);
 
   if (!pillars || !fiveElements) {
-    const computed = getBaziCalculation({ birthYear, birthMonth, birthDay, birthHour, gender });
+    const computed = await getBaziCalculation({
+      birthYear,
+      birthMonth,
+      birthDay,
+      birthHour,
+      gender
+    });
     if (!pillars) pillars = computed.pillars;
     if (!fiveElements) fiveElements = computed.fiveElements;
     if (!tenGods) tenGods = computed.tenGods;
@@ -1508,6 +1833,8 @@ const buildImportRecord = (raw, userId) => {
 
   const createdAtRaw = raw.createdAt ? new Date(raw.createdAt) : null;
   const createdAt = createdAtRaw && !Number.isNaN(createdAtRaw.getTime()) ? createdAtRaw : null;
+  const updatedAtRaw = raw.updatedAt ? new Date(raw.updatedAt) : null;
+  const updatedAt = updatedAtRaw && !Number.isNaN(updatedAtRaw.getTime()) ? updatedAtRaw : null;
 
   const timezoneOffset = parseTimezoneOffsetMinutes(raw.timezoneOffsetMinutes);
   const timezoneFallback = Number.isFinite(timezoneOffset)
@@ -1530,6 +1857,7 @@ const buildImportRecord = (raw, userId) => {
   };
 
   if (createdAt) record.createdAt = createdAt;
+  if (updatedAt || createdAt) record.updatedAt = updatedAt ?? createdAt;
   return record;
 };
 
@@ -1677,11 +2005,18 @@ const performCalculation = (data) => {
   return { pillars, fiveElements: counts, fiveElementsPercent, tenGods, luckCycles };
 };
 
-const getBaziCalculation = (data, { bypassCache = false } = {}) => {
+const hasFullBaziResult = (result) => {
+  if (!result || typeof result !== 'object') return false;
+  if (!result.pillars || !result.fiveElements) return false;
+  if (!result.tenGods || !result.luckCycles) return false;
+  return true;
+};
+
+const getBaziCalculation = async (data, { bypassCache = false } = {}) => {
   const cacheKey = buildBaziCacheKey(data);
   if (!bypassCache && cacheKey) {
-    const cached = getCachedBaziCalculation(cacheKey);
-    if (cached) return cached;
+    const cached = await getCachedBaziCalculationAsync(cacheKey);
+    if (cached && hasFullBaziResult(cached)) return cached;
   }
   const result = performCalculation(data);
   if (cacheKey) setBaziCacheEntry(cacheKey, result);
@@ -1909,8 +2244,57 @@ app.use('/api', apiRouter);
 
 // --- Routes ---
 
+const withTimeout = (promise, timeoutMs) => {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const timer = setTimeout(() => {
+        clearTimeout(timer);
+        reject(new Error('Timeout'));
+      }, timeoutMs);
+      timer.unref?.();
+    }),
+  ]);
+};
+
+const checkDatabase = async () => {
+  try {
+    await withTimeout(prisma.$queryRaw`SELECT 1`, 1500);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || 'db_check_failed' };
+  }
+};
+
+const checkRedis = async () => {
+  const client = await initRedis();
+  if (!client) {
+    return { ok: true, status: 'disabled' };
+  }
+  if (!client.isOpen) {
+    return { ok: false, status: 'disconnected' };
+  }
+  try {
+    await withTimeout(client.ping(), 1000);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || 'redis_check_failed' };
+  }
+};
+
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
+});
+
+app.get('/ready', async (req, res) => {
+  const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
+  const ok = db.ok && (redis.ok || redis.status === 'disabled');
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'ok' : 'degraded',
+    checks: { db, redis },
+    timestamp: new Date().toISOString(),
+  });
 });
 
 apiRouter.get('/ai/providers', (req, res) => {
@@ -1918,6 +2302,10 @@ apiRouter.get('/ai/providers', (req, res) => {
     activeProvider: AI_PROVIDER,
     providers: AVAILABLE_PROVIDERS
   });
+});
+
+apiRouter.get('/locations', (req, res) => {
+  res.json({ locations: listKnownLocations() });
 });
 
 apiRouter.post('/ai/interpret', requireAuth, async (req, res) => {
@@ -1950,6 +2338,30 @@ apiRouter.post('/ai/interpret', requireAuth, async (req, res) => {
   } finally {
     release();
   }
+});
+
+apiRouter.get('/zodiac/compatibility', (req, res) => {
+  const primaryKey = sanitizeQueryParam(req.query.primary);
+  const secondaryKey = sanitizeQueryParam(req.query.secondary);
+
+  if (!primaryKey || !secondaryKey) {
+    return res.status(400).json({ error: 'Provide primary and secondary signs.' });
+  }
+
+  const primary = ZODIAC_SIGNS[primaryKey];
+  const secondary = ZODIAC_SIGNS[secondaryKey];
+
+  if (!primary || !secondary) {
+    return res.status(404).json({ error: 'Unknown sign provided.' });
+  }
+
+  const compatibility = buildZodiacCompatibility(primary, secondary);
+
+  res.json({
+    primary: { key: primaryKey, ...primary },
+    secondary: { key: secondaryKey, ...secondary },
+    ...compatibility
+  });
 });
 
 apiRouter.get('/zodiac/:sign', (req, res) => {
@@ -2030,30 +2442,6 @@ apiRouter.get('/zodiac/:sign/horoscope', (req, res) => {
           : formatDateLabel(new Date(), { month: 'long', year: 'numeric' }),
     generatedAt: new Date().toISOString(),
     horoscope
-  });
-});
-
-apiRouter.get('/zodiac/compatibility', (req, res) => {
-  const primaryKey = sanitizeQueryParam(req.query.primary);
-  const secondaryKey = sanitizeQueryParam(req.query.secondary);
-
-  if (!primaryKey || !secondaryKey) {
-    return res.status(400).json({ error: 'Provide primary and secondary signs.' });
-  }
-
-  const primary = ZODIAC_SIGNS[primaryKey];
-  const secondary = ZODIAC_SIGNS[secondaryKey];
-
-  if (!primary || !secondary) {
-    return res.status(404).json({ error: 'Unknown sign provided.' });
-  }
-
-  const compatibility = buildZodiacCompatibility(primary, secondary);
-
-  res.json({
-    primary: { key: primaryKey, ...primary },
-    secondary: { key: secondaryKey, ...secondary },
-    ...compatibility
   });
 });
 
@@ -2168,8 +2556,13 @@ apiRouter.get('/auth/google/callback', async (req, res) => {
     let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       const randomPassword = crypto.randomBytes(24).toString('hex');
+      const hashed = await hashPassword(randomPassword);
+      if (!hashed) {
+        const redirectUrl = buildOauthRedirectUrl({ error: 'server_error', nextPath: stateEntry.nextPath });
+        return res.redirect(redirectUrl);
+      }
       user = await prisma.user.create({
-        data: { email, name: displayName, password: randomPassword },
+        data: { email, name: displayName, password: hashed },
       });
     } else if (!user.name && displayName) {
       user = await prisma.user.update({
@@ -2178,12 +2571,17 @@ apiRouter.get('/auth/google/callback', async (req, res) => {
       });
     }
 
-    const token = `token_${user.id}_${Date.now()}`;
+    const token = createSessionToken(user.id);
     sessionStore.set(token, Date.now());
 
     const redirectUrl = buildOauthRedirectUrl({
       token,
-      user: { id: user.id, email: user.email, name: user.name },
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isAdmin: isAdminUser(user),
+      },
       nextPath: stateEntry.nextPath,
     });
     return res.redirect(redirectUrl);
@@ -2204,10 +2602,22 @@ const handleRegister = async (req, res) => {
   }
 
   try {
+    const hashed = await hashPassword(password);
+    if (!hashed) {
+      return res.status(500).json({ error: 'Unable to process password' });
+    }
     const user = await prisma.user.create({
-      data: { email: String(email).trim().toLowerCase(), password, name },
+      data: { email: String(email).trim().toLowerCase(), password: hashed, name },
     });
-    res.json({ message: 'User created', user });
+    res.json({
+      message: 'User created',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isAdmin: isAdminUser(user),
+      },
+    });
   } catch (error) {
     if (error.code === 'P2002') res.status(409).json({ error: 'Email already exists' });
     else { console.error(error); res.status(500).json({ error: 'Internal server error' }); }
@@ -2219,10 +2629,16 @@ const handleLogin = async (req, res) => {
   try {
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (!user || user.password !== password) {
+    if (!user || !(await verifyPassword(password, user.password))) {
       return res.status(401).json({ error: 'Login failed' });
     }
-    const token = `token_${user.id}_${Date.now()}`;
+    if (!isHashedPassword(user.password)) {
+      const hashed = await hashPassword(password);
+      if (hashed) {
+        await prisma.user.update({ where: { id: user.id }, data: { password: hashed } });
+      }
+    }
+    const token = createSessionToken(user.id);
     sessionStore.set(token, Date.now());
     res.json({
       token,
@@ -2238,7 +2654,7 @@ const handleLogin = async (req, res) => {
 
 const handleLogout = async (req, res) => {
   const token = getBearerToken(req) || req.body?.token || null;
-  if (token && sessionStore.has(token)) {
+  if (token) {
     sessionStore.delete(token);
   }
   res.json({ message: 'Logged out' });
@@ -2332,10 +2748,14 @@ apiRouter.get('/auth/wechat/callback', async (req, res) => {
 
     let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
+      const hashed = await hashPassword(crypto.randomBytes(16).toString('hex'));
+      if (!hashed) {
+        return redirectToFrontend({ error: 'server_error', provider: 'wechat' });
+      }
       user = await prisma.user.create({
         data: {
           email,
-          password: crypto.randomBytes(16).toString('hex'),
+          password: hashed,
           name: displayName,
         },
       });
@@ -2346,7 +2766,7 @@ apiRouter.get('/auth/wechat/callback', async (req, res) => {
       });
     }
 
-    const token = `token_${user.id}_${Date.now()}`;
+    const token = createSessionToken(user.id);
     sessionStore.set(token, Date.now());
 
     const userPayload = {
@@ -2369,22 +2789,32 @@ apiRouter.get('/auth/wechat/callback', async (req, res) => {
 });
 
 apiRouter.post('/password/request', async (req, res) => {
+  const startedAt = Date.now();
   const { email } = req.body || {};
-  if (!email || typeof email !== 'string') {
-    return res.status(400).json({ error: 'Email is required' });
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+
+  const sendResponse = async (status, payload) => {
+    await ensureMinDuration(startedAt, RESET_REQUEST_MIN_DURATION_MS);
+    return res.status(status).json(payload);
+  };
+
+  if (!normalizedEmail) {
+    return sendResponse(400, { error: 'Email is required' });
   }
 
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (user) {
       const token = createResetToken(user.id);
-      console.log(`[password-reset] Reset token for ${user.email}: ${token}`);
+      if (PASSWORD_RESET_DEBUG_LOG) {
+        console.log(`[password-reset] Reset token for ${user.email}: ${token}`);
+      }
     }
   } catch (error) {
     console.error('Password reset request error:', error);
   }
 
-  res.json({
+  return sendResponse(200, {
     message: 'If an account exists for that email, a reset link has been sent.'
   });
 });
@@ -2406,7 +2836,11 @@ apiRouter.post('/password/reset', async (req, res) => {
   }
 
   try {
-    await prisma.user.update({ where: { id: userId }, data: { password } });
+    const hashed = await hashPassword(password);
+    if (!hashed) {
+      return res.status(500).json({ error: 'Unable to process password' });
+    }
+    await prisma.user.update({ where: { id: userId }, data: { password: hashed } });
     return res.json({ message: 'Password updated' });
   } catch (error) {
     console.error('Password reset error:', error);
@@ -2559,8 +2993,18 @@ apiRouter.put('/user/settings', requireAuth, async (req, res) => {
   }
 });
 
-apiRouter.get('/auth/me', requireAuth, (req, res) => {
+apiRouter.get('/auth/me', requireAuthStrict, (req, res) => {
   res.json({ user: req.user });
+});
+
+apiRouter.delete('/auth/me', requireAuthStrict, async (req, res) => {
+  try {
+    await deleteUserCascade({ prisma, userId: req.user.id, cleanupUserMemory });
+    res.json({ message: 'User deleted' });
+  } catch (error) {
+    console.error('User self-delete failed:', error);
+    res.status(500).json({ error: 'Unable to delete account' });
+  }
 });
 
 apiRouter.get('/admin/health', requireAuth, requireAdmin, (req, res) => {
@@ -2571,19 +3015,7 @@ apiRouter.delete('/admin/users/:id', requireAuth, requireAdmin, async (req, res)
   const userId = parseIdParam(req.params.id);
   if (!userId) return res.status(400).json({ error: 'Invalid user id' });
   try {
-    await prisma.$transaction([
-      prisma.favorite.deleteMany({ where: { userId } }),
-      prisma.tarotRecord.deleteMany({ where: { userId } }),
-      prisma.ichingRecord.deleteMany({ where: { userId } }),
-      prisma.baziRecord.deleteMany({ where: { userId } }),
-      prisma.userSettings.deleteMany({ where: { userId } }),
-      prisma.user.delete({ where: { id: userId } }),
-    ]);
-    try {
-      await prisma.$executeRaw`DELETE FROM BaziRecordTrash WHERE userId = ${userId}`;
-    } catch (error) {
-      console.warn('Failed to clear BaziRecordTrash for deleted user:', error?.message || error);
-    }
+    await deleteUserCascade({ prisma, userId, cleanupUserMemory });
     res.json({ success: true });
   } catch (error) {
     console.error('Admin user delete failed:', error);
@@ -2591,7 +3023,7 @@ apiRouter.delete('/admin/users/:id', requireAuth, requireAdmin, async (req, res)
   }
 });
 
-apiRouter.post('/bazi/calculate', (req, res) => {
+apiRouter.post('/bazi/calculate', async (req, res) => {
   const validation = validateBaziInput(req.body);
   if (!validation.ok) {
     const message = validation.reason === 'whitespace'
@@ -2604,7 +3036,7 @@ apiRouter.post('/bazi/calculate', (req, res) => {
   const buildResponse = async () => {
     const payload = validation.payload;
     const { calculationPayload, timeMeta, trueSolarMeta } = resolveBaziCalculationInput(payload);
-    const result = getBaziCalculation(calculationPayload);
+    const result = await getBaziCalculation(calculationPayload);
     return {
       pillars: result.pillars,
       fiveElements: result.fiveElements,
@@ -2634,7 +3066,7 @@ apiRouter.post('/bazi/calculate', (req, res) => {
     .finally(finalize);
 });
 
-apiRouter.post('/bazi/full-analysis', requireAuth, (req, res) => {
+apiRouter.post('/bazi/full-analysis', requireAuth, async (req, res) => {
   const validation = validateBaziInput(req.body);
   if (!validation.ok) {
     const message = validation.reason === 'whitespace'
@@ -2647,7 +3079,7 @@ apiRouter.post('/bazi/full-analysis', requireAuth, (req, res) => {
   const buildResponse = async () => {
     const payload = validation.payload;
     const { calculationPayload, timeMeta, trueSolarMeta } = resolveBaziCalculationInput(payload);
-    const result = getBaziCalculation(calculationPayload);
+    const result = await getBaziCalculation(calculationPayload);
     return { ...result, ...timeMeta, trueSolarTime: trueSolarMeta };
   };
 
@@ -2716,6 +3148,167 @@ apiRouter.post('/ziwei/calculate', requireAuth, (req, res) => {
   }
 });
 
+apiRouter.post('/ziwei/ai-interpret', requireAuth, async (req, res) => {
+  const { birthYear, birthMonth, birthDay, birthHour, gender, chart: chartPayload } = req.body || {};
+  let provider = null;
+  try {
+    provider = resolveAiProvider(req.body?.provider);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'Invalid AI provider.' });
+  }
+
+  let chart = chartPayload;
+  let birthMeta = {
+    birthYear,
+    birthMonth,
+    birthDay,
+    birthHour,
+    gender,
+  };
+
+  const hasChart = chart && typeof chart === 'object';
+  if (!hasChart) {
+    const birthYearNumber = Number(birthYear);
+    const birthMonthNumber = Number(birthMonth);
+    const birthDayNumber = Number(birthDay);
+    const birthHourNumber = Number(birthHour);
+    if (
+      !Number.isInteger(birthYearNumber)
+      || birthYearNumber < 1
+      || birthYearNumber > 9999
+      || !Number.isInteger(birthMonthNumber)
+      || birthMonthNumber < 1
+      || birthMonthNumber > 12
+      || !Number.isInteger(birthDayNumber)
+      || birthDayNumber < 1
+      || birthDayNumber > 31
+      || !Number.isInteger(birthHourNumber)
+      || birthHourNumber < 0
+      || birthHourNumber > 23
+      || !gender
+    ) {
+      return res.status(400).json({ error: 'Zi Wei chart data required' });
+    }
+    const payload = {
+      birthYear: birthYearNumber,
+      birthMonth: birthMonthNumber,
+      birthDay: birthDayNumber,
+      birthHour: birthHourNumber,
+      gender,
+    };
+    const result = calculateZiweiChart(payload);
+    const timeMeta = buildBirthTimeMeta(payload);
+    chart = { ...result, ...timeMeta };
+    birthMeta = payload;
+  }
+
+  const { system, user, fallback } = buildZiweiPrompt({
+    chart,
+    birth: birthMeta,
+  });
+
+  const release = acquireAiGuard(req.user.id);
+  if (!release) {
+    return res.status(429).json({ error: AI_CONCURRENCY_ERROR });
+  }
+  try {
+    const content = await generateAIContent({ system, user, fallback, provider });
+    res.json({ content });
+  } finally {
+    release();
+  }
+});
+
+apiRouter.post('/ziwei/history', requireAuth, async (req, res) => {
+  const { birthYear, birthMonth, birthDay, birthHour, gender } = req.body || {};
+  if (!birthYear || !birthMonth || !birthDay || birthHour === undefined || !gender) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const birthYearNumber = Number(birthYear);
+  const birthMonthNumber = Number(birthMonth);
+  const birthDayNumber = Number(birthDay);
+  const birthHourNumber = Number(birthHour);
+
+  if (
+    !Number.isInteger(birthYearNumber)
+    || birthYearNumber < 1
+    || birthYearNumber > 9999
+    || !Number.isInteger(birthMonthNumber)
+    || birthMonthNumber < 1
+    || birthMonthNumber > 12
+    || !Number.isInteger(birthDayNumber)
+    || birthDayNumber < 1
+    || birthDayNumber > 31
+    || !Number.isInteger(birthHourNumber)
+    || birthHourNumber < 0
+    || birthHourNumber > 23
+  ) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    const payload = {
+      birthYear: birthYearNumber,
+      birthMonth: birthMonthNumber,
+      birthDay: birthDayNumber,
+      birthHour: birthHourNumber,
+      gender,
+    };
+    const result = calculateZiweiChart(payload);
+    const timeMeta = buildBirthTimeMeta(payload);
+    const record = await prisma.ziweiRecord.create({
+      data: {
+        userId: req.user.id,
+        birthYear: birthYearNumber,
+        birthMonth: birthMonthNumber,
+        birthDay: birthDayNumber,
+        birthHour: birthHourNumber,
+        gender: String(gender),
+        chart: JSON.stringify({ ...result, ...timeMeta }),
+      },
+    });
+    res.json({ record: serializeZiweiRecord(record) });
+  } catch (error) {
+    console.error('Failed to save Ziwei history:', error);
+    res.status(500).json({ error: 'Unable to save history' });
+  }
+});
+
+apiRouter.get('/ziwei/history', requireAuth, async (req, res) => {
+  const rawLimit = Number(req.query.limit);
+  const take = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 30;
+  try {
+    const records = await prisma.ziweiRecord.findMany({
+      where: { userId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+      take,
+    });
+    res.json({ records: records.map(serializeZiweiRecord) });
+  } catch (error) {
+    console.error('Failed to load Ziwei history:', error);
+    res.status(500).json({ error: 'Unable to load history' });
+  }
+});
+
+apiRouter.delete('/ziwei/history/:id', requireAuth, async (req, res) => {
+  const recordId = Number(req.params.id);
+  if (!Number.isInteger(recordId) || recordId <= 0) {
+    return res.status(400).json({ error: 'Invalid record id' });
+  }
+  try {
+    const record = await prisma.ziweiRecord.findUnique({ where: { id: recordId } });
+    if (!record || record.userId !== req.user.id) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+    await prisma.ziweiRecord.delete({ where: { id: recordId } });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    console.error('Failed to delete Ziwei history:', error);
+    res.status(500).json({ error: 'Unable to delete history' });
+  }
+});
+
 apiRouter.post('/bazi/records', requireAuth, async (req, res) => {
   const validation = validateBaziInput(req.body);
   if (!validation.ok) {
@@ -2725,6 +3318,7 @@ apiRouter.post('/bazi/records', requireAuth, async (req, res) => {
     return res.status(400).json({ error: message });
   }
 
+  const clientId = extractClientId(req);
   const submitKey = buildBaziSubmitKey(req.user.id, validation.payload);
 
   const createRecord = async () => {
@@ -2754,7 +3348,7 @@ apiRouter.post('/bazi/records', requireAuth, async (req, res) => {
       || !normalizedProvidedResult?.fiveElements
       || !normalizedProvidedResult?.tenGods
       || !normalizedProvidedResult?.luckCycles;
-    const computedResult = needsCalculation ? getBaziCalculation(calculationPayload) : null;
+    const computedResult = needsCalculation ? await getBaziCalculation(calculationPayload) : null;
     const finalResult = {
       pillars: normalizedProvidedResult?.pillars ?? computedResult?.pillars,
       fiveElements: normalizedProvidedResult?.fiveElements ?? computedResult?.fiveElements,
@@ -2799,6 +3393,7 @@ apiRouter.post('/bazi/records', requireAuth, async (req, res) => {
       if (!record) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
+      trackClientRecords(req.user.id, clientId, [record.id]);
       return res.json({ record: serializeRecordWithTimezone(record) });
     } catch (e) {
       console.error(e);
@@ -2811,6 +3406,7 @@ apiRouter.post('/bazi/records', requireAuth, async (req, res) => {
     if (!record) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+    trackClientRecords(req.user.id, clientId, [record.id]);
     return res.json({ record: serializeRecordWithTimezone(record) });
   } catch (e) {
     console.error(e);
@@ -2911,7 +3507,7 @@ const parseRecordsQuery = (source) => {
 const getBaziRecords = async (req, res, source) => {
   const sourceWithClient = {
     ...(source || {}),
-    clientId: source?.clientId ?? req.headers['x-client-id'],
+    clientId: source?.clientId ?? extractClientId(req),
   };
   const {
     safePage,
@@ -2941,19 +3537,30 @@ const getBaziRecords = async (req, res, source) => {
 
   const baseWhere = { userId: req.user.id };
   const where = { userId: req.user.id };
+  const clientRecordSet = null;
+  const clientRecordIds =
+    clientRecordSet && clientRecordSet.size ? Array.from(clientRecordSet) : null;
   const deletedIds = await fetchDeletedRecordIds(req.user.id);
-  const scopedDeletedIds = CLIENT_DELETE_SCOPE_ENABLED && clientId
-    ? deletedIds.filter((id) => {
-      const recordSet = getClientDeletedSet(req.user.id, clientId);
-      return recordSet ? recordSet.has(id) : false;
-    })
-    : deletedIds;
+  const deletedIdSet = new Set(deletedIds);
+  const clientDeletedSet = null;
+  const scopedDeletedIds = null;
+  const clientRecordDeletedIds = null;
 
-  if (normalizedStatus === 'active' && deletedIds.length) {
-    baseWhere.id = { notIn: deletedIds };
-    where.id = { notIn: deletedIds };
+  if (normalizedStatus === 'active') {
+    if (deletedIds.length) {
+      baseWhere.id = { notIn: deletedIds };
+      where.id = { notIn: deletedIds };
+    }
   } else if (normalizedStatus === 'deleted') {
-    const filteredIds = CLIENT_DELETE_SCOPE_ENABLED && clientId ? scopedDeletedIds : deletedIds;
+    let filteredIds = deletedIds;
+    if (clientDeletedSet && scopedDeletedIds?.length) {
+      filteredIds = scopedDeletedIds;
+      if (clientRecordSet) {
+        filteredIds = filteredIds.filter((id) => clientRecordSet.has(id));
+      }
+    } else if (clientRecordDeletedIds?.length) {
+      filteredIds = clientRecordDeletedIds;
+    }
     if (!filteredIds.length) {
       return res.json({
         records: [],
@@ -2985,9 +3592,9 @@ const getBaziRecords = async (req, res, source) => {
     }
   }
 
-  let orderBy = { createdAt: 'desc' };
+  let orderBy = [{ createdAt: 'desc' }, { id: 'desc' }];
   if (sortOption === 'created-asc') {
-    orderBy = { createdAt: 'asc' };
+    orderBy = [{ createdAt: 'asc' }, { id: 'asc' }];
   } else if (sortOption === 'birth-desc') {
     orderBy = [
       { birthYear: 'desc' },
@@ -2995,6 +3602,7 @@ const getBaziRecords = async (req, res, source) => {
       { birthDay: 'desc' },
       { birthHour: 'desc' },
       { createdAt: 'desc' },
+      { id: 'desc' },
     ];
   } else if (sortOption === 'birth-asc') {
     orderBy = [
@@ -3003,15 +3611,19 @@ const getBaziRecords = async (req, res, source) => {
       { birthDay: 'asc' },
       { birthHour: 'asc' },
       { createdAt: 'desc' },
+      { id: 'desc' },
     ];
   }
+
+  const prismaBaseWhere = normalizePrismaWhere(baseWhere);
+  const prismaWhere = normalizePrismaWhere(where);
 
   const skip = (safePage - 1) * safePageSize;
 
   if (shouldFilterInMemory) {
     const [totalCount, records] = await Promise.all([
-      prisma.baziRecord.count({ where: baseWhere }),
-      prisma.baziRecord.findMany({ where, orderBy, select: BAZI_LIST_SELECT }),
+      prisma.baziRecord.count({ where: prismaBaseWhere }),
+      prisma.baziRecord.findMany({ where: prismaWhere, orderBy, select: BAZI_LIST_SELECT }),
     ]);
     const filteredRecords = records.filter((record) =>
       normalizedTerms.every((term) => recordMatchesQuery(record, term))
@@ -3034,8 +3646,8 @@ const getBaziRecords = async (req, res, source) => {
 
   if (birthSortDirection) {
     const [totalCount, records] = await Promise.all([
-      prisma.baziRecord.count({ where: baseWhere }),
-      prisma.baziRecord.findMany({ where, select: BAZI_LIST_SELECT }),
+      prisma.baziRecord.count({ where: prismaBaseWhere }),
+      prisma.baziRecord.findMany({ where: prismaWhere, select: BAZI_LIST_SELECT }),
     ]);
     const sortedRecords = sortRecordsByBirth(records, birthSortDirection);
     const filteredCount = sortedRecords.length;
@@ -3052,10 +3664,10 @@ const getBaziRecords = async (req, res, source) => {
   }
 
   const [totalCount, filteredCount, records] = await Promise.all([
-    prisma.baziRecord.count({ where: baseWhere }),
-    prisma.baziRecord.count({ where }),
+    prisma.baziRecord.count({ where: prismaBaseWhere }),
+    prisma.baziRecord.count({ where: prismaWhere }),
     prisma.baziRecord.findMany({
-      where,
+      where: prismaWhere,
       orderBy,
       skip,
       take: safePageSize + 1,
@@ -3089,6 +3701,10 @@ apiRouter.get('/bazi/records/export', requireAuth, async (req, res) => {
     sortOption,
     normalizedStatus,
   } = parseRecordsQuery(req.query);
+  const includeDeletedStatus =
+    normalizedStatus !== 'active'
+    || req.query?.includeDeletedStatus === '1'
+    || req.query?.includeDeletedStatus === 'true';
   const hasQuotes = normalizedQuery.includes('"') || normalizedQuery.includes("'");
   const searchTerms = normalizedQuery
     ? (hasQuotes ? parseSearchTerms(normalizedQuery) : [normalizedQuery])
@@ -3100,6 +3716,7 @@ apiRouter.get('/bazi/records/export', requireAuth, async (req, res) => {
 
   const where = { userId: req.user.id };
   const deletedIds = await fetchDeletedRecordIds(req.user.id);
+  const deletedSet = new Set(deletedIds);
 
   if (normalizedStatus === 'active' && deletedIds.length) {
     where.id = { notIn: deletedIds };
@@ -3125,9 +3742,9 @@ apiRouter.get('/bazi/records/export', requireAuth, async (req, res) => {
     }
   }
 
-  let orderBy = { createdAt: 'desc' };
+  let orderBy = [{ createdAt: 'desc' }, { id: 'desc' }];
   if (sortOption === 'created-asc') {
-    orderBy = { createdAt: 'asc' };
+    orderBy = [{ createdAt: 'asc' }, { id: 'asc' }];
   } else if (sortOption === 'birth-desc') {
     orderBy = [
       { birthYear: 'desc' },
@@ -3135,6 +3752,7 @@ apiRouter.get('/bazi/records/export', requireAuth, async (req, res) => {
       { birthDay: 'desc' },
       { birthHour: 'desc' },
       { createdAt: 'desc' },
+      { id: 'desc' },
     ];
   } else if (sortOption === 'birth-asc') {
     orderBy = [
@@ -3143,11 +3761,13 @@ apiRouter.get('/bazi/records/export', requireAuth, async (req, res) => {
       { birthDay: 'asc' },
       { birthHour: 'asc' },
       { createdAt: 'desc' },
+      { id: 'desc' },
     ];
   }
 
+  const prismaWhere = normalizePrismaWhere(where);
   let records = await prisma.baziRecord.findMany({
-    where,
+    where: prismaWhere,
     orderBy,
   });
   if (shouldFilterInMemory) {
@@ -3155,10 +3775,29 @@ apiRouter.get('/bazi/records/export', requireAuth, async (req, res) => {
       normalizedTerms.every((term) => recordMatchesQuery(record, term))
     );
   }
+  const deletedCount = normalizedStatus === 'all'
+    ? deletedIds.length
+    : normalizedStatus === 'deleted'
+      ? records.length
+      : 0;
+  const activeCount = normalizedStatus === 'all'
+    ? Math.max(0, records.length - deletedCount)
+    : normalizedStatus === 'active'
+      ? records.length
+      : 0;
+  const exportedRecords = records.map((record) => {
+    const base = serializeRecordWithTimezone(record);
+    if (!includeDeletedStatus) return base;
+    return { ...base, softDeleted: deletedSet.has(record.id) };
+  });
   res.json({
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
-    records: records.map(serializeRecordWithTimezone),
+    status: normalizedStatus,
+    totalCount: exportedRecords.length,
+    activeCount,
+    deletedCount,
+    records: exportedRecords,
   });
 });
 
@@ -3187,6 +3826,7 @@ apiRouter.post('/bazi/records/import', requireAuth, async (req, res) => {
   let created = 0;
   let validCount = 0;
   let batchEntries = [];
+  const softDeletedEntries = [];
 
   const flushBatch = async () => {
     if (!batchEntries.length) return;
@@ -3210,14 +3850,38 @@ apiRouter.post('/bazi/records/import', requireAuth, async (req, res) => {
     }
   };
 
+  const importSoftDeletedEntries = async () => {
+    if (!softDeletedEntries.length) return;
+    await ensureSoftDeleteReady();
+    for (const entry of softDeletedEntries) {
+      try {
+        const createdRecord = await prisma.baziRecord.create({ data: entry.record });
+        created += 1;
+        await prisma.$executeRaw`
+          INSERT OR IGNORE INTO BaziRecordTrash (userId, recordId)
+          VALUES (${req.user.id}, ${createdRecord.id})
+        `;
+      } catch (entryError) {
+        console.error('Import error (soft delete):', entryError);
+        failedIndices.push(entry.index);
+      }
+    }
+  };
+
+  const isSoftDeleted = (raw) => Boolean(raw?.softDeleted || raw?.isDeleted);
+
   for (let index = 0; index < incoming.length; index += 1) {
     const raw = incoming[index];
-    const record = buildImportRecord(raw, req.user.id);
+    const record = await buildImportRecord(raw, req.user.id);
     if (record) {
       validCount += 1;
-      batchEntries.push({ index, record });
-      if (batchEntries.length >= IMPORT_BATCH_SIZE) {
-        await flushBatch();
+      if (isSoftDeleted(raw)) {
+        softDeletedEntries.push({ index, record });
+      } else {
+        batchEntries.push({ index, record });
+        if (batchEntries.length >= IMPORT_BATCH_SIZE) {
+          await flushBatch();
+        }
       }
     } else {
       errorIndices.push(index);
@@ -3229,6 +3893,7 @@ apiRouter.post('/bazi/records/import', requireAuth, async (req, res) => {
   }
 
   await flushBatch();
+  await importSoftDeletedEntries();
 
   if (!created) {
     return res.status(500).json({
@@ -3242,6 +3907,7 @@ apiRouter.post('/bazi/records/import', requireAuth, async (req, res) => {
     skipped: incoming.length - validCount,
     failed: failedIndices.length ? failedIndices.slice(0, 5) : undefined,
     errors: errorIndices.length ? errorIndices.slice(0, 5) : undefined,
+    softDeleted: softDeletedEntries.length || undefined,
   });
 });
 
@@ -3250,7 +3916,7 @@ apiRouter.post('/bazi/records/bulk-delete', requireAuth, async (req, res) => {
   if (!ids || !ids.length) {
     return res.status(400).json({ error: 'No record ids provided' });
   }
-  const clientId = normalizeClientId(req.headers['x-client-id']);
+  const clientId = extractClientId(req);
 
   const normalizedIds = ids
     .map((id) => parseIdParam(id))
@@ -3299,10 +3965,117 @@ apiRouter.get('/bazi/records/:id', requireAuth, async (req, res) => {
   res.json({ record: serializeRecordWithTimezone(record) });
 });
 
+apiRouter.put('/bazi/records/:id', requireAuth, async (req, res) => {
+  const recordId = parseIdParam(req.params.id);
+  if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
+
+  const existing = await prisma.baziRecord.findFirst({
+    where: { id: recordId, userId: req.user.id },
+  });
+  if (!existing) return res.status(404).json({ error: 'Record not found' });
+  if (await isRecordSoftDeleted(req.user.id, recordId)) {
+    return res.status(404).json({ error: 'Record not found' });
+  }
+
+  const mergedPayload = {
+    ...req.body,
+    birthYear: req.body?.birthYear ?? existing.birthYear,
+    birthMonth: req.body?.birthMonth ?? existing.birthMonth,
+    birthDay: req.body?.birthDay ?? existing.birthDay,
+    birthHour: req.body?.birthHour ?? existing.birthHour,
+    gender: req.body?.gender ?? existing.gender,
+    birthLocation: req.body?.birthLocation ?? existing.birthLocation,
+    timezone: req.body?.timezone ?? existing.timezone,
+  };
+
+  const validation = validateBaziInput(mergedPayload);
+  if (!validation.ok) {
+    const message = validation.reason === 'whitespace'
+      ? 'Whitespace-only input is not allowed'
+      : 'Missing required fields';
+    return res.status(400).json({ error: message });
+  }
+
+  const {
+    birthYear,
+    birthMonth,
+    birthDay,
+    birthHour,
+    gender,
+    birthLocation,
+    timezone,
+    result: providedResult,
+  } = validation.payload;
+
+  const { calculationPayload } = resolveBaziCalculationInput({
+    ...validation.payload,
+    birthYear,
+    birthMonth,
+    birthDay,
+    birthHour,
+    gender,
+  });
+  const normalizedProvidedResult =
+    providedResult && typeof providedResult === 'object' ? providedResult : null;
+  const needsCalculation =
+    !normalizedProvidedResult?.pillars
+    || !normalizedProvidedResult?.fiveElements
+    || !normalizedProvidedResult?.tenGods
+    || !normalizedProvidedResult?.luckCycles;
+  const computedResult = needsCalculation ? await getBaziCalculation(calculationPayload) : null;
+  const finalResult = {
+    pillars: normalizedProvidedResult?.pillars ?? computedResult?.pillars,
+    fiveElements: normalizedProvidedResult?.fiveElements ?? computedResult?.fiveElements,
+    tenGods: normalizedProvidedResult?.tenGods ?? computedResult?.tenGods ?? null,
+    luckCycles: normalizedProvidedResult?.luckCycles ?? computedResult?.luckCycles ?? null,
+  };
+
+  if (!finalResult.pillars || !finalResult.fiveElements) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  invalidateBaziCalculationCache({
+    birthYear: existing.birthYear,
+    birthMonth: existing.birthMonth,
+    birthDay: existing.birthDay,
+    birthHour: existing.birthHour,
+    gender: existing.gender,
+  });
+  invalidateBaziCalculationCache({
+    birthYear,
+    birthMonth,
+    birthDay,
+    birthHour,
+    gender,
+  });
+  primeBaziCalculationCache(calculationPayload, finalResult);
+
+  const updated = await prisma.baziRecord.update({
+    where: { id: recordId },
+    data: {
+      birthYear,
+      birthMonth,
+      birthDay,
+      birthHour,
+      gender,
+      birthLocation: typeof birthLocation === 'string' && birthLocation.trim()
+        ? birthLocation.trim()
+        : null,
+      timezone: typeof timezone === 'string' && timezone.trim() ? timezone.trim() : null,
+      pillars: JSON.stringify(finalResult.pillars),
+      fiveElements: JSON.stringify(finalResult.fiveElements),
+      tenGods: finalResult.tenGods ? JSON.stringify(finalResult.tenGods) : null,
+      luckCycles: finalResult.luckCycles ? JSON.stringify(finalResult.luckCycles) : null,
+    },
+  });
+
+  res.json({ record: serializeRecordWithTimezone(updated) });
+});
+
 apiRouter.delete('/bazi/records/:id', requireAuth, async (req, res) => {
   const recordId = parseIdParam(req.params.id);
   if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
-  const clientId = normalizeClientId(req.headers['x-client-id']);
+  const clientId = extractClientId(req);
   const record = await prisma.baziRecord.findFirst({
     where: { id: recordId, userId: req.user.id },
   });
@@ -3327,7 +4100,7 @@ apiRouter.delete('/bazi/records/:id', requireAuth, async (req, res) => {
 apiRouter.post('/bazi/records/:id/restore', requireAuth, async (req, res) => {
   const recordId = parseIdParam(req.params.id);
   if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
-  const clientId = normalizeClientId(req.headers['x-client-id']);
+  const clientId = extractClientId(req);
   const record = await prisma.baziRecord.findFirst({
     where: { id: recordId, userId: req.user.id },
   });
@@ -3347,6 +4120,45 @@ apiRouter.post('/bazi/records/:id/restore', requireAuth, async (req, res) => {
   removeClientDeletedRecord(req.user.id, clientId, recordId);
 
   res.json({ status: 'ok', record: serializeRecordWithTimezone(record) });
+});
+
+apiRouter.delete('/bazi/records/:id/hard-delete', requireAuth, async (req, res) => {
+  const recordId = parseIdParam(req.params.id);
+  if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
+  const clientId = extractClientId(req);
+  const record = await prisma.baziRecord.findFirst({
+    where: { id: recordId, userId: req.user.id },
+  });
+  if (!record) return res.status(404).json({ error: 'Record not found' });
+
+  if (!(await isRecordSoftDeleted(req.user.id, recordId))) {
+    return res.status(409).json({ error: 'Record must be deleted first' });
+  }
+
+  invalidateBaziCalculationCache({
+    birthYear: record.birthYear,
+    birthMonth: record.birthMonth,
+    birthDay: record.birthDay,
+    birthHour: record.birthHour,
+    gender: record.gender,
+  });
+
+  try {
+    const { deletedCount } = await deleteBaziRecordHard({
+      prisma,
+      userId: req.user.id,
+      recordId,
+    });
+    removeClientDeletedRecord(req.user.id, clientId, recordId);
+    removeClientRecord(req.user.id, clientId, recordId);
+    if (!deletedCount) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+    return res.json({ status: 'ok', hardDeleted: true });
+  } catch (error) {
+    console.error('Hard delete failed:', error);
+    return res.status(500).json({ error: 'Unable to delete record' });
+  }
 });
 
 apiRouter.post('/favorites', requireAuth, async (req, res) => {
@@ -3482,7 +4294,7 @@ apiRouter.post('/tarot/draw', async (req, res) => {
   res.json(drawTarot({ spreadType: normalizedSpread }));
 });
 
-apiRouter.post('/tarot/ai-interpret', requireAuth, async (req, res) => {
+apiRouter.post('/tarot/ai-interpret', requireAuthStrict, async (req, res) => {
   const { spreadType, cards, userQuestion } = req.body;
   if (!cards || cards.length === 0) return res.status(400).json({ error: 'No cards provided' });
   let provider = null;
@@ -3805,6 +4617,7 @@ const buildOpenApiSpec = () => {
   const paths = {};
   const routes = [
     { method: 'get', path: '/health' },
+    { method: 'get', path: '/ready' },
     ...collectRouterRoutes(apiRouter, '/api/v1'),
   ];
 
@@ -3868,8 +4681,14 @@ const buildOpenApiSpec = () => {
 };
 
 const openApiSpec = buildOpenApiSpec();
-app.get('/api-docs.json', (req, res) => res.json(openApiSpec));
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, { explorer: true }));
+const apiDocsGuards = IS_PRODUCTION ? [requireAuth, requireAdmin] : [];
+app.get('/api-docs.json', ...apiDocsGuards, (req, res) => res.json(openApiSpec));
+app.use(
+  '/api-docs',
+  ...apiDocsGuards,
+  swaggerUi.serve,
+  swaggerUi.setup(openApiSpec, { explorer: true })
+);
 
 const server = http.createServer(app);
 const activeSockets = new Set();
@@ -3889,6 +4708,13 @@ server.on('upgrade', (req, socket, head) => {
   }
 
   if (req.url !== WS_PATH) {
+    socket.destroy();
+    return;
+  }
+
+  const origin = req.headers.origin;
+  if (origin && !isAllowedOrigin(origin)) {
+    socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
     socket.destroy();
     return;
   }
@@ -3990,8 +4816,10 @@ server.on('upgrade', (req, socket, head) => {
       const { system, user: userPrompt, fallback } = buildBaziPrompt(payload);
       const content = await generateAIContent({ system, user: userPrompt, fallback, provider });
       await streamContent(content || '');
-      sendWsJson(socket, { type: 'done' });
-      sendClose(1000);
+      if (!isClosed) {
+        sendWsJson(socket, { type: 'done' });
+        sendClose(1000);
+      }
     } catch (error) {
       sendWsJson(socket, { type: 'error', message: error.message || 'AI request failed.' });
       sendClose(1011);
@@ -4004,6 +4832,11 @@ server.on('upgrade', (req, socket, head) => {
   };
 
   sendWsJson(socket, { type: 'connected' });
+
+  const markClosed = () => {
+    if (isClosed) return;
+    isClosed = true;
+  };
 
   socket.on('data', (data) => {
     buffer = Buffer.concat([buffer, data]);
@@ -4032,6 +4865,8 @@ server.on('upgrade', (req, socket, head) => {
     }
   });
 
+  socket.on('end', markClosed);
+  socket.on('close', markClosed);
   socket.on('error', () => {
     sendClose(1011);
   });
@@ -4093,18 +4928,33 @@ const setupGracefulShutdown = (httpServer) => {
       } finally {
         clearTimeout(timeout);
         console.log('Graceful shutdown complete.');
-        process.exit(0);
+        process.exit(process.exitCode || 0);
       }
     });
   };
 
   process.once('SIGTERM', () => void closeServer('SIGTERM'));
+  process.once('SIGINT', () => void closeServer('SIGINT'));
 };
 
 if (NODE_ENV !== 'test' && isMain) {
   void (async () => {
+    setupGracefulShutdown(server);
+    const { errors, warnings } = validateProductionConfig();
+    warnings.forEach((warning) => {
+      console.warn(`[config] ${warning}`);
+    });
+    if (errors.length > 0) {
+      errors.forEach((error) => {
+        console.error(`[config] ${error}`);
+      });
+      process.exit(1);
+      return;
+    }
     try {
       await ensureUserSettingsTable();
+      await ensureZiweiHistoryTable();
+      await ensureBaziRecordUpdatedAt();
       await ensureDefaultUser();
     } catch (error) {
       console.error('Failed to initialize server prerequisites:', error);
@@ -4113,8 +4963,6 @@ if (NODE_ENV !== 'test' && isMain) {
     server.listen(PORT, () => {
       console.log(`BaZi Master API running on http://localhost:${PORT}`);
     });
-
-    setupGracefulShutdown(server);
   })();
 }
 
@@ -4122,6 +4970,7 @@ export {
   BRANCHES_MAP,
   ELEMENTS,
   STEMS_MAP,
+  app,
   buildBaziCacheKey,
   buildFiveElementsPercent,
   buildImportRecord,
@@ -4130,14 +4979,17 @@ export {
   calculateTenGod,
   getBaziCalculation,
   getCachedBaziCalculation,
+  getCachedBaziCalculationAsync,
   getElementRelation,
   invalidateBaziCalculationCache,
   normalizeBaziResult,
   parseRecordsQuery,
   parseSearchTerms,
   performCalculation,
+  prisma,
   recordMatchesQuery,
   primeBaziCalculationCache,
+  server,
   serializeRecordWithTimezone,
   setBaziCacheEntry,
   buildBirthTimeMeta,

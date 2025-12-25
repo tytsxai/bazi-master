@@ -5,9 +5,14 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import { useAuthFetch } from '../auth/useAuthFetch.js';
 import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import { getPreferredAiProvider } from '../utils/aiProvider.js';
+import { getClientId } from '../utils/clientId.js';
+import { readApiErrorMessage } from '../utils/apiError.js';
 
 const GUEST_STORAGE_KEY = 'bazi_guest_calculation_v1';
 const LAST_SAVED_FINGERPRINT_KEY = 'bazi_last_saved_fingerprint_v1';
+const PENDING_SAVE_KEY = 'bazi_pending_save_v1';
+const RECENT_SAVE_KEY = 'bazi_recent_save_v1';
+const PREFILL_STORAGE_KEY = 'bazi_prefill_request_v1';
 const formatOffsetMinutes = (offsetMinutes) => {
   if (!Number.isFinite(offsetMinutes)) return 'UTC';
   const sign = offsetMinutes >= 0 ? '+' : '-';
@@ -91,6 +96,55 @@ const coerceInt = (value) => {
   if (value === '' || value === null || value === undefined) return null;
   const numeric = Number(value);
   return Number.isInteger(numeric) ? numeric : null;
+};
+const safeJsonParse = (value) => {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+const computeFiveElementsPercent = (fiveElements) => {
+  if (!fiveElements || typeof fiveElements !== 'object') return null;
+  const order = ['Wood', 'Fire', 'Earth', 'Metal', 'Water'];
+  const total = order.reduce((sum, element) => {
+    const raw = Number(fiveElements[element]);
+    return sum + (Number.isFinite(raw) ? raw : 0);
+  }, 0);
+  return order.reduce((acc, element) => {
+    const raw = Number(fiveElements[element]);
+    const safe = Number.isFinite(raw) ? raw : 0;
+    acc[element] = total ? Math.round((safe / total) * 100) : 0;
+    return acc;
+  }, {});
+};
+const normalizeBaziApiResponse = (payload) => {
+  if (!payload || typeof payload !== 'object') return null;
+  const root =
+    payload.result && typeof payload.result === 'object'
+      ? payload.result
+      : payload.data && typeof payload.data === 'object'
+        ? payload.data
+        : payload;
+  const timeMeta = payload.timeMeta && typeof payload.timeMeta === 'object' ? payload.timeMeta : null;
+  const merged = { ...root, ...(timeMeta || {}) };
+  if (!merged.trueSolarTime && payload.trueSolarTime) {
+    merged.trueSolarTime = payload.trueSolarTime;
+  }
+  const normalized = {
+    ...merged,
+    pillars: safeJsonParse(merged.pillars),
+    fiveElements: safeJsonParse(merged.fiveElements),
+    fiveElementsPercent: safeJsonParse(merged.fiveElementsPercent),
+    tenGods: safeJsonParse(merged.tenGods),
+    luckCycles: safeJsonParse(merged.luckCycles),
+    trueSolarTime: safeJsonParse(merged.trueSolarTime),
+  };
+  if (!normalized.fiveElementsPercent) {
+    normalized.fiveElementsPercent = computeFiveElementsPercent(normalized.fiveElements);
+  }
+  return normalized;
 };
 const getTodayParts = () => {
   const now = new Date();
@@ -210,17 +264,24 @@ export default function Bazi() {
   const {
     token,
     isAuthenticated,
+    logout,
+    setRetryAction,
     getRetryAction,
     clearRetryAction,
   } = useAuth();
   const authFetch = useAuthFetch();
   const location = useLocation();
   const navigate = useNavigate();
-  const [formData, setFormData] = useState(() => buildDefaultFormData());
+  const defaultFormDataRef = useRef(buildDefaultFormData());
+  const [formData, setFormData] = useState(() => ({ ...defaultFormDataRef.current }));
+  const [locationOptions, setLocationOptions] = useState([]);
   const [baseResult, setBaseResult] = useState(null);
   const [fullResult, setFullResult] = useState(null);
   const [savedRecord, setSavedRecord] = useState(null);
   const [favoriteStatus, setFavoriteStatus] = useState(null);
+  const [ziweiStatus, setZiweiStatus] = useState({ type: 'idle', message: '' });
+  const [ziweiResult, setZiweiResult] = useState(null);
+  const [ziweiLoading, setZiweiLoading] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [errors, setErrors] = useState({});
   const [isCalculating, setIsCalculating] = useState(false);
@@ -230,17 +291,26 @@ export default function Bazi() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [confirmAiOpen, setConfirmAiOpen] = useState(false);
+  const [pendingRetry, setPendingRetry] = useState(null);
+  const [isOnline, setIsOnline] = useState(() => {
+    if (typeof navigator === 'undefined') return true;
+    return navigator.onLine;
+  });
   const calculateInFlightRef = useRef(false);
   const saveInFlightRef = useRef(false);
   const confirmResetCancelRef = useRef(null);
   const confirmAiCancelRef = useRef(null);
   const retryHandledRef = useRef(null);
+  const retryAutoAttemptRef = useRef(null);
+  const prefillHandledRef = useRef(false);
+  const wasOnlineRef = useRef(isOnline);
   const wsRef = useRef(null);
   const wsStatusRef = useRef({ done: false, errored: false });
   const isMountedRef = useRef(true);
   const hasInitializedRef = useRef(false);
   const lastCommittedFormRef = useRef(formData);
   const lastSavedFingerprintRef = useRef(null);
+  const clientIdRef = useRef(getClientId());
   const toastIdRef = useRef(0);
   const toastTimeoutsRef = useRef(new Map());
   const aiToastIdRef = useRef(null);
@@ -293,22 +363,118 @@ export default function Bazi() {
     aiToastIdRef.current = null;
   };
 
-  const readErrorMessage = async (response, fallback) => {
-    const text = await response.text();
-    if (!text) return fallback;
-    try {
-      const parsed = JSON.parse(text);
-      return parsed?.error || parsed?.message || fallback;
-    } catch {
-      return text;
-    }
-  };
+  const readErrorMessage = (response, fallback) => readApiErrorMessage(response, fallback);
 
   const getNetworkErrorMessage = (error) => {
     if (error instanceof Error && error.message) {
       return error.message;
     }
     return 'Network error. Please check your connection and try again.';
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadLocations = async () => {
+      try {
+        const res = await fetch('/api/locations', { signal: controller.signal });
+        if (!res.ok) throw new Error('Unable to load locations.');
+        const data = await res.json();
+        const locations = Array.isArray(data?.locations) ? data.locations : [];
+        if (!controller.signal.aborted) {
+          setLocationOptions(locations);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.warn('Failed to load locations:', error);
+        setLocationOptions([]);
+      }
+    };
+    loadLocations();
+    return () => controller.abort();
+  }, []);
+
+  const getRetryLabel = (action) => {
+    switch (action) {
+      case 'bazi_calculate':
+        return 'Calculation';
+      case 'bazi_full_analysis':
+        return 'Full analysis';
+      case 'bazi_save':
+        return 'Save to history';
+      case 'bazi_favorite':
+        return 'Add to favorites';
+      case 'bazi_ziwei':
+        return 'Zi Wei chart';
+      default:
+        return 'Action';
+    }
+  };
+
+  const getCurrentPath = () =>
+    `${location.pathname}${location.search || ''}${location.hash || ''}`;
+
+  const queueNetworkRetry = (action, payload, message) => {
+    const redirectPath = getCurrentPath();
+    const retryPayload = {
+      action,
+      payload,
+      redirectPath,
+      reason: 'network_error',
+    };
+    try {
+      setRetryAction(retryPayload);
+    } catch {
+      // Ignore retry persistence failures.
+    }
+    const stored = getRetryAction();
+    setPendingRetry(stored && stored.action ? stored : { ...retryPayload, createdAt: Date.now() });
+    const label = getRetryLabel(action);
+    pushToast({
+      type: 'error',
+      message: `${message} ${label} queued for retry.`,
+    });
+  };
+
+  const clearPendingRetry = () => {
+    clearRetryAction();
+    setPendingRetry(null);
+    retryAutoAttemptRef.current = null;
+  };
+
+  const attemptRetry = (source = 'manual') => {
+    const retry = pendingRetry || getRetryAction();
+    if (!retry || retry.reason !== 'network_error') return;
+    if (retryHandledRef.current === retry.createdAt) return;
+    if (!isOnline) {
+      pushToast({ type: 'error', message: 'You are offline. Reconnect to retry.' });
+      return;
+    }
+    if (retry.action !== 'bazi_calculate' && !isAuthenticated) {
+      pushToast({ type: 'error', message: t('bazi.loginRequired') });
+      clearPendingRetry();
+      return;
+    }
+    retryHandledRef.current = retry.createdAt;
+    clearPendingRetry();
+    if (retry.action === 'bazi_calculate') {
+      performCalculation(retry.payload, { skipValidation: true });
+      return;
+    }
+    if (retry.action === 'bazi_full_analysis') {
+      handleFullAnalysis(retry.payload || null);
+      return;
+    }
+    if (retry.action === 'bazi_save') {
+      handleSaveRecord(retry.payload || null);
+      return;
+    }
+    if (retry.action === 'bazi_favorite') {
+      handleAddFavorite(retry.payload?.recordId || null);
+      return;
+    }
+    if (retry.action === 'bazi_ziwei') {
+      handleZiweiGenerate(retry.payload || null);
+    }
   };
 
   useEffect(() => {
@@ -320,6 +486,17 @@ export default function Bazi() {
         wsRef.current.close(1000, 'Component unmounted');
         wsRef.current = null;
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
@@ -343,10 +520,15 @@ export default function Bazi() {
     try {
       const parsed = JSON.parse(raw);
       if (parsed?.formData) {
-        setFormData((prev) => ({ ...prev, ...parsed.formData }));
+        setFormData((prev) => {
+          const next = { ...prev, ...parsed.formData };
+          lastCommittedFormRef.current = next;
+          hasInitializedRef.current = true;
+          return next;
+        });
       }
       if (parsed?.baseResult) {
-        setBaseResult(parsed.baseResult);
+        setBaseResult(normalizeBaziApiResponse(parsed.baseResult));
       }
       pushToast({ type: 'success', message: t('bazi.restored') });
     } catch (error) {
@@ -356,14 +538,24 @@ export default function Bazi() {
 
   useEffect(() => {
     if (isAuthenticated) return;
-    if (!baseResult) return;
+    const hasBaseResult = Boolean(baseResult);
+    const hasDraftChanges = !isSameFormData(formData, defaultFormDataRef.current);
+
+    if (!hasBaseResult && !hasDraftChanges) {
+      localStorage.removeItem(GUEST_STORAGE_KEY);
+      return;
+    }
 
     const payload = {
       formData,
-      baseResult,
-      savedAt: new Date().toISOString()
+      baseResult: hasBaseResult ? baseResult : null,
+      savedAt: new Date().toISOString(),
     };
-    localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(payload));
+    try {
+      localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage failures.
+    }
   }, [baseResult, formData, isAuthenticated]);
 
   useEffect(() => {
@@ -400,12 +592,14 @@ export default function Bazi() {
 
   useUnsavedChangesWarning(shouldBlockNavigation, navigationBlockMessage);
 
+  const displayResult = fullResult || baseResult;
+
   const elements = useMemo(() => {
-    if (!baseResult?.fiveElements) return [];
+    if (!displayResult?.fiveElements) return [];
     const order = ['Wood', 'Fire', 'Earth', 'Metal', 'Water'];
-    const counts = baseResult.fiveElements;
+    const counts = displayResult.fiveElements;
     const total = order.reduce((sum, element) => sum + (counts[element] ?? 0), 0);
-    const percents = baseResult.fiveElementsPercent;
+    const percents = displayResult.fiveElementsPercent;
 
     return order.map((element) => {
       const count = counts[element] ?? 0;
@@ -416,23 +610,23 @@ export default function Bazi() {
           : 0;
       return { element, count, percent };
     });
-  }, [baseResult]);
+  }, [displayResult]);
 
   const timeMeta = useMemo(() => {
-    if (!baseResult) return null;
-    const offsetMinutes = Number.isFinite(baseResult.timezoneOffsetMinutes)
-      ? baseResult.timezoneOffsetMinutes
+    if (!displayResult) return null;
+    const offsetMinutes = Number.isFinite(displayResult.timezoneOffsetMinutes)
+      ? displayResult.timezoneOffsetMinutes
       : null;
-    const trueSolar = baseResult?.trueSolarTime && typeof baseResult.trueSolarTime === 'object'
-      ? baseResult.trueSolarTime
+    const trueSolar = displayResult?.trueSolarTime && typeof displayResult.trueSolarTime === 'object'
+      ? displayResult.trueSolarTime
       : null;
     return {
       offsetMinutes,
       offsetLabel: Number.isFinite(offsetMinutes) ? formatOffsetMinutes(offsetMinutes) : null,
-      birthIso: typeof baseResult.birthIso === 'string' ? baseResult.birthIso : null,
+      birthIso: typeof displayResult.birthIso === 'string' ? displayResult.birthIso : null,
       trueSolar,
     };
-  }, [baseResult]);
+  }, [displayResult]);
 
   const tenGodsList = useMemo(() => {
     if (!Array.isArray(fullResult?.tenGods)) return [];
@@ -507,40 +701,42 @@ export default function Bazi() {
   };
   const errorAnnouncement = Object.keys(errors).length ? getFirstErrorMessage(errors) : '';
 
-  const resolveTimezoneOffsetMinutes = () => {
-    const parsed = parseTimezoneOffsetMinutes(formData.timezone);
+  const resolveTimezoneOffsetMinutesFor = (timezone) => {
+    const parsed = parseTimezoneOffsetMinutes(timezone);
     if (Number.isFinite(parsed)) return parsed;
-    const trimmed = typeof formData.timezone === 'string' ? formData.timezone.trim() : '';
+    const trimmed = typeof timezone === 'string' ? timezone.trim() : '';
     if (trimmed) return null;
     return -new Date().getTimezoneOffset();
   };
 
-  const buildPayload = () => ({
-    ...formData,
-    birthYear: Number(formData.birthYear),
-    birthMonth: Number(formData.birthMonth),
-    birthDay: Number(formData.birthDay),
-    birthHour: Number(formData.birthHour),
-    birthLocation: normalizeOptionalText(formData.birthLocation),
-    timezone: normalizeOptionalText(formData.timezone),
-    timezoneOffsetMinutes: resolveTimezoneOffsetMinutes(),
+  const buildPayloadFrom = (data) => ({
+    ...data,
+    birthYear: Number(data.birthYear),
+    birthMonth: Number(data.birthMonth),
+    birthDay: Number(data.birthDay),
+    birthHour: Number(data.birthHour),
+    birthLocation: normalizeOptionalText(data.birthLocation),
+    timezone: normalizeOptionalText(data.timezone),
+    timezoneOffsetMinutes: resolveTimezoneOffsetMinutesFor(data.timezone),
   });
 
-  const handleCalculate = async (event) => {
-    event.preventDefault();
+  const buildPayload = () => buildPayloadFrom(formData);
+
+  const performCalculation = async (payload, { skipValidation = false } = {}) => {
     if (calculateInFlightRef.current || isCalculating) return;
-    const nextErrors = validate();
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
-      pushToast({ type: 'error', message: getFirstErrorMessage(nextErrors) });
-      return;
+    if (!skipValidation) {
+      const nextErrors = validate();
+      setErrors(nextErrors);
+      if (Object.keys(nextErrors).length > 0) {
+        pushToast({ type: 'error', message: getFirstErrorMessage(nextErrors) });
+        return;
+      }
     }
     setFullResult(null);
     setSavedRecord(null);
     setFavoriteStatus(null);
     calculateInFlightRef.current = true;
     setIsCalculating(true);
-    const payload = buildPayload();
 
     try {
       const res = await fetch('/api/bazi/calculate', {
@@ -557,16 +753,23 @@ export default function Bazi() {
 
       const data = await res.json();
       runIfMounted(() => {
-        setBaseResult(data);
+        setBaseResult(normalizeBaziApiResponse(data));
         pushToast({ type: 'success', message: t('bazi.calculated') });
       });
       lastCommittedFormRef.current = formData;
     } catch (error) {
-      runIfMounted(() => pushToast({ type: 'error', message: getNetworkErrorMessage(error) }));
+      const message = getNetworkErrorMessage(error);
+      runIfMounted(() => queueNetworkRetry('bazi_calculate', payload, message));
     } finally {
       calculateInFlightRef.current = false;
       runIfMounted(() => setIsCalculating(false));
     }
+  };
+
+  const handleCalculate = async (event) => {
+    event.preventDefault();
+    const payload = buildPayload();
+    await performCalculation(payload);
   };
 
   const handleFullAnalysis = async (overridePayload = null) => {
@@ -594,7 +797,7 @@ export default function Bazi() {
       );
 
       if (res.status === 401) {
-        redirectForSessionExpired(payload);
+        redirectForSessionExpired('bazi_full_analysis', payload);
         return;
       }
 
@@ -606,15 +809,62 @@ export default function Bazi() {
 
       const data = await res.json();
       runIfMounted(() => {
-        setFullResult(data);
+        const normalized = normalizeBaziApiResponse(data);
+        setFullResult(normalized);
+        setBaseResult(normalized);
         pushToast({ type: 'success', message: t('bazi.fullReady') });
       });
+      lastCommittedFormRef.current = formData;
     } catch (error) {
-      runIfMounted(() => pushToast({ type: 'error', message: getNetworkErrorMessage(error) }));
+      const message = getNetworkErrorMessage(error);
+      runIfMounted(() => queueNetworkRetry('bazi_full_analysis', payload, message));
     } finally {
       runIfMounted(() => setIsFullLoading(false));
     }
   };
+
+  useEffect(() => {
+    if (prefillHandledRef.current) return;
+    const statePrefill = location.state?.baziPrefill;
+    const stateAutoFull = location.state?.autoFullAnalysis;
+    const stateAutoCalc = location.state?.autoCalculate;
+    let request = statePrefill
+      ? { formData: statePrefill, autoFullAnalysis: stateAutoFull, autoCalculate: stateAutoCalc }
+      : null;
+
+    if (!request) {
+      const stored = safeJsonParse(sessionStorage.getItem(PREFILL_STORAGE_KEY));
+      if (stored && typeof stored === 'object') {
+        request = stored;
+      }
+    }
+
+    if (!request?.formData) return;
+    prefillHandledRef.current = true;
+    try {
+      sessionStorage.removeItem(PREFILL_STORAGE_KEY);
+    } catch {
+      // Ignore storage failures.
+    }
+
+    const nextForm = { ...defaultFormDataRef.current, ...request.formData };
+    setFormData(nextForm);
+    setErrors({});
+    setBaseResult(null);
+    setFullResult(null);
+    setSavedRecord(null);
+    setFavoriteStatus(null);
+    lastCommittedFormRef.current = nextForm;
+
+    const payload = buildPayloadFrom(nextForm);
+    if (request.autoFullAnalysis) {
+      handleFullAnalysis(payload);
+      return;
+    }
+    if (request.autoCalculate) {
+      performCalculation(payload, { skipValidation: true });
+    }
+  }, [location.state, handleFullAnalysis, performCalculation, buildPayloadFrom]);
 
   const handleSaveRecord = async (overridePayload = null) => {
     if (!isAuthenticated) {
@@ -649,17 +899,33 @@ export default function Bazi() {
       return;
     }
 
+    const clientId = clientIdRef.current;
+    const requestPayload = clientId ? { ...payload, clientId } : payload;
+
     if (saveInFlightRef.current || isSaving) return;
     saveInFlightRef.current = true;
     setIsSaving(true);
+    try {
+      sessionStorage.setItem(PENDING_SAVE_KEY, JSON.stringify({ payload: requestPayload }));
+      sessionStorage.setItem(
+        RECENT_SAVE_KEY,
+        JSON.stringify({ payload: requestPayload, createdAt: Date.now() })
+      );
+    } catch {
+      // Ignore storage failures.
+    }
 
     try {
       const res = await authFetch(
         '/api/bazi/records',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          headers: {
+            'Content-Type': 'application/json',
+            ...(clientId ? { 'X-Client-ID': clientId } : {}),
+          },
+          body: JSON.stringify(requestPayload),
+          keepalive: true,
         },
         { action: 'bazi_save', payload }
       );
@@ -675,6 +941,11 @@ export default function Bazi() {
       }
 
       const data = await res.json();
+      try {
+        sessionStorage.removeItem(PENDING_SAVE_KEY);
+      } catch {
+        // Ignore storage failures.
+      }
       runIfMounted(() => {
         setSavedRecord(data.record);
         pushToast({ type: 'success', message: t('bazi.saved') });
@@ -686,7 +957,8 @@ export default function Bazi() {
         // Ignore storage issues in private mode.
       }
     } catch (error) {
-      runIfMounted(() => pushToast({ type: 'error', message: getNetworkErrorMessage(error) }));
+      const message = getNetworkErrorMessage(error);
+      runIfMounted(() => queueNetworkRetry('bazi_save', payload, message));
     } finally {
       saveInFlightRef.current = false;
       runIfMounted(() => setIsSaving(false));
@@ -735,18 +1007,101 @@ export default function Bazi() {
         pushToast({ type: 'success', message: t('bazi.favorited') });
       });
     } catch (error) {
-      runIfMounted(() => pushToast({ type: 'error', message: getNetworkErrorMessage(error) }));
+      const message = getNetworkErrorMessage(error);
+      runIfMounted(() => queueNetworkRetry('bazi_favorite', { recordId }, message));
     } finally {
       runIfMounted(() => setIsFavoriting(false));
     }
   };
 
+  const handleZiweiGenerate = async (overridePayload = null) => {
+    if (ziweiLoading) return;
+    if (!isAuthenticated) {
+      const message = t('bazi.loginRequired');
+      pushToast({ type: 'error', message });
+      setZiweiStatus({ type: 'error', message });
+      return;
+    }
+    const nextErrors = validate();
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      const message = getFirstErrorMessage(nextErrors);
+      pushToast({ type: 'error', message });
+      setZiweiStatus({ type: 'error', message });
+      return;
+    }
+
+    const payload = normalizeOverrideArg(overridePayload) || buildPayload();
+    const ziweiPayload = {
+      birthYear: payload.birthYear,
+      birthMonth: payload.birthMonth,
+      birthDay: payload.birthDay,
+      birthHour: payload.birthHour,
+      gender: payload.gender,
+    };
+
+    setZiweiLoading(true);
+    setZiweiStatus({ type: 'loading', message: '' });
+    setZiweiResult(null);
+    try {
+      const res = await authFetch(
+        '/api/ziwei/calculate',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ziweiPayload),
+        },
+        { action: 'bazi_ziwei', payload: ziweiPayload }
+      );
+
+      if (res.status === 401) {
+        return;
+      }
+
+      if (!res.ok) {
+        const message = await readErrorMessage(res, 'Unable to calculate Zi Wei chart.');
+        runIfMounted(() => {
+          pushToast({ type: 'error', message });
+          setZiweiStatus({ type: 'error', message });
+        });
+        return;
+      }
+
+      const data = await res.json();
+      runIfMounted(() => {
+        setZiweiResult(data);
+        setZiweiStatus({ type: 'success', message: 'Zi Wei chart generated.' });
+      });
+    } catch (error) {
+      const message = getNetworkErrorMessage(error);
+      runIfMounted(() => {
+        setZiweiStatus({ type: 'error', message });
+        queueNetworkRetry('bazi_ziwei', ziweiPayload, message);
+      });
+    } finally {
+      runIfMounted(() => setZiweiLoading(false));
+    }
+  };
+
+  const handleOpenHistory = () => {
+    const recordId = savedRecord?.id;
+    if (recordId) {
+      navigate(`/history?recordId=${recordId}`);
+      return;
+    }
+    navigate('/history');
+  };
+
   useEffect(() => {
-    if (!isAuthenticated) return;
     const retry = getRetryAction();
     if (!retry) return;
-    const currentPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
+    const currentPath = getCurrentPath();
     if (retry.redirectPath && retry.redirectPath !== currentPath) return;
+    if (retry.reason === 'network_error') {
+      setPendingRetry(retry);
+      return;
+    }
+    if (!isAuthenticated) return;
     if (retryHandledRef.current === retry.createdAt) return;
     retryHandledRef.current = retry.createdAt;
     clearRetryAction();
@@ -761,6 +1116,10 @@ export default function Bazi() {
     }
     if (retry.action === 'bazi_favorite') {
       handleAddFavorite(retry.payload?.recordId || null);
+      return;
+    }
+    if (retry.action === 'bazi_ziwei') {
+      handleZiweiGenerate(retry.payload || null);
     }
   }, [
     isAuthenticated,
@@ -771,6 +1130,15 @@ export default function Bazi() {
     location.hash,
   ]);
 
+  useEffect(() => {
+    if (wasOnlineRef.current === isOnline) return;
+    wasOnlineRef.current = isOnline;
+    if (!isOnline || !pendingRetry) return;
+    if (retryAutoAttemptRef.current === pendingRetry.createdAt) return;
+    retryAutoAttemptRef.current = pendingRetry.createdAt;
+    attemptRetry('online');
+  }, [pendingRetry, isOnline]);
+
   const statusStyle = (type) =>
     type === 'error'
       ? 'border-rose-400/40 bg-rose-500/10 text-rose-100'
@@ -778,10 +1146,13 @@ export default function Bazi() {
   const toastLabel = (type) => (type === 'error' ? 'Error' : 'Success');
 
   const [aiResult, setAiResult] = useState(null);
-  const redirectForSessionExpired = (payload) => {
+  const displayAiResult = aiResult;
+  const redirectForSessionExpired = (action, payload) => {
     const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
     try {
-      setRetryAction({ action: 'bazi_save', payload, redirectPath });
+      if (action) {
+        setRetryAction({ action, payload, redirectPath, reason: 'session_expired' });
+      }
     } catch {
       // Ignore retry persistence failures.
     }
@@ -790,8 +1161,20 @@ export default function Bazi() {
     } catch {
       // Ignore logout failures.
     }
+    try {
+      localStorage.setItem('bazi_session_expired', '1');
+    } catch {
+      // Ignore storage failures.
+    }
     const params = new URLSearchParams({ reason: 'session_expired', next: redirectPath });
-    window.location.assign(`/login?${params.toString()}`);
+    const target = `/login?${params.toString()}`;
+    navigate(target, { replace: true, state: { from: redirectPath } });
+    window.setTimeout(() => {
+      const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+      if (currentPath !== target) {
+        window.location.assign(target);
+      }
+    }, 50);
   };
 
   const resolveWsUrl = () => {
@@ -927,11 +1310,23 @@ export default function Bazi() {
     setFullResult(null);
     setSavedRecord(null);
     setFavoriteStatus(null);
+    setZiweiResult(null);
+    setZiweiStatus({ type: 'idle', message: '' });
+    setZiweiLoading(false);
     setAiResult(null);
     clearToasts();
+    clearPendingRetry();
     setIsAiLoading(false);
     closeAiSocket();
     localStorage.removeItem(GUEST_STORAGE_KEY);
+    try {
+      sessionStorage.removeItem(LAST_SAVED_FINGERPRINT_KEY);
+      sessionStorage.removeItem(PENDING_SAVE_KEY);
+      sessionStorage.removeItem(RECENT_SAVE_KEY);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+    lastSavedFingerprintRef.current = null;
     lastCommittedFormRef.current = nextDefaults;
   };
 
@@ -956,6 +1351,42 @@ export default function Bazi() {
   return (
     <main id="main-content" tabIndex={-1} className="responsive-container pb-16">
       <Breadcrumbs />
+      {pendingRetry && (
+        <section
+          data-testid="retry-banner"
+          role="status"
+          className="mt-6 rounded-3xl border border-amber-400/40 bg-amber-500/10 px-6 py-4 text-sm text-amber-50 shadow-glass"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-amber-200">Network interruption</p>
+              <p className="mt-2 text-sm text-amber-50">
+                {getRetryLabel(pendingRetry.action)} is queued.{' '}
+                {isOnline ? 'Retry now or continue when ready.' : 'Waiting for connection...'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                data-testid="retry-action"
+                onClick={() => attemptRetry('manual')}
+                disabled={!isOnline}
+                className="rounded-full border border-amber-200/60 bg-amber-200/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-amber-100 transition hover:border-amber-100 hover:text-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Retry now
+              </button>
+              <button
+                type="button"
+                data-testid="retry-dismiss"
+                onClick={clearPendingRetry}
+                className="rounded-full border border-amber-200/30 px-4 py-2 text-xs uppercase tracking-[0.2em] text-amber-100 transition hover:border-amber-200 hover:text-amber-50"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
       {toasts.length > 0 && (
         <div className="pointer-events-none fixed right-6 top-6 z-50 flex w-[min(90vw,360px)] flex-col gap-2">
           {toasts.map((toast) => (
@@ -1187,11 +1618,19 @@ export default function Bazi() {
                 type="text"
                 value={formData.birthLocation}
                 onChange={updateField('birthLocation')}
+                list="bazi-location-options"
                 className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"
                 placeholder={t('bazi.locationPlaceholder')}
                 aria-invalid={Boolean(errors.birthLocation)}
                 aria-describedby={errors.birthLocation ? 'bazi-birthLocation-error' : undefined}
               />
+              <datalist id="bazi-location-options">
+                {locationOptions.map((location) => {
+                  const label = formatLocationLabel(location);
+                  const key = `${location.name || 'coords'}-${location.latitude}-${location.longitude}`;
+                  return <option key={key} value={label} />;
+                })}
+              </datalist>
               <p className="mt-2 text-xs text-white/50">
                 {t('bazi.locationHint')}
               </p>
@@ -1225,7 +1664,7 @@ export default function Bazi() {
               <button
                 type="submit"
                 className="rounded-full bg-gold-400 px-4 py-2 text-sm font-semibold text-mystic-900 shadow-lg shadow-gold-400/30 disabled:cursor-not-allowed disabled:opacity-70"
-                disabled={isCalculating}
+                disabled={isCalculating || isSaving}
               >
                 {isCalculating ? `${t('bazi.calculate')}...` : t('bazi.calculate')}
               </button>
@@ -1279,6 +1718,7 @@ export default function Bazi() {
               className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/80 transition hover:border-gold-400/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!baseResult || isSaving}
               data-testid="bazi-save-record"
+              aria-label="Save to History"
             >
               {isSaving ? `${t('bazi.saveRecord')}...` : t('bazi.saveRecord')}
             </button>
@@ -1289,6 +1729,15 @@ export default function Bazi() {
               disabled={!savedRecord || isFavoriting}
             >
               {isFavoriting ? `${t('bazi.addFavorite')}...` : t('bazi.addFavorite')}
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenHistory}
+              className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/80 transition hover:border-gold-400/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!isAuthenticated}
+              data-testid="bazi-view-history"
+            >
+              {t('nav.history')}
             </button>
           </div>
           {favoriteStatus && (
@@ -1359,10 +1808,70 @@ export default function Bazi() {
             )}
           </section>
           <section className="glass-card rounded-3xl border border-white/10 p-6 shadow-glass">
+            <h2 className="font-display text-2xl text-gold-400">Zi Wei (V2)</h2>
+            <p className="mt-2 text-sm text-white/70">
+              Generate a Zi Wei chart using the current BaZi inputs.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleZiweiGenerate}
+                className="rounded-full bg-gold-400 px-4 py-2 text-xs font-semibold text-mystic-900 shadow-lg shadow-gold-400/30 transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={ziweiLoading}
+              >
+                {ziweiLoading ? 'Calculating…' : 'Generate Zi Wei Chart'}
+              </button>
+            </div>
+            {ziweiStatus.type !== 'idle' && (
+              <p
+                data-testid="bazi-ziwei-status"
+                role={ziweiStatus.type === 'error' ? 'alert' : 'status'}
+                aria-live={ziweiStatus.type === 'error' ? 'assertive' : 'polite'}
+                className={`mt-4 text-sm ${
+                  ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
+                }`}
+              >
+                {ziweiStatus.message || (ziweiStatus.type === 'loading' ? 'Calculating…' : '')}
+              </p>
+            )}
+            {ziweiResult && (
+              <div className="mt-6 grid gap-4 md:grid-cols-3" data-testid="bazi-ziwei-result">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <h3 className="text-xs uppercase text-gold-400/80">Lunar Date</h3>
+                  <p className="mt-2 text-white">
+                    {ziweiResult?.lunar?.year}年 {ziweiResult?.lunar?.month}月 {ziweiResult?.lunar?.day}日
+                    {ziweiResult?.lunar?.isLeap ? ' (Leap)' : ''}
+                  </p>
+                  <p className="mt-1 text-xs text-white/60">
+                    {ziweiResult?.lunar?.yearStem}{ziweiResult?.lunar?.yearBranch}年 · {ziweiResult?.lunar?.monthStem}{ziweiResult?.lunar?.monthBranch}月
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <h3 className="text-xs uppercase text-gold-400/80">Key Palaces</h3>
+                  <p className="mt-2 text-white">
+                    命宫: {ziweiResult?.mingPalace?.palace?.cn} · {ziweiResult?.mingPalace?.branch?.name}
+                  </p>
+                  <p className="mt-1 text-white">
+                    身宫: {ziweiResult?.shenPalace?.palace?.cn} · {ziweiResult?.shenPalace?.branch?.name}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <h3 className="text-xs uppercase text-gold-400/80">Birth Time</h3>
+                  <p className="mt-2 text-white">{ziweiResult?.birthIso || '—'}</p>
+                  <p className="mt-1 text-xs text-white/60">
+                    UTC offset: {Number.isFinite(ziweiResult?.timezoneOffsetMinutes)
+                      ? `${ziweiResult.timezoneOffsetMinutes} mins`
+                      : '—'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </section>
+          <section className="glass-card rounded-3xl border border-white/10 p-6 shadow-glass">
             <h2 className="font-display text-2xl text-gold-400">{t('bazi.fourPillars')}</h2>
             <div className="mt-4 grid gap-4 md:grid-cols-2" data-testid="pillars-grid">
-              {baseResult ? (
-                Object.entries(baseResult.pillars).map(([key, pillar]) => (
+              {displayResult ? (
+                Object.entries(displayResult.pillars).map(([key, pillar]) => (
                   <div key={key} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-white/50">{t(`bazi.${key}`)}</p>
                     <p className="mt-2 text-lg text-white">
@@ -1409,19 +1918,25 @@ export default function Bazi() {
       {(aiResult !== null || isAiLoading) && (
         <section className="mt-10 glass-card rounded-3xl border border-purple-500/30 bg-purple-900/10 p-8 shadow-glass">
           <h2 className="font-display text-2xl text-purple-300">✨ {t('bazi.aiAnalysis')}</h2>
-          <div className="mt-4 prose prose-invert max-w-none whitespace-pre-wrap text-white/90">
-            {aiResult || (isAiLoading ? t('bazi.aiThinking') : '')}
+          <div
+            className="mt-4 prose prose-invert max-w-none whitespace-pre-wrap text-white/90"
+            data-testid="bazi-ai-result"
+          >
+            {displayAiResult || (isAiLoading ? t('bazi.aiThinking') : '')}
           </div>
         </section>
       )}
 
       <section className="mt-10 grid gap-6 lg:grid-cols-2">
-        <div className="glass-card rounded-3xl border border-white/10 p-6 shadow-glass">
+        <div
+          className="glass-card rounded-3xl border border-white/10 p-6 shadow-glass"
+          data-testid="ten-gods-section"
+        >
           <h2 className="font-display text-2xl text-gold-400">{t('bazi.tenGods')}</h2>
-          <div className="mt-4 grid gap-x-10 gap-y-3 3xl:grid-cols-2">
+          <div className="mt-4 grid gap-x-10 gap-y-3 3xl:grid-cols-2" data-testid="ten-gods-list">
             {tenGodsList.length ? (
               tenGodsList.map((item) => (
-                <div key={item.name} className="flex items-center gap-4">
+                <div key={item.name} className="flex items-center gap-4" data-testid="ten-god-item">
                   <span className="w-32 text-sm text-white/80">{item.name}</span>
                   <div className="h-2 flex-1 rounded-full bg-white/10">
                     <div
@@ -1442,12 +1957,19 @@ export default function Bazi() {
           </div>
         </div>
 
-        <div className="glass-card rounded-3xl border border-white/10 p-6 shadow-glass">
+        <div
+          className="glass-card rounded-3xl border border-white/10 p-6 shadow-glass"
+          data-testid="luck-cycles-section"
+        >
           <h2 className="font-display text-2xl text-gold-400">{t('bazi.luckCycles')}</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 3xl:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 3xl:grid-cols-3" data-testid="luck-cycles-list">
             {luckCyclesList.length ? (
               luckCyclesList.map((cycle) => (
-                <div key={cycle.range} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div
+                  key={cycle.range}
+                  className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                  data-testid="luck-cycle-item"
+                >
                   <p className="text-xs uppercase tracking-[0.2em] text-white/60">{cycle.range}</p>
                   <p className="mt-2 text-lg text-white">
                     {cycle.stem} · {cycle.branch}
