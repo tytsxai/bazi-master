@@ -19,6 +19,7 @@ import {
   applyChangingLines,
   deriveChangingLinesFromNumbers,
   deriveChangingLinesFromTimeContext,
+  getDetailedLines,
 } from './iching.js';
 import { calculateRisingSign } from './zodiac.js';
 import { resolveLocationCoordinates, computeTrueSolarTime, listKnownLocations } from './solarTime.js';
@@ -30,6 +31,7 @@ import {
   buildFiveElementsPercent,
   getCachedBaziCalculation,
   getCachedBaziCalculationAsync,
+  hasBaziCacheMirror,
   invalidateBaziCalculationCache,
   normalizeBaziResult,
   primeBaziCalculationCache,
@@ -2332,6 +2334,19 @@ const getBaziCalculation = async (data, { bypassCache = false } = {}) => {
   return result;
 };
 
+const getBaziCalculationWithMeta = async (data, { bypassCache = false } = {}) => {
+  const cacheKey = buildBaziCacheKey(data);
+  if (!bypassCache && cacheKey) {
+    const cached = await getCachedBaziCalculationAsync(cacheKey);
+    if (cached && hasFullBaziResult(cached)) {
+      return { result: cached, cacheHit: true };
+    }
+  }
+  const result = performCalculation(data);
+  if (cacheKey) setBaziCacheEntry(cacheKey, result);
+  return { result, cacheHit: false };
+};
+
 // --- Ziwei (V2) Calculation ---
 const ZIWEI_BRANCH_ORDER = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 const ZIWEI_MONTH_BRANCH_ORDER = ['寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥', '子', '丑'];
@@ -3367,13 +3382,16 @@ apiRouter.post('/bazi/calculate', async (req, res) => {
   const buildResponse = async () => {
     const payload = validation.payload;
     const { calculationPayload, timeMeta, trueSolarMeta } = resolveBaziCalculationInput(payload);
-    const result = await getBaziCalculation(calculationPayload);
+    const { result, cacheHit } = await getBaziCalculationWithMeta(calculationPayload);
     return {
-      pillars: result.pillars,
-      fiveElements: result.fiveElements,
-      fiveElementsPercent: result.fiveElementsPercent,
-      trueSolarTime: trueSolarMeta,
-      ...timeMeta,
+      payload: {
+        pillars: result.pillars,
+        fiveElements: result.fiveElements,
+        fiveElementsPercent: result.fiveElementsPercent,
+        trueSolarTime: trueSolarMeta,
+        ...timeMeta,
+      },
+      cacheHit,
     };
   };
 
@@ -3389,7 +3407,10 @@ apiRouter.post('/bazi/calculate', async (req, res) => {
   };
 
   calculationPromise
-    .then((payload) => res.json(payload))
+    .then(({ payload, cacheHit }) => {
+      res.set('x-bazi-cache', cacheHit ? 'hit' : 'miss');
+      res.json(payload);
+    })
     .catch((error) => {
       console.error(error);
       res.status(500).json({ error: 'Calculation error' });
@@ -3410,8 +3431,8 @@ apiRouter.post('/bazi/full-analysis', requireAuth, async (req, res) => {
   const buildResponse = async () => {
     const payload = validation.payload;
     const { calculationPayload, timeMeta, trueSolarMeta } = resolveBaziCalculationInput(payload);
-    const result = await getBaziCalculation(calculationPayload);
-    return { ...result, ...timeMeta, trueSolarTime: trueSolarMeta };
+    const { result, cacheHit } = await getBaziCalculationWithMeta(calculationPayload);
+    return { payload: { ...result, ...timeMeta, trueSolarTime: trueSolarMeta }, cacheHit };
   };
 
   const { promise: analysisPromise, isNew } = baziFullAnalysisDeduper.getOrCreate(
@@ -3426,7 +3447,10 @@ apiRouter.post('/bazi/full-analysis', requireAuth, async (req, res) => {
   };
 
   analysisPromise
-    .then((payload) => res.json(payload))
+    .then(({ payload, cacheHit }) => {
+      res.set('x-bazi-cache', cacheHit ? 'hit' : 'miss');
+      res.json(payload);
+    })
     .catch((error) => {
       console.error(error);
       res.status(500).json({ error: 'Calculation error' });
@@ -5405,7 +5429,8 @@ if (NODE_ENV !== 'test' && isMain) {
       console.error('Failed to initialize server prerequisites:', error);
     }
 
-    server.listen(PORT, () => {
+    const bindHost = process.env.BIND_HOST || (IS_PRODUCTION ? '0.0.0.0' : '127.0.0.1');
+    server.listen(PORT, bindHost, () => {
       console.log(`BaZi Master API running on http://localhost:${PORT}`);
     });
   })();

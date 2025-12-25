@@ -32,6 +32,27 @@ test('User can log in with Google OAuth redirect', async ({ page }) => {
     };
     const encodedUser = Buffer.from(JSON.stringify(oauthUser)).toString('base64url');
 
+    await page.route('**/api/user/settings', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                settings: {
+                    locale: 'en-US',
+                    preferences: { profileName: '', aiProvider: '' },
+                },
+            }),
+        });
+    });
+
+    await page.route('**/api/bazi/records**', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ records: [], totalCount: 0, filteredCount: 0, hasMore: false }),
+        });
+    });
+
     await page.route('**/api/auth/me', async (route) => {
         const auth = route.request().headers()['authorization'] || '';
         if (auth.includes('oauth_token_')) {
@@ -80,6 +101,27 @@ test('User can log in with WeChat OAuth redirect', async ({ page }) => {
         name: 'WeChat User',
     };
     const encodedUser = Buffer.from(JSON.stringify(oauthUser)).toString('base64url');
+
+    await page.route('**/api/user/settings', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                settings: {
+                    locale: 'en-US',
+                    preferences: { profileName: '', aiProvider: '' },
+                },
+            }),
+        });
+    });
+
+    await page.route('**/api/bazi/records**', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ records: [], totalCount: 0, filteredCount: 0, hasMore: false }),
+        });
+    });
 
     await page.route('**/api/auth/me', async (route) => {
         const auth = route.request().headers()['authorization'] || '';

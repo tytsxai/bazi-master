@@ -3,12 +3,47 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureLocalPostgres, stopLocalPostgres } from '../../backend/scripts/local-postgres.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..', '..');
 const backendDir = path.join(rootDir, 'backend');
 const frontendDir = path.join(rootDir, 'frontend');
+const prismaSchemaCandidates = [
+  path.join(rootDir, 'prisma', 'schema.prisma'),
+  path.join(backendDir, 'node_modules', '.prisma', 'client', 'schema.prisma'),
+];
+
+const readPrismaProvider = (schemaPath) => {
+  try {
+    if (!fs.existsSync(schemaPath)) return '';
+    const raw = fs.readFileSync(schemaPath, 'utf8');
+    const datasourceMatch = raw.match(/datasource\s+db\s*{([\s\S]*?)}/m);
+    const block = datasourceMatch?.[1] ?? '';
+    return (block.match(/\bprovider\s*=\s*"([^"]+)"/)?.[1] ?? '').trim().toLowerCase();
+  } catch {
+    return '';
+  }
+};
+
+const resolvePrismaProvider = () => {
+  for (const schemaPath of prismaSchemaCandidates) {
+    const provider = readPrismaProvider(schemaPath);
+    if (provider) return provider;
+  }
+  return '';
+};
+
+const prismaProvider = resolvePrismaProvider();
+const isSqliteProvider = prismaProvider === 'sqlite';
+const isPostgresProvider = prismaProvider === 'postgresql' || prismaProvider === 'postgres';
+
+const ensureSqliteDatabaseUrl = () => {
+  if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('file:')) return;
+  const sqlitePath = path.join(rootDir, 'prisma', 'dev.db');
+  process.env.DATABASE_URL = `file:${sqlitePath}`;
+};
 
 const frontendPort = Number(process.env.E2E_WEB_PORT || process.env.PW_PORT || 3000);
 process.env.PORT = process.env.PORT || '4000';
@@ -100,6 +135,16 @@ const waitForPortClosed = async (port, timeoutMs = 5000) => {
   return false;
 };
 
+const waitForPortOnHost = async (port, host, timeoutMs = 20_000) => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const available = await checkPort(port, host);
+    if (available) return true;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
+};
+
 const startBackendIfNeeded = async () => {
   const isRunning = await checkPort(4000);
   if (isRunning) {
@@ -113,12 +158,12 @@ const startBackendIfNeeded = async () => {
         process.exit(1);
       }
     } else {
-    const healthy = await checkBackendHealth();
-    if (healthy) {
-      console.log('[dev-server] Backend already running on port 4000.');
-      return null;
-    }
-    const killed = killPort(4000);
+      const healthy = await checkBackendHealth();
+      if (healthy) {
+        console.log('[dev-server] Backend already running on port 4000.');
+        return null;
+      }
+      const killed = killPort(4000);
       if (killed) {
         console.warn('[dev-server] Restarting unresponsive backend on port 4000.');
       } else {
@@ -165,6 +210,8 @@ let backendProcess = null;
 let frontendProcess = null;
 let keepAliveTimer = null;
 let shuttingDown = false;
+let postgresStartedByScript = false;
+const postgresDataDir = path.join(rootDir, 'prisma', '.pgdata-e2e');
 
 const shutdown = () => {
   if (shuttingDown) return;
@@ -175,13 +222,21 @@ const shutdown = () => {
   }
   if (frontendProcess) frontendProcess.kill('SIGTERM');
   if (backendProcess) backendProcess.kill('SIGTERM');
+  if (postgresStartedByScript) {
+    stopLocalPostgres({ dataDir: postgresDataDir, mode: 'fast' });
+  }
 };
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 process.on('exit', shutdown);
 
-if (forceRestart && process.env.E2E_SKIP_RESET !== '1' && process.env.PW_SKIP_RESET !== '1') {
+if (
+  forceRestart
+  && process.env.E2E_SKIP_RESET !== '1'
+  && process.env.PW_SKIP_RESET !== '1'
+  && isPostgresProvider
+) {
   const backendRunning = await checkPort(4000);
   if (backendRunning) {
     if (killPort(4000)) {
@@ -194,20 +249,55 @@ if (forceRestart && process.env.E2E_SKIP_RESET !== '1' && process.env.PW_SKIP_RE
     }
   }
 
-  const e2eDbPath = path.join(rootDir, 'prisma', 'e2e.db');
-  process.env.DATABASE_URL = `file:${e2eDbPath}`;
-  console.log(`[dev-server] Resetting E2E SQLite database at ${e2eDbPath}`);
+  const providedE2eDatabaseUrl = process.env.E2E_DATABASE_URL;
+  let e2eDatabaseUrl = providedE2eDatabaseUrl;
+  const pgPort = Number(process.env.PG_E2E_PORT || 5433);
+  const pgDbName = process.env.PG_E2E_DB || 'bazi_master_e2e';
+  if (!e2eDatabaseUrl) {
+    const result = await ensureLocalPostgres({
+      dataDir: postgresDataDir,
+      port: pgPort,
+      dbName: pgDbName,
+    });
+    postgresStartedByScript = result.started;
+    e2eDatabaseUrl = result.url;
+  }
+
+  process.env.DATABASE_URL = e2eDatabaseUrl;
+
+  if (providedE2eDatabaseUrl) {
+    try {
+      const url = new URL(providedE2eDatabaseUrl);
+      const host = url.hostname || '127.0.0.1';
+      const port = Number(url.port || 5432);
+      const ready = await waitForPortOnHost(port, host, 20_000);
+      if (!ready) {
+        console.error(`[dev-server] E2E database not reachable at ${host}:${port}`);
+        process.exit(1);
+      }
+    } catch {
+      // Ignore URL parsing failures; Prisma will report a connection error.
+    }
+  } else {
+    console.log(`[dev-server] Resetting E2E PostgreSQL database ${pgDbName} on 127.0.0.1:${pgPort}`);
+  }
+  console.log('[dev-server] Resetting E2E database via Prisma migrations...');
   try {
-    fs.rmSync(e2eDbPath, { force: true });
-    fs.rmSync(`${e2eDbPath}-wal`, { force: true });
-    fs.rmSync(`${e2eDbPath}-shm`, { force: true });
+    const prismaEnv = { ...process.env, DATABASE_URL: e2eDatabaseUrl };
     execSync(
-      `${nodeCmd} scripts/prisma.mjs db push --force-reset --schema=../prisma/schema.prisma`,
-      { cwd: backendDir, stdio: 'inherit', env: process.env }
+      `${nodeCmd} scripts/prisma.mjs migrate reset --force --skip-generate --schema=../prisma/schema.prisma`,
+      { cwd: backendDir, stdio: 'inherit', env: prismaEnv }
     );
   } catch {
     console.error('[dev-server] Failed to reset E2E database.');
     process.exit(1);
+  }
+}
+
+if (isSqliteProvider) {
+  ensureSqliteDatabaseUrl();
+  if (forceRestart && process.env.E2E_SKIP_RESET !== '1' && process.env.PW_SKIP_RESET !== '1') {
+    console.log('[dev-server] SQLite provider detected; skipping Postgres reset.');
   }
 }
 

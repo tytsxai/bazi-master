@@ -9,6 +9,7 @@ COPY prisma ./prisma/
 # Setup Backend
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json ./
+COPY backend/scripts ./scripts
 
 # Install dependencies
 RUN npm ci

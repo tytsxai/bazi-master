@@ -12,6 +12,8 @@ export const setBaziCacheMirror = (mirror) => {
   cacheMirror = mirror;
 };
 
+export const hasBaziCacheMirror = () => Boolean(cacheMirror);
+
 const coerceInt = (value) => {
   if (value === null || value === undefined) return null;
   if (typeof value === 'string' && value.trim().length === 0) return null;
