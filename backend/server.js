@@ -242,6 +242,8 @@ app.use((req, res, next) => {
 const AI_CONCURRENCY_ERROR = 'AI request already in progress. Please wait.';
 const { acquire: acquireAiGuard } = createAiGuard();
 const baziSubmitDeduper = createInFlightDeduper();
+const baziCalculationDeduper = createInFlightDeduper();
+const baziFullAnalysisDeduper = createInFlightDeduper();
 
 const fetchWithTimeout = async (url, options, timeoutMs = AI_TIMEOUT_MS) => {
   const controller = new AbortController();
@@ -593,15 +595,18 @@ const resolveBaziCalculationInput = (payload) => {
   return { calculationPayload: payload, timeMeta, trueSolarMeta };
 };
 
-const buildBaziSubmitKey = (userId, payload) => {
-  if (!userId || !payload) return null;
+const buildBaziCalculationKey = (payload, userId = null) => {
+  if (!payload) return null;
   const birthLocation =
     typeof payload.birthLocation === 'string' ? payload.birthLocation.trim() : '';
   const timezone = typeof payload.timezone === 'string' ? payload.timezone.trim() : '';
   const gender =
     typeof payload.gender === 'string' ? payload.gender.trim().toLowerCase() : '';
+  const timezoneOffsetMinutes = Number.isFinite(payload.timezoneOffsetMinutes)
+    ? payload.timezoneOffsetMinutes
+    : null;
   const keyPayload = {
-    userId,
+    userId: userId ?? null,
     birthYear: payload.birthYear,
     birthMonth: payload.birthMonth,
     birthDay: payload.birthDay,
@@ -609,9 +614,15 @@ const buildBaziSubmitKey = (userId, payload) => {
     gender,
     birthLocation,
     timezone,
+    timezoneOffsetMinutes,
   };
   const hash = crypto.createHash('sha256').update(JSON.stringify(keyPayload)).digest('hex');
-  return `${userId}:${hash}`;
+  return userId ? `${userId}:${hash}` : `calc:${hash}`;
+};
+
+const buildBaziSubmitKey = (userId, payload) => {
+  if (!userId || !payload) return null;
+  return buildBaziCalculationKey(payload, userId);
 };
 
 // --- Mappings & Constants ---
@@ -2333,22 +2344,38 @@ apiRouter.post('/bazi/calculate', (req, res) => {
     return res.status(400).json({ error: message });
   }
 
-  try {
+  const submitKey = buildBaziCalculationKey(validation.payload);
+  const buildResponse = async () => {
     const payload = validation.payload;
     const { calculationPayload, timeMeta, trueSolarMeta } = resolveBaziCalculationInput(payload);
     const result = getBaziCalculation(calculationPayload);
-    // basic returns pillars + fiveElements
-    res.json({
+    return {
       pillars: result.pillars,
       fiveElements: result.fiveElements,
       fiveElementsPercent: result.fiveElementsPercent,
       trueSolarTime: trueSolarMeta,
       ...timeMeta,
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Calculation error' });
-  }
+    };
+  };
+
+  const { promise: calculationPromise, isNew } = baziCalculationDeduper.getOrCreate(
+    submitKey,
+    buildResponse
+  );
+
+  const finalize = () => {
+    if (isNew) {
+      baziCalculationDeduper.clear(submitKey);
+    }
+  };
+
+  calculationPromise
+    .then((payload) => res.json(payload))
+    .catch((error) => {
+      console.error(error);
+      res.status(500).json({ error: 'Calculation error' });
+    })
+    .finally(finalize);
 });
 
 apiRouter.post('/bazi/full-analysis', requireAuth, (req, res) => {
@@ -2360,15 +2387,32 @@ apiRouter.post('/bazi/full-analysis', requireAuth, (req, res) => {
     return res.status(400).json({ error: message });
   }
 
-  try {
+  const submitKey = buildBaziCalculationKey(validation.payload, req.user?.id);
+  const buildResponse = async () => {
     const payload = validation.payload;
     const { calculationPayload, timeMeta, trueSolarMeta } = resolveBaziCalculationInput(payload);
     const result = getBaziCalculation(calculationPayload);
-    res.json({ ...result, ...timeMeta, trueSolarTime: trueSolarMeta });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Calculation error' });
-  }
+    return { ...result, ...timeMeta, trueSolarTime: trueSolarMeta };
+  };
+
+  const { promise: analysisPromise, isNew } = baziFullAnalysisDeduper.getOrCreate(
+    submitKey,
+    buildResponse
+  );
+
+  const finalize = () => {
+    if (isNew) {
+      baziFullAnalysisDeduper.clear(submitKey);
+    }
+  };
+
+  analysisPromise
+    .then((payload) => res.json(payload))
+    .catch((error) => {
+      console.error(error);
+      res.status(500).json({ error: 'Calculation error' });
+    })
+    .finally(finalize);
 });
 
 apiRouter.post('/ziwei/calculate', (req, res) => {
@@ -3042,7 +3086,12 @@ apiRouter.post('/favorites', requireAuth, async (req, res) => {
     where: { userId_recordId: { userId: req.user.id, recordId } },
   });
   if (existingFavorite) {
-    return res.status(409).json({ error: 'Favorite already exists' });
+    return res.json({
+      favorite: {
+        ...existingFavorite,
+        record: serializeRecordWithTimezone(record),
+      },
+    });
   }
 
   let favorite = null;
@@ -3053,6 +3102,17 @@ apiRouter.post('/favorites', requireAuth, async (req, res) => {
     });
   } catch (error) {
     if (error?.code === 'P2002') {
+      const fallbackFavorite = await prisma.favorite.findUnique({
+        where: { userId_recordId: { userId: req.user.id, recordId } },
+      });
+      if (fallbackFavorite) {
+        return res.json({
+          favorite: {
+            ...fallbackFavorite,
+            record: serializeRecordWithTimezone(record),
+          },
+        });
+      }
       return res.status(409).json({ error: 'Favorite already exists' });
     }
     console.error('Failed to create favorite:', error);
