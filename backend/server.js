@@ -46,13 +46,14 @@ const fetchDeletedRecordIds = async (userId) => {
 const isRecordSoftDeleted = async (userId, recordId) => {
   await ensureSoftDeleteReady();
   const rows = await prisma.$queryRaw`
-    SELECT 1 as exists FROM BaziRecordTrash WHERE userId = ${userId} AND recordId = ${recordId} LIMIT 1
+    SELECT 1 as existsFlag FROM BaziRecordTrash WHERE userId = ${userId} AND recordId = ${recordId} LIMIT 1
   `;
   return rows.length > 0;
 };
 
 app.use(cors());
-app.use(express.json());
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '50mb';
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 const MAX_URL_LENGTH = Number(process.env.MAX_URL_LENGTH || 16384);
 
@@ -1098,6 +1099,32 @@ const parseJsonValue = (raw) => {
   } catch {
     return null;
   }
+};
+
+const serializeRecordForList = (record) => ({
+  id: record.id,
+  birthYear: record.birthYear,
+  birthMonth: record.birthMonth,
+  birthDay: record.birthDay,
+  birthHour: record.birthHour,
+  gender: record.gender,
+  birthLocation: record.birthLocation,
+  timezone: record.timezone,
+  pillars: JSON.parse(record.pillars),
+  createdAt: record.createdAt,
+});
+
+const BAZI_LIST_SELECT = {
+  id: true,
+  birthYear: true,
+  birthMonth: true,
+  birthDay: true,
+  birthHour: true,
+  gender: true,
+  birthLocation: true,
+  timezone: true,
+  pillars: true,
+  createdAt: true,
 };
 
 const serializeIchingRecord = (record) => ({
@@ -2886,7 +2913,7 @@ const getBaziRecords = async (req, res, source) => {
   if (shouldFilterInMemory) {
     const [totalCount, records] = await Promise.all([
       prisma.baziRecord.count({ where: baseWhere }),
-      prisma.baziRecord.findMany({ where, orderBy }),
+      prisma.baziRecord.findMany({ where, orderBy, select: BAZI_LIST_SELECT }),
     ]);
     const filteredRecords = records.filter((record) =>
       normalizedTerms.every((term) => recordMatchesQuery(record, term))
@@ -2900,7 +2927,7 @@ const getBaziRecords = async (req, res, source) => {
     const pageRecords = hasMore ? pageSlice.slice(0, safePageSize) : pageSlice;
 
     return res.json({
-      records: pageRecords.map(serializeRecordWithTimezone),
+      records: pageRecords.map(serializeRecordForList),
       hasMore,
       totalCount,
       filteredCount,
@@ -2910,7 +2937,7 @@ const getBaziRecords = async (req, res, source) => {
   if (birthSortDirection) {
     const [totalCount, records] = await Promise.all([
       prisma.baziRecord.count({ where: baseWhere }),
-      prisma.baziRecord.findMany({ where }),
+      prisma.baziRecord.findMany({ where, select: BAZI_LIST_SELECT }),
     ]);
     const sortedRecords = sortRecordsByBirth(records, birthSortDirection);
     const filteredCount = sortedRecords.length;
@@ -2919,7 +2946,7 @@ const getBaziRecords = async (req, res, source) => {
     const pageRecords = hasMore ? pageSlice.slice(0, safePageSize) : pageSlice;
 
     return res.json({
-      records: pageRecords.map(serializeRecordWithTimezone),
+      records: pageRecords.map(serializeRecordForList),
       hasMore,
       totalCount,
       filteredCount,
@@ -2934,13 +2961,14 @@ const getBaziRecords = async (req, res, source) => {
       orderBy,
       skip,
       take: safePageSize + 1,
+      select: BAZI_LIST_SELECT,
     }),
   ]);
   const hasMore = records.length > safePageSize;
   const pageRecords = hasMore ? records.slice(0, safePageSize) : records;
 
   return res.json({
-    records: pageRecords.map(serializeRecordWithTimezone),
+    records: pageRecords.map(serializeRecordForList),
     hasMore,
     totalCount,
     filteredCount,
@@ -3037,63 +3065,87 @@ app.get('/api/bazi/records/export', requireAuth, async (req, res) => {
 });
 
 app.post('/api/bazi/records/import', requireAuth, async (req, res) => {
-  const incoming = Array.isArray(req.body) ? req.body : req.body?.records;
-  if (!Array.isArray(incoming) || !incoming.length) {
+  let incoming = null;
+  if (Array.isArray(req.body)) {
+    incoming = req.body;
+  } else if (req.body && typeof req.body === 'object') {
+    if (!('records' in req.body)) {
+      return res.status(400).json({ error: 'Invalid import file format' });
+    }
+    if (!Array.isArray(req.body.records)) {
+      return res.status(400).json({ error: 'Invalid import file format' });
+    }
+    incoming = req.body.records;
+  } else {
+    return res.status(400).json({ error: 'Invalid import file format' });
+  }
+
+  if (!incoming.length) {
     return res.status(400).json({ error: 'No records provided' });
   }
 
-  const toCreate = [];
   const errorIndices = [];
-  const importEntries = [];
-  incoming.forEach((raw, index) => {
+  const failedIndices = [];
+  const IMPORT_BATCH_SIZE = Number(process.env.IMPORT_BATCH_SIZE || 500);
+  let created = 0;
+  let validCount = 0;
+  let batchEntries = [];
+
+  const flushBatch = async () => {
+    if (!batchEntries.length) return;
+    const batchRecords = batchEntries.map((entry) => entry.record);
+    try {
+      const result = await prisma.baziRecord.createMany({ data: batchRecords });
+      created += result.count;
+    } catch (error) {
+      console.error('Import error (bulk):', error);
+      for (const entry of batchEntries) {
+        try {
+          await prisma.baziRecord.create({ data: entry.record });
+          created += 1;
+        } catch (entryError) {
+          console.error('Import error (single):', entryError);
+          failedIndices.push(entry.index);
+        }
+      }
+    } finally {
+      batchEntries = [];
+    }
+  };
+
+  for (let index = 0; index < incoming.length; index += 1) {
+    const raw = incoming[index];
     const record = buildImportRecord(raw, req.user.id);
     if (record) {
-      importEntries.push({ index, record });
-      toCreate.push(record);
+      validCount += 1;
+      batchEntries.push({ index, record });
+      if (batchEntries.length >= IMPORT_BATCH_SIZE) {
+        await flushBatch();
+      }
     } else {
       errorIndices.push(index);
     }
-  });
+  }
 
-  if (!toCreate.length) {
+  if (!validCount) {
     return res.status(400).json({ error: 'No valid records found' });
   }
 
-  try {
-    const result = await prisma.baziRecord.createMany({ data: toCreate });
-    res.json({
-      created: result.count,
-      skipped: incoming.length - toCreate.length,
-      errors: errorIndices.length ? errorIndices.slice(0, 5) : undefined,
-    });
-  } catch (error) {
-    console.error('Import error (bulk):', error);
-    let created = 0;
-    const failedIndices = [];
-    for (const entry of importEntries) {
-      try {
-        await prisma.baziRecord.create({ data: entry.record });
-        created += 1;
-      } catch (entryError) {
-        console.error('Import error (single):', entryError);
-        failedIndices.push(entry.index);
-      }
-    }
+  await flushBatch();
 
-    if (!created) {
-      return res.status(500).json({
-        error: 'Unable to import records',
-        failed: failedIndices.slice(0, 5),
-      });
-    }
-
-    res.json({
-      created,
-      skipped: incoming.length - toCreate.length,
-      failed: failedIndices.length ? failedIndices.slice(0, 5) : undefined,
-      errors: errorIndices.length ? errorIndices.slice(0, 5) : undefined,
+  if (!created) {
+    return res.status(500).json({
+      error: 'Unable to import records',
+      failed: failedIndices.slice(0, 5),
     });
   }
+
+  res.json({
+    created,
+    skipped: incoming.length - validCount,
+    failed: failedIndices.length ? failedIndices.slice(0, 5) : undefined,
+    errors: errorIndices.length ? errorIndices.slice(0, 5) : undefined,
+  });
 });
 
 app.post('/api/bazi/records/bulk-delete', requireAuth, async (req, res) => {
@@ -3781,6 +3833,13 @@ server.on('upgrade', (req, socket, head) => {
   socket.on('error', () => {
     sendClose(1011);
   });
+});
+
+app.use((err, req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request body too large' });
+  }
+  return next(err);
 });
 
 server.listen(PORT, () => {

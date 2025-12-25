@@ -27,3 +27,7 @@
 - Re-verified registered + guest BaZi flows via Playwright scripts; added I Ching end-to-end verification with screenshots.
 - Marked feature_list.json test #4 as passing. Current progress: 9/479 tests passing.
 - Next: continue remaining I Ching/Tarot/Zodiac functional tests and align feature_list steps for non-BaZi modules.
+- Fixed SQLite raw query alias error in soft-delete check (renamed alias to avoid reserved keyword).
+- Re-verified registered Bazi flow and I Ching flow via Playwright scripts; captured new screenshots.
+- Marked feature_list.json test #5 as passing. Current progress: 10/479 tests passing.
+- Next: continue remaining cross-module functional tests and start Tarot/Zodiac flows.
