@@ -1,21 +1,41 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext.jsx';
+import Breadcrumbs from '../components/Breadcrumbs.jsx';
+import { useAuthFetch } from '../auth/useAuthFetch.js';
+
+const buildShareUrl = (record) => {
+  if (!record?.id) return '';
+  if (typeof window === 'undefined') return '';
+  try {
+    const url = new URL('/history', window.location.origin);
+    url.searchParams.set('recordId', String(record.id));
+    return url.toString();
+  } catch {
+    return '';
+  }
+};
 
 const buildShareText = (record) => {
   if (!record) return '';
   const { birthYear, birthMonth, birthDay, birthHour, gender, birthLocation, timezone, pillars } = record;
-  return [
+  const shareUrl = buildShareUrl(record);
+  const lines = [
     'BaZi Master Favorite',
     `Date: ${birthYear}-${birthMonth}-${birthDay} · ${birthHour}:00`,
     `Profile: ${gender} · ${birthLocation || '—'} · ${timezone || 'UTC'}`,
     `Pillars: ${pillars.year.stem}/${pillars.year.branch}, ${pillars.month.stem}/${pillars.month.branch}, ${pillars.day.stem}/${pillars.day.branch}, ${pillars.hour.stem}/${pillars.hour.branch}`,
-  ].join('\n');
+  ];
+  if (shareUrl) {
+    lines.push(`View: ${shareUrl}`);
+  }
+  return lines.join('\n');
 };
 
 export default function Favorites() {
   const { t } = useTranslation();
   const { token } = useAuth();
+  const authFetch = useAuthFetch();
   const [favorites, setFavorites] = useState([]);
   const [records, setRecords] = useState([]);
   const [status, setStatus] = useState(null);
@@ -23,9 +43,12 @@ export default function Favorites() {
   const [shareStatus, setShareStatus] = useState(null);
 
   const loadFavorites = async () => {
-    const res = await fetch('/api/favorites', {
+    const res = await authFetch('/api/favorites', {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (res.status === 401) {
+      return;
+    }
     if (!res.ok) {
       setStatus('Unable to load favorites.');
       return;
@@ -35,9 +58,12 @@ export default function Favorites() {
   };
 
   const loadRecords = async () => {
-    const res = await fetch('/api/bazi/records', {
+    const res = await authFetch('/api/bazi/records', {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (res.status === 401) {
+      return;
+    }
     if (!res.ok) {
       setStatus('Unable to load records.');
       return;
@@ -63,10 +89,13 @@ export default function Favorites() {
   );
 
   const handleDelete = async (id) => {
-    const res = await fetch(`/api/favorites/${id}`, {
+    const res = await authFetch(`/api/favorites/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (res.status === 401) {
+      return;
+    }
     if (res.ok) {
       setFavorites((prev) => prev.filter((favorite) => favorite.id !== id));
     }
@@ -74,7 +103,7 @@ export default function Favorites() {
 
   const handleAdd = async (recordId) => {
     setStatus(null);
-    const res = await fetch('/api/favorites', {
+    const res = await authFetch('/api/favorites', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -82,6 +111,9 @@ export default function Favorites() {
       },
       body: JSON.stringify({ recordId }),
     });
+    if (res.status === 401) {
+      return;
+    }
     if (!res.ok) {
       const err = await res.json();
       setStatus(err.error || 'Unable to add favorite.');
@@ -100,6 +132,7 @@ export default function Favorites() {
 
   const handleShare = async (record) => {
     const shareText = buildShareText(record);
+    const shareUrl = buildShareUrl(record);
     if (!shareText) return;
     setShareStatus(null);
 
@@ -108,6 +141,7 @@ export default function Favorites() {
         await navigator.share({
           title: 'BaZi Master Favorite',
           text: shareText,
+          url: shareUrl || undefined,
         });
         setShareStatus('Shared successfully.');
         return;
@@ -125,7 +159,8 @@ export default function Favorites() {
   };
 
   return (
-    <main id="main-content" tabIndex={-1} className="container mx-auto pb-16">
+    <main id="main-content" tabIndex={-1} className="responsive-container pb-16">
+      <Breadcrumbs />
       <section className="glass-card rounded-3xl border border-white/10 p-8 shadow-glass">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -136,8 +171,16 @@ export default function Favorites() {
             {favorites.length} saved · {unfavoritedRecords.length} available to add
           </div>
         </div>
-        {status && <p className="mt-4 text-sm text-rose-200">{status}</p>}
-        {shareStatus && <p className="mt-2 text-xs text-emerald-200">{shareStatus}</p>}
+        {status && (
+          <p className="mt-4 text-sm text-rose-200" role="alert" aria-live="assertive">
+            {status}
+          </p>
+        )}
+        {shareStatus && (
+          <p className="mt-2 text-xs text-emerald-200" role="status" aria-live="polite">
+            {shareStatus}
+          </p>
+        )}
         {favorites.length ? (
           <div className="mt-6 grid gap-4">
             {favorites.map((favorite) => {
@@ -165,6 +208,7 @@ export default function Favorites() {
                       <button
                         type="button"
                         onClick={() => handleShare(record)}
+                        data-share-url={buildShareUrl(record)}
                         className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-emerald-400/60 hover:text-emerald-200"
                       >
                         Share

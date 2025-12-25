@@ -86,3 +86,10 @@
 - Added Playwright real data audit flow with unique BaZi record creation, history/favorites verification, refresh persistence, and cleanup; captured verification screenshots.
 - Verified real-data-audit.spec.js via Playwright; marked test #18 as passing. Current progress: 22/479 tests passing.
 - Next: continue remaining functional tests (deep link, Tarot/Zodiac flows) and resolve init.sh prisma data-loss prompt.
+- Ran Playwright suite for auth/login/logout, registration, profile settings, tarot (single/three + Celtic AI), I Ching, zodiac horoscope, and zodiac rising (tests/login.spec.js, logout.spec.js, register.spec.js, profile-settings.spec.js, tarot-draw.spec.js, tarot-celtic.spec.js, iching.spec.js, zodiac-horoscope.spec.js, zodiac-rising.spec.js) — all passed.
+- Marked 15 related feature_list.json items as passing (auth login/register, logout redirect, profile settings persistence, tarot single/three/Celtic flow, I Ching number flow, zodiac horoscope flow, zodiac rising UI-backend integration).
+- Current progress: 37/479 tests passing.
+- Added deep link verification flow: exposed share URL on favorites cards, added Playwright deep-link.spec.js with filter + redirect checks and cleanup, captured screenshots.
+- Verified deep link flow end-to-end via Playwright; marked feature_list.json test #19 as passing. Current progress: 23/479 tests passing.
+- Note: init.sh still fails prisma db push due to BaziRecordTrash data-loss warning (52 rows).
+- Next: continue remaining functional tests (Tarot/Zodiac/Deep link edge cases) and resolve init.sh prisma data-loss prompt.
