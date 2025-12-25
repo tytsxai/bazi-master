@@ -457,7 +457,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -503,7 +503,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -937,7 +937,7 @@
       "Step 2: Trigger Zodiac monthly horoscope flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -947,7 +947,7 @@
       "Step 2: Trigger Tarot single draw flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -1037,7 +1037,7 @@
       "Step 2: Trigger Zodiac compatibility flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -2177,7 +2177,7 @@
       "Step 2: Trigger Zodiac monthly horoscope flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -3077,7 +3077,7 @@
       "Step 2: Trigger Zodiac compatibility flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

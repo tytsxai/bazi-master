@@ -93,3 +93,9 @@
 - Verified deep link flow end-to-end via Playwright; marked feature_list.json test #19 as passing. Current progress: 23/479 tests passing.
 - Note: init.sh still fails prisma db push due to BaziRecordTrash data-loss warning (52 rows).
 - Next: continue remaining functional tests (Tarot/Zodiac/Deep link edge cases) and resolve init.sh prisma data-loss prompt.
+- Init.sh failed due to Prisma wanting to drop BaziRecordTrash; added BaziRecordTrash model to Prisma schema and re-synced DB so init.sh succeeds.
+- Fixed Iching Playwright flow to confirm AI request modal and added verification screenshots for each step; re-ran iching.spec.js successfully.
+- Fixed responsive-flow Playwright test navigation/logout handling; re-ran responsive-flow.spec.js successfully with screenshots across desktop/tablet/mobile.
+- Marked feature_list.json test #22 (Responsive layout verification across desktop/tablet/mobile) as passing. Current progress: 45/479 tests passing.
+- Note: Iching flow was temporarily failing due to AI confirm modal; resolved and re-verified.
+- Next: continue with next failing feature test after #22.
