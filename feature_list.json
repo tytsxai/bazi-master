@@ -273,7 +273,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

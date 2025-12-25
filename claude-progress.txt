@@ -56,3 +56,7 @@
 - Updated BaZi UI with location hint and true solar time fields, plus i18n strings for the new metadata.
 - Added Playwright true solar time flow test with screenshots; verified end-to-end and marked feature_list.json test #11 as passing. Current progress: 15/479 tests passing.
 - Next: continue remaining BaZi-related tests (true solar/time accuracy edge cases) then move into Tarot/Zodiac modules.
+- Added Playwright coverage for Zodiac rising sign calculation with screenshots and console error checks.
+- Verified Zodiac rising sign flow end-to-end via Playwright; marked feature_list.json test #12 as passing. Current progress: 16/479 tests passing.
+- Init script currently stops on Prisma data-loss warning for BaziRecordTrash (non-empty).
+- Next: continue remaining Zodiac functional tests (horoscope periods, compatibility, rising sign edge cases) and ensure OAuth provider validation if needed.
