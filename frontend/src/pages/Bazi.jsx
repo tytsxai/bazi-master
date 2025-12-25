@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { useAuthFetch } from '../auth/useAuthFetch.js';
+import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import { getPreferredAiProvider } from '../utils/aiProvider.js';
 
 const GUEST_STORAGE_KEY = 'bazi_guest_calculation_v1';
@@ -58,6 +60,11 @@ const UNSAVED_WARNING_MESSAGE = 'You have unsaved changes. Are you sure you want
 const isWhitespaceOnly = (value) =>
   typeof value === 'string' && value.length > 0 && value.trim().length === 0;
 const normalizeOptionalText = (value) => (typeof value === 'string' ? value.trim() : value);
+const normalizeOverrideArg = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object' && typeof value.preventDefault === 'function') return null;
+  return value;
+};
 const NUMERIC_FIELD_LIMITS = {
   birthHour: { min: 0, max: 23 },
 };
@@ -200,7 +207,14 @@ const getFieldErrors = (data) => {
 
 export default function Bazi() {
   const { t } = useTranslation();
-  const { token, isAuthenticated } = useAuth();
+  const {
+    token,
+    isAuthenticated,
+    getRetryAction,
+    clearRetryAction,
+  } = useAuth();
+  const authFetch = useAuthFetch();
+  const location = useLocation();
   const navigate = useNavigate();
   const [formData, setFormData] = useState(() => buildDefaultFormData());
   const [baseResult, setBaseResult] = useState(null);
@@ -220,6 +234,7 @@ export default function Bazi() {
   const saveInFlightRef = useRef(false);
   const confirmResetCancelRef = useRef(null);
   const confirmAiCancelRef = useRef(null);
+  const retryHandledRef = useRef(null);
   const wsRef = useRef(null);
   const wsStatusRef = useRef({ done: false, errored: false });
   const isMountedRef = useRef(true);
@@ -554,7 +569,7 @@ export default function Bazi() {
     }
   };
 
-  const handleFullAnalysis = async () => {
+  const handleFullAnalysis = async (overridePayload = null) => {
     if (!isAuthenticated) {
       pushToast({ type: 'error', message: t('bazi.loginRequired') });
       return;
@@ -563,17 +578,25 @@ export default function Bazi() {
 
     setAiResult(null);
     setIsFullLoading(true);
-    const payload = buildPayload();
+    const payload = normalizeOverrideArg(overridePayload) || buildPayload();
 
     try {
-      const res = await fetch('/api/bazi/full-analysis', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      const res = await authFetch(
+        '/api/bazi/full-analysis',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+        { action: 'bazi_full_analysis', payload }
+      );
+
+      if (res.status === 401) {
+        redirectForSessionExpired(payload);
+        return;
+      }
 
       if (!res.ok) {
         const message = await readErrorMessage(res, 'Full analysis failed.');
@@ -593,52 +616,57 @@ export default function Bazi() {
     }
   };
 
-  const handleSaveRecord = async () => {
+  const handleSaveRecord = async (overridePayload = null) => {
     if (!isAuthenticated) {
       pushToast({ type: 'error', message: t('bazi.loginRequired') });
       return;
     }
-    if (!baseResult) {
+    if (!baseResult && !overridePayload) {
       pushToast({ type: 'error', message: 'Run a calculation before saving to history.' });
       return;
     }
+    const payload =
+      normalizeOverrideArg(overridePayload) ||
+      {
+        ...buildPayload(),
+        result: fullResult
+          ? {
+              pillars: fullResult.pillars,
+              fiveElements: fullResult.fiveElements,
+              tenGods: fullResult.tenGods,
+              luckCycles: fullResult.luckCycles,
+            }
+          : baseResult
+            ? {
+                pillars: baseResult.pillars,
+                fiveElements: baseResult.fiveElements,
+              }
+            : null,
+      };
+    const fingerprint = JSON.stringify(payload);
+    if (lastSavedFingerprintRef.current === fingerprint) {
+      pushToast({ type: 'success', message: 'Record already saved.' });
+      return;
+    }
+
     if (saveInFlightRef.current || isSaving) return;
     saveInFlightRef.current = true;
     setIsSaving(true);
 
-    const payload = {
-      ...buildPayload(),
-      result: fullResult
-        ? {
-            pillars: fullResult.pillars,
-            fiveElements: fullResult.fiveElements,
-            tenGods: fullResult.tenGods,
-            luckCycles: fullResult.luckCycles,
-          }
-        : baseResult
-          ? {
-              pillars: baseResult.pillars,
-              fiveElements: baseResult.fiveElements,
-            }
-          : null,
-    };
-    const fingerprint = JSON.stringify(payload);
-    if (lastSavedFingerprintRef.current === fingerprint) {
-      pushToast({ type: 'success', message: 'Record already saved.' });
-      saveInFlightRef.current = false;
-      setIsSaving(false);
-      return;
-    }
-
     try {
-      const res = await fetch('/api/bazi/records', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      const res = await authFetch(
+        '/api/bazi/records',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+        { action: 'bazi_save', payload }
+      );
+
+      if (res.status === 401) {
+        return;
+      }
 
       if (!res.ok) {
         const message = await readErrorMessage(res, 'Save failed.');
@@ -665,8 +693,13 @@ export default function Bazi() {
     }
   };
 
-  const handleAddFavorite = async () => {
-    if (!savedRecord) {
+  const handleAddFavorite = async (overrideRecordId = null) => {
+    if (!isAuthenticated) {
+      pushToast({ type: 'error', message: t('bazi.loginRequired') });
+      return;
+    }
+    const recordId = normalizeOverrideArg(overrideRecordId) || savedRecord?.id;
+    if (!recordId) {
       pushToast({ type: 'error', message: t('bazi.saveFirst') });
       return;
     }
@@ -674,14 +707,21 @@ export default function Bazi() {
     setIsFavoriting(true);
 
     try {
-      const res = await fetch('/api/favorites', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      const res = await authFetch(
+        '/api/favorites',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ recordId }),
         },
-        body: JSON.stringify({ recordId: savedRecord.id }),
-      });
+        { action: 'bazi_favorite', payload: { recordId } }
+      );
+
+      if (res.status === 401) {
+        return;
+      }
 
       if (!res.ok) {
         const message = await readErrorMessage(res, 'Favorite failed.');
@@ -701,6 +741,36 @@ export default function Bazi() {
     }
   };
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const retry = getRetryAction();
+    if (!retry) return;
+    const currentPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
+    if (retry.redirectPath && retry.redirectPath !== currentPath) return;
+    if (retryHandledRef.current === retry.createdAt) return;
+    retryHandledRef.current = retry.createdAt;
+    clearRetryAction();
+
+    if (retry.action === 'bazi_full_analysis') {
+      handleFullAnalysis(retry.payload || null);
+      return;
+    }
+    if (retry.action === 'bazi_save') {
+      handleSaveRecord(retry.payload || null);
+      return;
+    }
+    if (retry.action === 'bazi_favorite') {
+      handleAddFavorite(retry.payload?.recordId || null);
+    }
+  }, [
+    isAuthenticated,
+    getRetryAction,
+    clearRetryAction,
+    location.pathname,
+    location.search,
+    location.hash,
+  ]);
+
   const statusStyle = (type) =>
     type === 'error'
       ? 'border-rose-400/40 bg-rose-500/10 text-rose-100'
@@ -708,6 +778,21 @@ export default function Bazi() {
   const toastLabel = (type) => (type === 'error' ? 'Error' : 'Success');
 
   const [aiResult, setAiResult] = useState(null);
+  const redirectForSessionExpired = (payload) => {
+    const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
+    try {
+      setRetryAction({ action: 'bazi_save', payload, redirectPath });
+    } catch {
+      // Ignore retry persistence failures.
+    }
+    try {
+      logout({ preserveRetry: true });
+    } catch {
+      // Ignore logout failures.
+    }
+    const params = new URLSearchParams({ reason: 'session_expired', next: redirectPath });
+    window.location.assign(`/login?${params.toString()}`);
+  };
 
   const resolveWsUrl = () => {
     if (typeof window === 'undefined') return 'ws://localhost:4000/ws/ai';
@@ -870,6 +955,7 @@ export default function Bazi() {
 
   return (
     <main id="main-content" tabIndex={-1} className="responsive-container pb-16">
+      <Breadcrumbs />
       {toasts.length > 0 && (
         <div className="pointer-events-none fixed right-6 top-6 z-50 flex w-[min(90vw,360px)] flex-col gap-2">
           {toasts.map((toast) => (
@@ -1165,8 +1251,15 @@ export default function Bazi() {
             <button
               type="button"
               onClick={handleFullAnalysis}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleFullAnalysis();
+                }
+              }}
               className="rounded-full border border-gold-400/60 px-4 py-2 text-sm text-gold-400 transition hover:bg-gold-400/10 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!baseResult || isFullLoading}
+              data-testid="bazi-full-analysis"
             >
               {isFullLoading ? `${t('bazi.fullAnalysis')}...` : t('bazi.fullAnalysis')}
             </button>
@@ -1176,6 +1269,7 @@ export default function Bazi() {
               className="rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 px-4 py-2 text-sm font-bold text-white shadow-lg transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!fullResult || isAiLoading}
               data-testid="bazi-ai-interpret"
+              aria-label={t('bazi.aiOpen')}
             >
               ✨ {isAiLoading ? t('bazi.aiThinking') : t('bazi.aiInterpret')}
             </button>
@@ -1184,6 +1278,7 @@ export default function Bazi() {
               onClick={handleSaveRecord}
               className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/80 transition hover:border-gold-400/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!baseResult || isSaving}
+              data-testid="bazi-save-record"
             >
               {isSaving ? `${t('bazi.saveRecord')}...` : t('bazi.saveRecord')}
             </button>

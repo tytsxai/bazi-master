@@ -78,3 +78,8 @@
 - Marked feature_list.json test #16 (stress/idempotency flow) as passing. Current progress: 20/479 tests passing.
 - Note: init.sh still fails prisma db push due to BaziRecordTrash data-loss warning (10 rows).
 - Next: continue remaining Tarot/Zodiac functional tests and resolve init.sh prisma data-loss prompt.
+- Fixed security session expiry flow: auth middleware now supports silent session-expired responses (x-session-expired header), auth fetch includes silent header and treats session-expired responses as 401 for retries.
+- Allowed loopback origins (127.0.0.1) in backend CORS and corrected SQLite pragma execution to avoid Prisma errors.
+- Added global error suppression for failed resource load console noise during session expiry.
+- Verified security-session-expiry.spec.js via Playwright; marked test #17 as passing. Current progress: 21/479 tests passing.
+- Next: continue remaining functional tests (real data audit, deep link, Tarot/Zodiac flows) and resolve init.sh prisma data-loss prompt.

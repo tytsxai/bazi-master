@@ -9,6 +9,7 @@ import swaggerUi from 'swagger-ui-express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Solar } from 'lunar-javascript';
 import { drawTarot, getTarotSpreadConfig } from './tarot.js';
+import tarotDeck from './data/tarotData.js';
 import { hexagrams } from './data/ichingHexagrams.js';
 import {
   pickTrigram,
@@ -30,6 +31,7 @@ import {
   normalizeBaziResult,
   primeBaziCalculationCache,
   setBaziCacheEntry,
+  setBaziCacheMirror,
 } from './baziCache.js';
 import { normalizePageNumber, normalizePageSize } from './pagination.js';
 import { createAuthorizeToken, createRequireAuth, requireAdmin } from './auth.js';
@@ -38,10 +40,13 @@ import {
   parseTimezoneOffsetMinutes,
   buildBirthTimeMeta,
 } from './timezone.js';
-import { getServerConfig } from './env.js';
+import { getServerConfig, getSessionConfig } from './env.js';
+import { initRedis, createRedisMirror } from './redis.js';
+import { createSessionStore } from './sessionStore.js';
 
 const prisma = new PrismaClient();
 const app = express();
+const { sessionIdleMs: SESSION_IDLE_MS } = getSessionConfig();
 const {
   port: PORT,
   jsonBodyLimit: JSON_BODY_LIMIT,
@@ -75,9 +80,50 @@ const {
 } = getServerConfig();
 console.log('--- SERVER STARTING: FIX APPLIED ---');
 
+const applySqlitePragmas = async () => {
+  try {
+    await prisma.$queryRawUnsafe('PRAGMA journal_mode=WAL;');
+    await prisma.$queryRawUnsafe('PRAGMA busy_timeout=5000;');
+  } catch (error) {
+    console.error('Failed to apply SQLite pragmas:', error);
+  }
+};
+
+void applySqlitePragmas();
+
+const RATE_LIMIT_ENABLED =
+  NODE_ENV === 'production' || process.env.FORCE_RATE_LIMIT === 'true';
+const AI_GUARD_ENABLED =
+  NODE_ENV === 'production' || process.env.FORCE_AI_GUARD === 'true';
+
 const normalizeOrigin = (value) => {
   if (!value || typeof value !== 'string') return '';
-  return value.trim().replace(/\/+$/, '');
+  const trimmed = value.trim();
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname === '127.0.0.1' || url.hostname === '::1') {
+      url.hostname = 'localhost';
+    }
+    return url.origin;
+  } catch {
+    return trimmed.replace(/\/+$/, '');
+  }
+};
+const expandLoopbackOrigins = (origin) => {
+  if (!origin) return [];
+  try {
+    const url = new URL(origin);
+    const variants = new Set([normalizeOrigin(origin)]);
+    const hostnames = new Set([url.hostname, 'localhost', '127.0.0.1', '::1']);
+    hostnames.forEach((hostname) => {
+      const variant = new URL(origin);
+      variant.hostname = hostname;
+      variants.add(normalizeOrigin(variant.origin));
+    });
+    return Array.from(variants).filter(Boolean);
+  } catch {
+    return [normalizeOrigin(origin)];
+  }
 };
 const parseOriginList = (value) => {
   if (!value || typeof value !== 'string') return [];
@@ -90,10 +136,24 @@ const baseFrontendOrigin = normalizeOrigin(FRONTEND_URL);
 const wechatFrontendOrigin = normalizeOrigin(WECHAT_FRONTEND_URL);
 const allowedOrigins = new Set([
   ...parseOriginList(CORS_ALLOWED_ORIGINS),
-  baseFrontendOrigin,
-  wechatFrontendOrigin,
+  ...expandLoopbackOrigins(baseFrontendOrigin),
+  ...expandLoopbackOrigins(wechatFrontendOrigin),
 ].filter(Boolean));
-const isAllowedOrigin = (origin) => allowedOrigins.has(normalizeOrigin(origin));
+const isLocalDevOrigin = (origin) => {
+  const normalized = normalizeOrigin(origin);
+  return (
+    normalized.startsWith('http://localhost:')
+    || normalized.startsWith('https://localhost:')
+  );
+};
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (origin === 'null') return NODE_ENV !== 'production';
+  const normalized = normalizeOrigin(origin);
+  if (allowedOrigins.has(normalized)) return true;
+  if (NODE_ENV !== 'production' && isLocalDevOrigin(origin)) return true;
+  return false;
+};
 
 const ensureSoftDeleteTables = async () => {
   await prisma.$executeRawUnsafe(`
@@ -142,7 +202,7 @@ const isRecordSoftDeleted = async (userId, recordId) => {
 app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || isAllowedOrigin(origin)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Not allowed by CORS'));
@@ -189,6 +249,7 @@ app.use((req, res, next) => {
 });
 
 const rateLimitStore = new Map();
+const deletedClientIndex = new Map();
 
 const getRateLimitKey = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -198,7 +259,80 @@ const getRateLimitKey = (req) => {
   return req.ip || req.connection?.remoteAddress || 'unknown';
 };
 
+const isLocalAddress = (value) => {
+  if (!value || typeof value !== 'string') return false;
+  if (value === '::1' || value === '127.0.0.1' || value === 'localhost') return true;
+  if (value.startsWith('127.')) return true;
+  if (value.startsWith('::ffff:127.')) return true;
+  return false;
+};
+
+const normalizeClientId = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+};
+
+const extractClientId = (req) => {
+  if (!req) return '';
+  const headerValue = req.headers?.['x-client-id'];
+  if (typeof headerValue === 'string' && headerValue.trim()) {
+    return normalizeClientId(headerValue);
+  }
+  const queryValue = req.query?.clientId;
+  if (typeof queryValue === 'string' && queryValue.trim()) {
+    return normalizeClientId(queryValue);
+  }
+  const bodyValue = req.body?.clientId;
+  if (typeof bodyValue === 'string' && bodyValue.trim()) {
+    return normalizeClientId(bodyValue);
+  }
+  return '';
+};
+
+const getClientDeletedSet = (userId, clientId) => {
+  if (!userId || !clientId) return null;
+  const userMap = deletedClientIndex.get(userId);
+  if (!userMap) return null;
+  return userMap.get(clientId) || null;
+};
+
+const trackClientDeletedRecords = (userId, clientId, recordIds) => {
+  if (!userId || !clientId || !recordIds?.length) return;
+  let userMap = deletedClientIndex.get(userId);
+  if (!userMap) {
+    userMap = new Map();
+    deletedClientIndex.set(userId, userMap);
+  }
+  let recordSet = userMap.get(clientId);
+  if (!recordSet) {
+    recordSet = new Set();
+    userMap.set(clientId, recordSet);
+  }
+  recordIds.forEach((id) => recordSet.add(id));
+};
+
+const removeClientDeletedRecord = (userId, clientId, recordId) => {
+  if (!userId || !clientId || !recordId) return;
+  const recordSet = getClientDeletedSet(userId, clientId);
+  if (!recordSet) return;
+  recordSet.delete(recordId);
+  if (recordSet.size === 0) {
+    const userMap = deletedClientIndex.get(userId);
+    if (userMap) {
+      userMap.delete(clientId);
+      if (userMap.size === 0) {
+        deletedClientIndex.delete(userId);
+      }
+    }
+  }
+};
+
+const CLIENT_DELETE_SCOPE_ENABLED = NODE_ENV !== 'production';
+
 app.use((req, res, next) => {
+  if (!RATE_LIMIT_ENABLED) {
+    return next();
+  }
   if (!Number.isFinite(RATE_LIMIT_WINDOW_MS) || RATE_LIMIT_WINDOW_MS <= 0) {
     return next();
   }
@@ -208,6 +342,9 @@ app.use((req, res, next) => {
 
   const now = Date.now();
   const key = getRateLimitKey(req);
+  if (isLocalAddress(key)) {
+    return next();
+  }
   const entry = rateLimitStore.get(key);
 
   if (!entry || now >= entry.resetAt) {
@@ -240,7 +377,8 @@ app.use((req, res, next) => {
 
 // --- AI Provider Settings ---
 const AI_CONCURRENCY_ERROR = 'AI request already in progress. Please wait.';
-const { acquire: acquireAiGuard } = createAiGuard();
+const aiGuard = createAiGuard();
+const acquireAiGuard = AI_GUARD_ENABLED ? aiGuard.acquire : () => () => {};
 const baziSubmitDeduper = createInFlightDeduper();
 const baziCalculationDeduper = createInFlightDeduper();
 const baziFullAnalysisDeduper = createInFlightDeduper();
@@ -626,13 +764,23 @@ const buildBaziSubmitKey = (userId, payload) => {
 };
 
 // --- Mappings & Constants ---
-const sessionStore = new Map();
+const sessionStore = createSessionStore({ ttlMs: SESSION_IDLE_MS });
 const resetTokenStore = new Map();
 const resetTokenByUser = new Map();
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const oauthStateStore = new Map();
 const WECHAT_STATE_TTL_MS = 10 * 60 * 1000;
 const wechatStateStore = new Map();
+
+const initializeRedisMirrors = async () => {
+  const client = await initRedis();
+  if (!client) return;
+  const sessionMirror = createRedisMirror(client, { prefix: 'session:' });
+  sessionStore.setMirror(sessionMirror);
+  const baziMirror = createRedisMirror(client, { prefix: 'bazi:calc:' });
+  setBaziCacheMirror(baziMirror);
+};
+void initializeRedisMirrors();
 
 const sanitizeNextPath = (raw) => {
   if (typeof raw !== 'string') return null;
@@ -676,6 +824,21 @@ const isAdminUser = (user) => {
 
 const authorizeToken = createAuthorizeToken({ prisma, sessionStore, isAdminUser });
 const requireAuth = createRequireAuth({ authorizeToken });
+const getBearerToken = (req) => {
+  const auth = req.headers.authorization || '';
+  if (!auth.startsWith('Bearer ')) return null;
+  return auth.slice(7);
+};
+const resolveOptionalUser = async (req, res) => {
+  const token = getBearerToken(req);
+  if (!token) return null;
+  try {
+    return await authorizeToken(token);
+  } catch (error) {
+    res.status(401).json({ error: error.message || 'Unauthorized' });
+    return null;
+  }
+};
 
 const createWeChatState = (redirectPath) => {
   const state = crypto.randomBytes(16).toString('hex');
@@ -724,6 +887,16 @@ const consumeResetToken = (token) => {
     resetTokenByUser.delete(entry.userId);
   }
   return entry.userId;
+};
+
+const PASSWORD_MIN_LENGTH = 8;
+const isPasswordComplex = (password) => {
+  if (typeof password !== 'string') return false;
+  const trimmed = password.trim();
+  if (trimmed.length < PASSWORD_MIN_LENGTH) return false;
+  if (!/[A-Za-z]/.test(trimmed)) return false;
+  if (!/\d/.test(trimmed)) return false;
+  return true;
 };
 
 // Pinyin and Element mappings for Stems (TianGan)
@@ -1747,6 +1920,38 @@ apiRouter.get('/ai/providers', (req, res) => {
   });
 });
 
+apiRouter.post('/ai/interpret', requireAuth, async (req, res) => {
+  const { system, user, prompt, fallback: fallbackText } = req.body || {};
+  const userPrompt = typeof user === 'string' ? user : typeof prompt === 'string' ? prompt : '';
+  if (!userPrompt.trim()) {
+    return res.status(400).json({ error: 'User prompt required' });
+  }
+  let provider = null;
+  try {
+    provider = resolveAiProvider(req.body?.provider);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'Invalid AI provider.' });
+  }
+
+  const systemPrompt = typeof system === 'string' && system.trim()
+    ? system.trim()
+    : 'You are a helpful assistant. Provide a concise response in Markdown.';
+  const fallback = () => (typeof fallbackText === 'string' && fallbackText.trim()
+    ? fallbackText
+    : 'Unable to reach the AI provider. Please try again shortly.');
+
+  const release = acquireAiGuard(req.user.id);
+  if (!release) {
+    return res.status(429).json({ error: AI_CONCURRENCY_ERROR });
+  }
+  try {
+    const content = await generateAIContent({ system: systemPrompt, user: userPrompt, fallback, provider });
+    res.json({ content });
+  } finally {
+    release();
+  }
+});
+
 apiRouter.get('/zodiac/:sign', (req, res) => {
   const signKey = normalizeSign(req.params.sign);
   const sign = ZODIAC_SIGNS[signKey];
@@ -1989,23 +2194,31 @@ apiRouter.get('/auth/google/callback', async (req, res) => {
   }
 });
 
-apiRouter.post('/register', async (req, res) => {
+const handleRegister = async (req, res) => {
   const { email, password, name } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  if (!isPasswordComplex(password)) {
+    return res.status(400).json({
+      error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters and include letters and numbers.`,
+    });
+  }
 
   try {
-    const user = await prisma.user.create({ data: { email, password, name } });
+    const user = await prisma.user.create({
+      data: { email: String(email).trim().toLowerCase(), password, name },
+    });
     res.json({ message: 'User created', user });
   } catch (error) {
     if (error.code === 'P2002') res.status(409).json({ error: 'Email already exists' });
     else { console.error(error); res.status(500).json({ error: 'Internal server error' }); }
   }
-});
+};
 
-apiRouter.post('/login', async (req, res) => {
+const handleLogin = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user || user.password !== password) {
       return res.status(401).json({ error: 'Login failed' });
     }
@@ -2021,7 +2234,21 @@ apiRouter.post('/login', async (req, res) => {
       }
     });
   } catch (error) { console.error(error); res.status(500).json({ error: 'Internal server error' }); }
-});
+};
+
+const handleLogout = async (req, res) => {
+  const token = getBearerToken(req) || req.body?.token || null;
+  if (token && sessionStore.has(token)) {
+    sessionStore.delete(token);
+  }
+  res.json({ message: 'Logged out' });
+};
+
+apiRouter.post('/register', handleRegister);
+apiRouter.post('/auth/register', handleRegister);
+apiRouter.post('/login', handleLogin);
+apiRouter.post('/auth/login', handleLogin);
+apiRouter.post('/auth/logout', handleLogout);
 
 apiRouter.get('/auth/wechat/redirect', (req, res) => {
   const redirectPath = sanitizeNextPath(req.query?.next) || '/profile';
@@ -2166,6 +2393,11 @@ apiRouter.post('/password/reset', async (req, res) => {
   const { token, password } = req.body || {};
   if (!token || typeof token !== 'string' || !password || typeof password !== 'string') {
     return res.status(400).json({ error: 'Reset token and new password are required' });
+  }
+  if (!isPasswordComplex(password)) {
+    return res.status(400).json({
+      error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters and include letters and numbers.`,
+    });
   }
 
   const userId = consumeResetToken(token);
@@ -2335,6 +2567,30 @@ apiRouter.get('/admin/health', requireAuth, requireAdmin, (req, res) => {
   res.json({ status: 'ok' });
 });
 
+apiRouter.delete('/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  const userId = parseIdParam(req.params.id);
+  if (!userId) return res.status(400).json({ error: 'Invalid user id' });
+  try {
+    await prisma.$transaction([
+      prisma.favorite.deleteMany({ where: { userId } }),
+      prisma.tarotRecord.deleteMany({ where: { userId } }),
+      prisma.ichingRecord.deleteMany({ where: { userId } }),
+      prisma.baziRecord.deleteMany({ where: { userId } }),
+      prisma.userSettings.deleteMany({ where: { userId } }),
+      prisma.user.delete({ where: { id: userId } }),
+    ]);
+    try {
+      await prisma.$executeRaw`DELETE FROM BaziRecordTrash WHERE userId = ${userId}`;
+    } catch (error) {
+      console.warn('Failed to clear BaziRecordTrash for deleted user:', error?.message || error);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin user delete failed:', error);
+    res.status(500).json({ error: 'Unable to delete user' });
+  }
+});
+
 apiRouter.post('/bazi/calculate', (req, res) => {
   const validation = validateBaziInput(req.body);
   if (!validation.ok) {
@@ -2415,7 +2671,7 @@ apiRouter.post('/bazi/full-analysis', requireAuth, (req, res) => {
     .finally(finalize);
 });
 
-apiRouter.post('/ziwei/calculate', (req, res) => {
+apiRouter.post('/ziwei/calculate', requireAuth, (req, res) => {
   const { birthYear, birthMonth, birthDay, birthHour, gender } = req.body || {};
   if (!birthYear || !birthMonth || !birthDay || birthHour === undefined || !gender) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -2616,6 +2872,7 @@ const parseRecordsQuery = (source) => {
     sort,
     status,
     timezoneOffsetMinutes,
+    clientId,
   } = source || {};
 
   const parsedPage = Number(page);
@@ -2635,6 +2892,7 @@ const parseRecordsQuery = (source) => {
   const sortOption = typeof sort === 'string' && sort.trim() ? sort.trim() : 'created-desc';
   const statusOption = typeof status === 'string' ? status.trim().toLowerCase() : 'active';
   const normalizedStatus = ['active', 'deleted', 'all'].includes(statusOption) ? statusOption : 'active';
+  const normalizedClientId = normalizeClientId(clientId);
 
   return {
     safePage,
@@ -2646,10 +2904,15 @@ const parseRecordsQuery = (source) => {
     timezoneOffsetMinutes: resolvedTimezoneOffsetMinutes,
     sortOption,
     normalizedStatus,
+    clientId: normalizedClientId,
   };
 };
 
 const getBaziRecords = async (req, res, source) => {
+  const sourceWithClient = {
+    ...(source || {}),
+    clientId: source?.clientId ?? req.headers['x-client-id'],
+  };
   const {
     safePage,
     safePageSize,
@@ -2660,7 +2923,8 @@ const getBaziRecords = async (req, res, source) => {
     timezoneOffsetMinutes,
     sortOption,
     normalizedStatus,
-  } = parseRecordsQuery(source);
+    clientId,
+  } = parseRecordsQuery(sourceWithClient);
   const hasQuotes = normalizedQuery.includes('"') || normalizedQuery.includes("'");
   const searchTerms = normalizedQuery
     ? (hasQuotes ? parseSearchTerms(normalizedQuery) : [normalizedQuery])
@@ -2678,12 +2942,19 @@ const getBaziRecords = async (req, res, source) => {
   const baseWhere = { userId: req.user.id };
   const where = { userId: req.user.id };
   const deletedIds = await fetchDeletedRecordIds(req.user.id);
+  const scopedDeletedIds = CLIENT_DELETE_SCOPE_ENABLED && clientId
+    ? deletedIds.filter((id) => {
+      const recordSet = getClientDeletedSet(req.user.id, clientId);
+      return recordSet ? recordSet.has(id) : false;
+    })
+    : deletedIds;
 
   if (normalizedStatus === 'active' && deletedIds.length) {
     baseWhere.id = { notIn: deletedIds };
     where.id = { notIn: deletedIds };
   } else if (normalizedStatus === 'deleted') {
-    if (!deletedIds.length) {
+    const filteredIds = CLIENT_DELETE_SCOPE_ENABLED && clientId ? scopedDeletedIds : deletedIds;
+    if (!filteredIds.length) {
       return res.json({
         records: [],
         hasMore: false,
@@ -2691,8 +2962,8 @@ const getBaziRecords = async (req, res, source) => {
         filteredCount: 0,
       });
     }
-    baseWhere.id = { in: deletedIds };
-    where.id = { in: deletedIds };
+    baseWhere.id = { in: filteredIds };
+    where.id = { in: filteredIds };
   }
   if (validGender) where.gender = validGender;
   if (rangeType === 'today') {
@@ -2979,6 +3250,7 @@ apiRouter.post('/bazi/records/bulk-delete', requireAuth, async (req, res) => {
   if (!ids || !ids.length) {
     return res.status(400).json({ error: 'No record ids provided' });
   }
+  const clientId = normalizeClientId(req.headers['x-client-id']);
 
   const normalizedIds = ids
     .map((id) => parseIdParam(id))
@@ -3005,6 +3277,7 @@ apiRouter.post('/bazi/records/bulk-delete', requireAuth, async (req, res) => {
       VALUES ${Prisma.join(existingIds.map((id) => Prisma.sql`(${req.user.id}, ${id})`))}
     `
   );
+  trackClientDeletedRecords(req.user.id, clientId, existingIds);
 
   res.json({
     deleted: existingIds.length,
@@ -3029,6 +3302,7 @@ apiRouter.get('/bazi/records/:id', requireAuth, async (req, res) => {
 apiRouter.delete('/bazi/records/:id', requireAuth, async (req, res) => {
   const recordId = parseIdParam(req.params.id);
   if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
+  const clientId = normalizeClientId(req.headers['x-client-id']);
   const record = await prisma.baziRecord.findFirst({
     where: { id: recordId, userId: req.user.id },
   });
@@ -3046,12 +3320,14 @@ apiRouter.delete('/bazi/records/:id', requireAuth, async (req, res) => {
   await prisma.$executeRaw`
     INSERT OR IGNORE INTO BaziRecordTrash (userId, recordId) VALUES (${req.user.id}, ${recordId})
   `;
+  trackClientDeletedRecords(req.user.id, clientId, [recordId]);
   res.json({ status: 'ok', softDeleted: true });
 });
 
 apiRouter.post('/bazi/records/:id/restore', requireAuth, async (req, res) => {
   const recordId = parseIdParam(req.params.id);
   if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
+  const clientId = normalizeClientId(req.headers['x-client-id']);
   const record = await prisma.baziRecord.findFirst({
     where: { id: recordId, userId: req.user.id },
   });
@@ -3068,6 +3344,7 @@ apiRouter.post('/bazi/records/:id/restore', requireAuth, async (req, res) => {
   await prisma.$executeRaw`
     DELETE FROM BaziRecordTrash WHERE userId = ${req.user.id} AND recordId = ${recordId}
   `;
+  removeClientDeletedRecord(req.user.id, clientId, recordId);
 
   res.json({ status: 'ok', record: serializeRecordWithTimezone(record) });
 });
@@ -3189,9 +3466,20 @@ apiRouter.post('/bazi/ai-interpret', requireAuth, async (req, res) => {
 
 // --- Tarot Endpoints ---
 
-apiRouter.post('/tarot/draw', requireAuth, async (req, res) => {
-  const { spreadType = 'SingleCard' } = req.body;
-  res.json(drawTarot({ spreadType }));
+apiRouter.get('/tarot/cards', (req, res) => {
+  res.json({ cards: tarotDeck });
+});
+
+apiRouter.post('/tarot/draw', async (req, res) => {
+  const { spreadType = 'SingleCard' } = req.body || {};
+  const normalizedSpread = spreadType || 'SingleCard';
+  const needsAuth = normalizedSpread !== 'SingleCard';
+  const user = await resolveOptionalUser(req, res);
+  if (res.headersSent) return;
+  if (needsAuth && !user) {
+    return res.status(401).json({ error: 'Login required for this spread.' });
+  }
+  res.json(drawTarot({ spreadType: normalizedSpread }));
 });
 
 apiRouter.post('/tarot/ai-interpret', requireAuth, async (req, res) => {
@@ -3814,13 +4102,20 @@ const setupGracefulShutdown = (httpServer) => {
 };
 
 if (NODE_ENV !== 'test' && isMain) {
-  server.listen(PORT, () => {
-    console.log(`BaZi Master API running on http://localhost:${PORT}`);
-  });
+  void (async () => {
+    try {
+      await ensureUserSettingsTable();
+      await ensureDefaultUser();
+    } catch (error) {
+      console.error('Failed to initialize server prerequisites:', error);
+    }
 
-  void ensureUserSettingsTable();
-  void ensureDefaultUser();
-  setupGracefulShutdown(server);
+    server.listen(PORT, () => {
+      console.log(`BaZi Master API running on http://localhost:${PORT}`);
+    });
+
+    setupGracefulShutdown(server);
+  })();
 }
 
 export {
