@@ -2047,7 +2047,9 @@ app.get('/api/zodiac/compatibility', (req, res) => {
 
 app.get('/api/auth/google', (req, res) => {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    return res.status(500).json({ error: 'Google OAuth not configured' });
+    const nextPath = sanitizeNextPath(req.query.next);
+    const redirectUrl = buildOauthRedirectUrl({ error: 'not_configured', nextPath });
+    return res.redirect(redirectUrl);
   }
 
   const nextPath = sanitizeNextPath(req.query.next);

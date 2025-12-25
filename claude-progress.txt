@@ -31,3 +31,7 @@
 - Re-verified registered Bazi flow and I Ching flow via Playwright scripts; captured new screenshots.
 - Marked feature_list.json test #5 as passing. Current progress: 10/479 tests passing.
 - Next: continue remaining cross-module functional tests and start Tarot/Zodiac flows.
+- Updated Google OAuth start endpoint to redirect back to login with a not-configured error instead of returning raw JSON, keeping OAuth flow consistent with frontend error handling.
+- Re-ran core Playwright checks: bazi-calculation and iching specs; fixed port conflict and confirmed pass.
+- Verified login flow including mocked Google OAuth redirect via Playwright (login.spec.js). Marked feature_list.json test #6 as passing. Current progress: 11/479 tests passing.
+- Next: continue remaining functional tests (Tarot/Zodiac) and ensure OAuth can be validated with real provider credentials if available.
