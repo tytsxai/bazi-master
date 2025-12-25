@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../backend/node_modules/@prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String // In a real app, hash this! For now, simple storage.
+  name     String?
+  baziRecords BaziRecord[]
+  favorites   Favorite[]
+}
+
+model BaziRecord {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  birthYear     Int
+  birthMonth    Int
+  birthDay      Int
+  birthHour     Int
+  gender        String
+  birthLocation String?
+  timezone      String?
+  pillars       String
+  fiveElements  String
+  tenGods       String?
+  luckCycles    String?
+  createdAt     DateTime @default(now())
+
+  user      User        @relation(fields: [userId], references: [id])
+  favorites Favorite[]
+}
+
+model Favorite {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  recordId  Int
+  createdAt DateTime @default(now())
+
+  user   User       @relation(fields: [userId], references: [id])
+  record BaziRecord @relation(fields: [recordId], references: [id])
+
+  @@unique([userId, recordId])
+}

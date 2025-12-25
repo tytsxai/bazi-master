@@ -20,7 +20,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -204,7 +204,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -4567,7 +4567,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "style",
@@ -4577,7 +4577,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "style",
@@ -4587,7 +4587,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "style",
@@ -4647,7 +4647,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "style",

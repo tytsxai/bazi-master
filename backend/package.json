@@ -1,0 +1,20 @@
+{
+  "name": "bazi-master-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "prisma:generate": "prisma generate --schema=../prisma/schema.prisma",
+    "prisma:push": "prisma db push --schema=../prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.2",
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "lunar-javascript": "^1.7.7"
+  },
+  "devDependencies": {
+    "prisma": "^5.10.2"
+  }
+}

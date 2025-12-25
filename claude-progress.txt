@@ -2,3 +2,18 @@
 - Created init.sh for environment setup guidance.
 - Added README.md and base project directories: frontend/, backend/, prisma/, docs/.
 - Initialized git repository and committed initial setup.
+- Implemented a Vite + React + Tailwind frontend scaffold with routing, i18n, and protected routes (Home/Login/Profile/History/Bazi/Tarot/Iching/Zodiac).
+- Added minimal Express backend scaffold with /health endpoint and npm scripts.
+- init.sh now succeeds after backend package.json added (frontend and backend installs).
+- Implemented real auth + frontend integration (Login/Register verified).
+- Set up Playwright for headless E2E testing (verified with npm run dev + npx playwright test).
+- Environment is healthy: Ports 3000/4000 fixed, DB synced.
+- Ready to implement Bazi calculation features.
+- Implemented Bazi calculation backend with lunar-javascript pillars, five elements, Ten Gods, and luck cycles plus auth-protected save/history/favorite endpoints.
+- Added Prisma models for bazi records and favorites, regenerated Prisma client for backend.
+- Built Bazi UI form, results display, full analysis, save to history, and add to favorites flows.
+- Implemented History and Favorites pages with real data fetch and delete actions; added Favorites route and nav.
+- Added Playwright verification scripts and captured screenshots in verification/.
+- Verified auth guard redirect to login and API 401 without token.
+- Marked feature_list.json test #1 (registered user journey) as passing. Current progress: 6/479 tests passing.
+- Next: implement guest Bazi flow and expand Bazi analysis accuracy, then continue remaining functional tests.

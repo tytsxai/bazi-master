@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-family: 'Noto Serif SC', 'Times New Roman', serif;
+  background: radial-gradient(circle at top, rgba(75,47,122,0.35), rgba(11,6,24,0.9) 55%),
+    linear-gradient(135deg, rgba(45,27,78,0.8), rgba(11,6,24,0.95));
+  min-height: 100vh;
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+  backdrop-filter: blur(18px);
+}
+
+.starfield {
+  background-image: radial-gradient(rgba(212,175,55,0.4) 1px, transparent 1px);
+  background-size: 120px 120px;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1.5rem;
+  top: 1rem;
+  z-index: 50;
+  transform: translateY(-200%);
+  border-radius: 9999px;
+  border: 1px solid rgba(212, 175, 55, 0.6);
+  background: rgba(11, 6, 24, 0.9);
+  padding: 0.4rem 0.9rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: rgba(212, 175, 55, 0.95);
+  transition: transform 0.2s ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid rgba(212, 175, 55, 0.95);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.25);
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus:not(:focus-visible) {
+  outline: none;
+}

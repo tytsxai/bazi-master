@@ -3,52 +3,37 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-printf "\nBaZi Master init\n"
+printf "\nBaZi Master Init & Status Check\n"
 
+# Check Node.js
 if ! command -v node >/dev/null 2>&1; then
-  echo "Node.js is required. Please install Node.js 18+ before continuing."
+  echo "Node.js is required. Please install Node.js 18+."
   exit 1
 fi
 
-if ! command -v npm >/dev/null 2>&1; then
-  echo "npm is required. Please install npm before continuing."
-  exit 1
-fi
+# Check psql/redis (optional warning, not failure)
+if ! command -v psql >/dev/null 2>&1; then echo "Optional: PostgreSQL client (psql) not found."; fi
+if ! command -v redis-cli >/dev/null 2>&1; then echo "Optional: Redis client (redis-cli) not found."; fi
 
-if ! command -v psql >/dev/null 2>&1; then
-  echo "PostgreSQL client not found (psql). Please install PostgreSQL."
-fi
-
-if ! command -v redis-cli >/dev/null 2>&1; then
-  echo "Redis client not found (redis-cli). Please install Redis."
+# Install/Update Dependencies
+if [ -d "$ROOT_DIR/backend" ]; then
+  echo "Checking backend dependencies..."
+  (cd "$ROOT_DIR/backend" && npm install)
+  
+  # Ensure Prisma DB is ready
+  echo "Ensuring Database is synced..."
+  (cd "$ROOT_DIR/backend" && npx prisma db push --schema=../prisma/schema.prisma)
 fi
 
 if [ -d "$ROOT_DIR/frontend" ]; then
-  echo "Installing frontend dependencies..."
+  echo "Checking frontend dependencies..."
   (cd "$ROOT_DIR/frontend" && npm install)
 fi
 
-if [ -d "$ROOT_DIR/backend" ]; then
-  echo "Installing backend dependencies..."
-  (cd "$ROOT_DIR/backend" && npm install)
-fi
-
-echo "\nStarting services (if configured)..."
-
-if [ -d "$ROOT_DIR/backend" ]; then
-  echo "Backend: npm run dev (expected to run on http://localhost:4000)"
-fi
-
-if [ -d "$ROOT_DIR/frontend" ]; then
-  echo "Frontend: npm run dev (expected to run on http://localhost:3000)"
-fi
-
-echo "\nNext steps:"
-if [ -d "$ROOT_DIR/backend" ]; then
-  echo "1) In one terminal: cd backend && npm run dev"
-fi
-if [ -d "$ROOT_DIR/frontend" ]; then
-  echo "2) In another terminal: cd frontend && npm run dev"
-fi
-
-echo "\nAccess the app at: http://localhost:3000"
+echo "\n-----------------------------------------------------------"
+echo "Setup Complete."
+echo "-----------------------------------------------------------"
+echo "To clean start services:"
+echo "1. Backend: cd backend && npm run dev (Runs on :4000)"
+echo "2. Frontend: cd frontend && npm run dev (Runs on :3000, proxies to :4000)"
+echo "-----------------------------------------------------------"
