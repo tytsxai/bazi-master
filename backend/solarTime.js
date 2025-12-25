@@ -97,15 +97,28 @@ const computeTrueSolarTime = ({
   const minute = Number.isFinite(Number(birthMinute)) ? Number(birthMinute) : 0;
   if (![year, month, day, hour].every(Number.isFinite)) return null;
 
+  // 1. Longitude Correction (4 minutes per degree from standard meridian)
   const offsetHours = timezoneOffsetMinutes / 60;
   const standardMeridian = offsetHours * 15;
-  const correctionMinutes = (longitude - standardMeridian) * 4;
+  const longitudeCorrection = (longitude - standardMeridian) * 4;
+
+  // 2. Equation of Time (EoT) Correction
+  // Simple but effective approximation for astronomical calculations
   const baseUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
-  const correctedDate = new Date(baseUtc + correctionMinutes * 60000);
+  const startOfYear = Date.UTC(year, 0, 1);
+  const dayOfYear = Math.floor((baseUtc - startOfYear) / (24 * 60 * 60 * 1000)) + 1;
+  const b = (360 / 365) * (dayOfYear - 81);
+  const bRad = (b * Math.PI) / 180;
+  const eotCorrection = 9.87 * Math.sin(2 * bRad) - 7.53 * Math.cos(bRad) - 1.5 * Math.sin(bRad);
+
+  const totalCorrectionMinutes = longitudeCorrection + eotCorrection;
+  const correctedDate = new Date(baseUtc + totalCorrectionMinutes * 60000);
 
   return {
     applied: true,
-    correctionMinutes: Math.round(correctionMinutes * 100) / 100,
+    correctionMinutes: Math.round(totalCorrectionMinutes * 100) / 100,
+    longitudeCorrection: Math.round(longitudeCorrection * 100) / 100,
+    eotCorrection: Math.round(eotCorrection * 100) / 100,
     correctedDate,
     corrected: {
       year: correctedDate.getUTCFullYear(),

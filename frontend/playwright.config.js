@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const fallbackPort = 3100 + Math.floor(Math.random() * 800);
-const webPort = Number(process.env.E2E_WEB_PORT || fallbackPort);
+const webPort = Number(process.env.E2E_WEB_PORT || process.env.PW_PORT || fallbackPort);
 const baseURL = `http://127.0.0.1:${webPort}`;
 
 export default defineConfig({
@@ -33,8 +33,10 @@ export default defineConfig({
         timeout: 120 * 1000,
         env: {
             ...process.env,
-            E2E_SERVER: '1',
+            E2E_SERVER: process.env.E2E_SERVER || process.env.PW_SERVER || '1',
             E2E_WEB_PORT: String(webPort),
+            PW_SERVER: '1',
+            PW_PORT: String(webPort),
             AI_PROVIDER: 'mock',
             OPENAI_API_KEY: '',
             ANTHROPIC_API_KEY: '',
