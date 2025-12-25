@@ -400,7 +400,7 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const GOOGLE_REDIRECT_URI =
   process.env.GOOGLE_REDIRECT_URI || `http://localhost:${PORT}/api/auth/google/callback`;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const oauthStateStore = new Map();
 const ADMIN_EMAILS = new Set(
@@ -2217,10 +2217,14 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/api/auth/wechat/redirect', (req, res) => {
-  if (!WECHAT_APP_ID) {
-    return res.status(500).json({ error: 'WeChat OAuth not configured' });
-  }
   const redirectPath = sanitizeNextPath(req.query?.next) || '/profile';
+  if (!WECHAT_APP_ID) {
+    const target = new URL('/login', WECHAT_FRONTEND_URL);
+    target.searchParams.set('error', 'wechat_not_configured');
+    target.searchParams.set('provider', 'wechat');
+    target.searchParams.set('next', redirectPath);
+    return res.redirect(target.toString());
+  }
   const state = createWeChatState(redirectPath);
   const redirectUri = encodeURIComponent(WECHAT_REDIRECT_URI);
   const scope = encodeURIComponent(WECHAT_SCOPE);

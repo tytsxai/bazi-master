@@ -35,3 +35,10 @@
 - Re-ran core Playwright checks: bazi-calculation and iching specs; fixed port conflict and confirmed pass.
 - Verified login flow including mocked Google OAuth redirect via Playwright (login.spec.js). Marked feature_list.json test #6 as passing. Current progress: 11/479 tests passing.
 - Next: continue remaining functional tests (Tarot/Zodiac) and ensure OAuth can be validated with real provider credentials if available.
+- Verified core flows (BaZi guest + I Ching) via Playwright before new work; both passed.
+- Fixed WeChat OAuth redirect to return to login when not configured and aligned frontend error messaging.
+- Updated backend default FRONTEND_URL to http://localhost:3000 to match Vite config.
+- Added Playwright coverage for WeChat OAuth redirect success (mocked) and not-configured error state.
+- Re-ran login Playwright suite; all tests passed.
+- Marked feature_list.json test #7 as passing. Current progress: 12/479 tests passing.
+- Next: continue remaining functional tests (Tarot/Zodiac) and validate OAuth with real provider credentials if available.
