@@ -10,7 +10,7 @@ export function useAuthFetch() {
   const navigate = useNavigate();
   const location = useLocation();
   const isBackendToken = (value) =>
-    typeof value === 'string' && /^token_\\d+_\\d+_[A-Za-z0-9]+$/.test(value);
+    typeof value === 'string' && /^token_\d+_\d+_[A-Za-z0-9]+$/.test(value);
 
   return useCallback(
     async (input, init = {}, retryAction = null) => {

@@ -12,7 +12,7 @@ const SESSION_EXPIRED_KEY = 'bazi_session_expired';
 const PROFILE_NAME_KEY = 'bazi_profile_name';
 const SESSION_IDLE_MS = 30 * 60 * 1000;
 const isBackendToken = (value) =>
-  typeof value === 'string' && /^token_\\d+_\\d+_[A-Za-z0-9]+$/.test(value);
+  typeof value === 'string' && /^token_\d+_\d+_[A-Za-z0-9]+$/.test(value);
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY));
