@@ -6,7 +6,6 @@ import path from 'path';
 import cors from 'cors';
 import compression from 'compression';
 import helmet from 'helmet';
-import { PrismaClient } from '@prisma/client';
 import { pathToFileURL, fileURLToPath } from 'url';
 import swaggerUi from 'swagger-ui-express';
 import { PrismaClient, Prisma } from '@prisma/client';
