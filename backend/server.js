@@ -2633,6 +2633,19 @@ apiRouter.get('/ai/providers', (req, res) => {
   });
 });
 
+apiRouter.get('/system/cache-status', requireAuth, async (req, res) => {
+  if (IS_PRODUCTION) {
+    return res.status(404).json({ error: 'Not available' });
+  }
+  const redis = await checkRedis();
+  res.json({
+    redis,
+    sessionCache: { mirror: Boolean(sessionStore.hasMirror?.()) },
+    baziCache: { mirror: hasBaziCacheMirror() },
+    timestamp: new Date().toISOString(),
+  });
+});
+
 apiRouter.get('/locations', (req, res) => {
   res.json({ locations: listKnownLocations() });
 });

@@ -112,3 +112,6 @@
 - Verified AI streaming flow end-to-end via Playwright (PW_PORT=3000); captured verification screenshots.
 - Marked feature_list.json test #25 (AI streaming via WebSocket flow) as passing. Current progress: 48/479 tests passing.
 - Next: continue remaining functional tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases).
+- Added cache validation flow: exposed /api/system/cache-status (non-prod, auth) and cache verification hooks for Redis session and BaZi calculation cache.
+- Added Playwright cache-validation.spec.js with cache status checks, cache hit/miss validation, and screenshots; updated Playwright webServer env to set REDIS_URL.
+- Verified cache validation flow end-to-end via Playwright; marked feature_list.json test #26 as passing. Current progress: 49/479 tests passing.
