@@ -12,7 +12,7 @@ export default function Home() {
   const { t } = useTranslation();
 
   return (
-    <main id="main-content" tabIndex={-1} className="relative px-6 pb-16">
+    <main id="main-content" tabIndex={-1} className="container mx-auto relative pb-16">
       <section className="starfield rounded-3xl border border-white/10 bg-white/5 p-10 shadow-glass">
         <div className="max-w-3xl">
           <p className="text-sm uppercase tracking-[0.3em] text-gold-400/80">Oracle Platform</p>
@@ -27,7 +27,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mt-10 grid gap-6 md:grid-cols-2">
+      <section className="mt-10 grid gap-6 md:grid-cols-2 3xl:grid-cols-4">
         {modules.map((mod) => (
           <Link
             key={mod.title}

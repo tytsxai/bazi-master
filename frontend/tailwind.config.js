@@ -1,7 +1,22 @@
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
+    container: {
+      center: true,
+      padding: '1.5rem',
+      screens: {
+        sm: '100%',
+        md: '100%',
+        lg: '1024px',
+        xl: '1280px',
+        '2xl': '1536px',
+        '3xl': '1720px'
+      }
+    },
     extend: {
+      screens: {
+        '3xl': '1920px'
+      },
       colors: {
         mystic: {
           950: '#0b0618',
@@ -13,7 +28,11 @@ export default {
         },
         gold: {
           500: '#d4af37',
-          400: '#e3c45c'
+          400: '#e3c45c',
+          300: '#edcf73',
+          200: '#f5e2a6',
+          100: '#fbf4d4',
+          50: '#fdfbe9'
         }
       },
       fontFamily: {

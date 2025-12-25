@@ -14,6 +14,7 @@ model User {
   password String // In a real app, hash this! For now, simple storage.
   name     String?
   baziRecords BaziRecord[]
+  tarotRecords TarotRecord[]
   favorites   Favorite[]
 }
 
@@ -48,3 +49,16 @@ model Favorite {
 
   @@unique([userId, recordId])
 }
+
+model TarotRecord {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  spreadType    String   // e.g., "CelticCross"
+  cards         String   // JSON string of drawn cards array with positions
+  userQuestion  String?
+  aiInterpretation String? // Markdown content
+  createdAt     DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+}
+

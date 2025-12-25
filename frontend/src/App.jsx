@@ -31,6 +31,7 @@ export default function App() {
         <Route path="/tarot" element={<Tarot />} />
         <Route path="/iching" element={<Iching />} />
         <Route path="/zodiac" element={<Zodiac />} />
+        <Route path="/404" element={<NotFound />} />
         <Route
           path="/profile"
           element={

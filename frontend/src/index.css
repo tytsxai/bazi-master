@@ -11,6 +11,7 @@ body {
   background: radial-gradient(circle at top, rgba(75,47,122,0.35), rgba(11,6,24,0.9) 55%),
     linear-gradient(135deg, rgba(45,27,78,0.8), rgba(11,6,24,0.95));
   min-height: 100vh;
+  @apply text-slate-200;
 }
 
 .glass-card {
@@ -52,4 +53,16 @@ body {
 
 :where(a, button, input, select, textarea, [tabindex]):focus:not(:focus-visible) {
   outline: none;
+}
+
+@layer components {
+  .mobile-menu-btn {
+    @apply p-2 text-gold-400 hover:bg-white/10 rounded-md min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+  .mobile-nav {
+    @apply absolute top-full left-0 w-full bg-mystic-900/95 border-b border-gold-400/20 p-6 flex flex-col gap-4 shadow-xl z-50 backdrop-blur-xl md:hidden;
+  }
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] flex items-center;
+  }
 }
