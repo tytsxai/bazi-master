@@ -2,10 +2,38 @@ import express from 'express';
 import http from 'http';
 import crypto from 'crypto';
 import cors from 'cors';
+import { pathToFileURL } from 'url';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Solar } from 'lunar-javascript';
-import tarotDeck from './data/tarotData.js';
-import { TRIGRAMS, hexagrams, hexagramByTrigrams, hexagramByLines } from './data/ichingHexagrams.js';
+import { drawTarot, getTarotSpreadConfig } from './tarot.js';
+import { hexagrams } from './data/ichingHexagrams.js';
+import {
+  pickTrigram,
+  buildHexagram,
+  applyChangingLines,
+  deriveChangingLinesFromNumbers,
+  deriveChangingLinesFromTimeContext,
+} from './iching.js';
+import { calculateRisingSign } from './zodiac.js';
+import { validateBaziInput } from './validation.js';
+import { buildSearchOr, parseSearchTerms, recordMatchesQuery } from './search.js';
+import { createAiGuard, createInFlightDeduper } from './lib/concurrency.js';
+import {
+  buildBaziCacheKey,
+  buildFiveElementsPercent,
+  getCachedBaziCalculation,
+  invalidateBaziCalculationCache,
+  normalizeBaziResult,
+  primeBaziCalculationCache,
+  setBaziCacheEntry,
+} from './baziCache.js';
+import { normalizePageNumber, normalizePageSize } from './pagination.js';
+import { createAuthorizeToken, createRequireAuth, requireAdmin } from './auth.js';
+import {
+  formatTimezoneOffset,
+  parseTimezoneOffsetMinutes,
+  buildBirthTimeMeta,
+} from './timezone.js';
 
 const prisma = new PrismaClient();
 const app = express();
@@ -62,9 +90,6 @@ const isUrlTooLong = (req) => {
   return url.length > MAX_URL_LENGTH;
 };
 
-const isWhitespaceOnly = (value) =>
-  typeof value === 'string' && value.length > 0 && value.trim().length === 0;
-
 app.use((req, res, next) => {
   if (isUrlTooLong(req)) {
     return res.status(414).json({ error: 'Request-URI Too Long' });
@@ -82,8 +107,8 @@ const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-202406
 const AI_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS || 700);
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 15000);
 const AI_CONCURRENCY_ERROR = 'AI request already in progress. Please wait.';
-const aiInFlightByUser = new Set();
-const baziSubmitInFlight = new Map();
+const { acquire: acquireAiGuard } = createAiGuard();
+const baziSubmitDeduper = createInFlightDeduper();
 
 const AVAILABLE_PROVIDERS = [
   { name: 'openai', enabled: Boolean(process.env.OPENAI_API_KEY) },
@@ -253,15 +278,6 @@ const generateAIContent = async ({ system, user, fallback }) => {
   return fallback();
 };
 
-const acquireAiGuard = (userId) => {
-  if (!userId) return () => {};
-  if (aiInFlightByUser.has(userId)) return null;
-  aiInFlightByUser.add(userId);
-  return () => {
-    aiInFlightByUser.delete(userId);
-  };
-};
-
 const buildBaziPrompt = ({ pillars, fiveElements, tenGods, luckCycles, strength }) => {
   const elementLines = fiveElements
     ? Object.entries(fiveElements).map(([key, value]) => `- ${key}: ${value}`).join('\n')
@@ -390,8 +406,6 @@ const buildBaziSubmitKey = (userId, payload) => {
 };
 
 // --- Mappings & Constants ---
-const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
-const SESSION_IDLE_MS = Number(process.env.SESSION_IDLE_MS || 30 * 60 * 1000);
 const RESET_TOKEN_TTL_MS = Number(process.env.RESET_TOKEN_TTL_MS || 30 * 60 * 1000);
 const sessionStore = new Map();
 const resetTokenStore = new Map();
@@ -417,15 +431,6 @@ const WECHAT_REDIRECT_URI = process.env.WECHAT_REDIRECT_URI
   || `${process.env.BACKEND_BASE_URL || 'http://localhost:4000'}/api/auth/wechat/callback`;
 const WECHAT_STATE_TTL_MS = 10 * 60 * 1000;
 const wechatStateStore = new Map();
-
-const parseAuthToken = (token) => {
-  const match = token.match(/^token_(\d+)_(\d+)$/);
-  if (!match) return null;
-  const userId = Number(match[1]);
-  const issuedAt = Number(match[2]);
-  if (!Number.isFinite(userId) || !Number.isFinite(issuedAt)) return null;
-  return { userId, issuedAt };
-};
 
 const sanitizeNextPath = (raw) => {
   if (typeof raw !== 'string') return null;
@@ -466,6 +471,9 @@ const isAdminUser = (user) => {
   if (!user?.email) return false;
   return ADMIN_EMAILS.has(String(user.email).toLowerCase());
 };
+
+const authorizeToken = createAuthorizeToken({ prisma, sessionStore, isAdminUser });
+const requireAuth = createRequireAuth({ authorizeToken });
 
 const createWeChatState = (redirectPath) => {
   const state = crypto.randomBytes(16).toString('hex');
@@ -744,75 +752,6 @@ const sanitizeQueryParam = (raw) => {
   if (!/^[a-z]+$/.test(normalized)) return null;
   return normalized;
 };
-const ZODIAC_ORDER = [
-  'aries',
-  'taurus',
-  'gemini',
-  'cancer',
-  'leo',
-  'virgo',
-  'libra',
-  'scorpio',
-  'sagittarius',
-  'capricorn',
-  'aquarius',
-  'pisces'
-];
-
-const normalizeAngle = (deg) => ((deg % 360) + 360) % 360;
-const degToRad = (deg) => (deg * Math.PI) / 180;
-const radToDeg = (rad) => (rad * 180) / Math.PI;
-
-const calculateRisingSign = ({
-  birthYear,
-  birthMonth,
-  birthDay,
-  birthHour,
-  birthMinute,
-  latitude,
-  longitude,
-  timezoneOffsetMinutes
-}) => {
-  const offsetMinutes = Number.isFinite(timezoneOffsetMinutes) ? timezoneOffsetMinutes : 0;
-  const utcMillis = Date.UTC(
-    birthYear,
-    birthMonth - 1,
-    birthDay,
-    birthHour,
-    birthMinute || 0,
-    0
-  ) - offsetMinutes * 60 * 1000;
-
-  const jd = utcMillis / 86400000 + 2440587.5;
-  const t = (jd - 2451545.0) / 36525;
-  const gmst = normalizeAngle(
-    280.46061837 +
-      360.98564736629 * (jd - 2451545.0) +
-      0.000387933 * t * t -
-      (t * t * t) / 38710000
-  );
-  const lst = normalizeAngle(gmst + longitude);
-
-  const theta = degToRad(lst);
-  const epsilon = degToRad(23.439291 - 0.0130042 * t);
-  const phi = degToRad(latitude);
-
-  const ascRad = Math.atan2(
-    -Math.cos(theta),
-    Math.sin(theta) * Math.cos(epsilon) + Math.tan(phi) * Math.sin(epsilon)
-  );
-  const ascDeg = normalizeAngle(radToDeg(ascRad) + 180);
-  const signIndex = Math.floor(ascDeg / 30);
-  const signKey = ZODIAC_ORDER[signIndex] || 'aries';
-
-  return {
-    signKey,
-    ascendant: {
-      longitude: Number(ascDeg.toFixed(2)),
-      localSiderealTime: Number((lst / 15).toFixed(2))
-    }
-  };
-};
 
 const buildHoroscope = (sign, period) => {
   const now = new Date();
@@ -1038,52 +977,6 @@ function buildPillar(ganChar, zhiChar) {
   };
 }
 
-const authorizeToken = async (token) => {
-  if (!token) throw new Error('Unauthorized');
-  const parsed = parseAuthToken(token);
-  if (!parsed) throw new Error('Invalid token');
-  if (Date.now() - parsed.issuedAt > TOKEN_TTL_MS) {
-    throw new Error('Token expired');
-  }
-
-  const now = Date.now();
-  const lastSeen = sessionStore.get(token) ?? parsed.issuedAt;
-  if (now - lastSeen > SESSION_IDLE_MS) {
-    sessionStore.delete(token);
-    throw new Error('Session expired');
-  }
-  sessionStore.set(token, now);
-
-  const userId = parsed.userId;
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw new Error('User not found');
-  return {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    isAdmin: isAdminUser(user)
-  };
-};
-
-const requireAuth = async (req, res, next) => {
-  const auth = req.headers.authorization || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  try {
-    const user = await authorizeToken(token);
-    req.user = user;
-    next();
-  } catch (error) {
-    res.status(401).json({ error: error.message || 'Unauthorized' });
-  }
-};
-
-const requireAdmin = (req, res, next) => {
-  if (!req.user?.isAdmin) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  return next();
-};
-
 const serializeRecord = (record) => ({
   ...record,
   pillars: JSON.parse(record.pillars),
@@ -1135,103 +1028,6 @@ const serializeIchingRecord = (record) => ({
   changingLines: parseJsonValue(record.changingLines),
   timeContext: parseJsonValue(record.timeContext),
 });
-
-const formatTimezoneOffset = (offsetMinutes) => {
-  if (!Number.isFinite(offsetMinutes)) return 'UTC';
-  const sign = offsetMinutes >= 0 ? '+' : '-';
-  const abs = Math.abs(offsetMinutes);
-  const hours = Math.floor(abs / 60);
-  const minutes = abs % 60;
-  return `UTC${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-};
-
-const parseTimezoneOffsetMinutes = (value) => {
-  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (/^(utc|gmt|z)$/i.test(trimmed)) return 0;
-  const match = trimmed.match(/^(?:utc|gmt)?\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?$/i);
-  if (!match) return null;
-  const sign = match[1] === '-' ? -1 : 1;
-  const hours = Number(match[2]);
-  const minutes = Number(match[3] || 0);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 14 || minutes > 59) return null;
-  return sign * (hours * 60 + minutes);
-};
-
-const getOffsetMinutesFromTimeZone = (timeZone, date) => {
-  if (typeof timeZone !== 'string' || !timeZone.trim()) return null;
-  try {
-    const dtf = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
-    const parts = dtf.formatToParts(date);
-    const values = {};
-    parts.forEach((part) => {
-      if (part.type !== 'literal') values[part.type] = part.value;
-    });
-    const asUtc = Date.UTC(
-      Number(values.year),
-      Number(values.month) - 1,
-      Number(values.day),
-      Number(values.hour),
-      Number(values.minute),
-      Number(values.second),
-    );
-    if (!Number.isFinite(asUtc)) return null;
-    return Math.round((asUtc - date.getTime()) / 60000);
-  } catch (error) {
-    return null;
-  }
-};
-
-const buildBirthTimeMeta = ({
-  birthYear,
-  birthMonth,
-  birthDay,
-  birthHour,
-  birthMinute,
-  timezone,
-  timezoneOffsetMinutes,
-}) => {
-  const year = Number(birthYear);
-  const month = Number(birthMonth);
-  const day = Number(birthDay);
-  const hour = Number.isFinite(Number(birthHour)) ? Number(birthHour) : 0;
-  const minute = Number.isFinite(Number(birthMinute)) ? Number(birthMinute) : 0;
-  if (![year, month, day].every(Number.isFinite)) {
-    return { timezoneOffsetMinutes: null, birthTimestamp: null, birthIso: null };
-  }
-
-  const offsetFromPayload = parseTimezoneOffsetMinutes(timezoneOffsetMinutes);
-  const offsetFromLabel = parseTimezoneOffsetMinutes(timezone);
-  const baseUtcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
-  const offsetFromZone = offsetFromLabel === null ? getOffsetMinutesFromTimeZone(timezone, baseUtcDate) : null;
-  const resolvedOffset = Number.isFinite(offsetFromPayload)
-    ? offsetFromPayload
-    : Number.isFinite(offsetFromLabel)
-      ? offsetFromLabel
-      : offsetFromZone;
-
-  if (!Number.isFinite(resolvedOffset)) {
-    return { timezoneOffsetMinutes: null, birthTimestamp: null, birthIso: null };
-  }
-
-  const birthTimestamp = Date.UTC(year, month - 1, day, hour, minute, 0) - resolvedOffset * 60 * 1000;
-  return {
-    timezoneOffsetMinutes: resolvedOffset,
-    birthTimestamp,
-    birthIso: new Date(birthTimestamp).toISOString(),
-  };
-};
 
 const serializeRecordWithTimezone = (record) => {
   const base = serializeRecord(record);
@@ -1288,18 +1084,6 @@ const sortRecordsByBirth = (records, direction) => {
   return keyed.map((entry) => entry.record);
 };
 
-const normalizeSearchValue = (value) => (value == null ? '' : String(value).toLowerCase());
-
-const recordMatchesQuery = (record, queryLower) => {
-  if (!queryLower) return true;
-  return [
-    record.birthLocation,
-    record.timezone,
-    record.gender,
-    record.pillars,
-  ].some((field) => normalizeSearchValue(field).includes(queryLower));
-};
-
 const parseJsonField = (value) => {
   if (value === null || value === undefined) return null;
   if (typeof value === 'string') {
@@ -1319,164 +1103,7 @@ const coerceInt = (value) => {
   return Math.trunc(numberValue);
 };
 
-const isValidCalendarDate = (year, month, day) => {
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year
-    && date.getUTCMonth() === month - 1
-    && date.getUTCDate() === day
-  );
-};
-
-const validateBaziInput = (raw) => {
-  const birthYear = Number(raw?.birthYear);
-  const birthMonth = Number(raw?.birthMonth);
-  const birthDay = Number(raw?.birthDay);
-  const birthHour = Number(raw?.birthHour);
-  const genderRaw = raw?.gender;
-  const gender = typeof genderRaw === 'string' ? genderRaw.trim() : '';
-  const birthLocationRaw = raw?.birthLocation;
-  const timezoneRaw = raw?.timezone;
-  if (isWhitespaceOnly(genderRaw) || isWhitespaceOnly(birthLocationRaw) || isWhitespaceOnly(timezoneRaw)) {
-    return { ok: false, payload: null, reason: 'whitespace' };
-  }
-  const birthLocation = typeof birthLocationRaw === 'string' ? birthLocationRaw.trim() : birthLocationRaw;
-  const timezone = typeof timezoneRaw === 'string' ? timezoneRaw.trim() : timezoneRaw;
-
-  if (
-    !Number.isInteger(birthYear)
-    || birthYear < 1
-    || birthYear > 9999
-    || !Number.isInteger(birthMonth)
-    || birthMonth < 1
-    || birthMonth > 12
-    || !Number.isInteger(birthDay)
-    || birthDay < 1
-    || birthDay > 31
-    || !Number.isInteger(birthHour)
-    || birthHour < 0
-    || birthHour > 23
-    || !gender
-    || !isValidCalendarDate(birthYear, birthMonth, birthDay)
-  ) {
-    return { ok: false, payload: null, reason: 'invalid' };
-  }
-
-  return {
-    ok: true,
-    payload: {
-      ...raw,
-      birthYear,
-      birthMonth,
-      birthDay,
-      birthHour,
-      gender,
-      birthLocation,
-      timezone,
-    },
-  };
-};
-
-const BAZI_CACHE_TTL_MS = Number(process.env.BAZI_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
-const BAZI_CACHE_MAX_ENTRIES = Number(process.env.BAZI_CACHE_MAX_ENTRIES || 500);
-const baziCalculationCache = new Map();
-
-const buildBaziCacheKey = (data) => {
-  if (!data) return null;
-  const birthYear = coerceInt(data.birthYear);
-  const birthMonth = coerceInt(data.birthMonth);
-  const birthDay = coerceInt(data.birthDay);
-  const birthHour = coerceInt(data.birthHour);
-  const gender =
-    typeof data.gender === 'string' ? data.gender.trim().toLowerCase() : null;
-
-  if (
-    birthYear === null
-    || birthMonth === null
-    || birthDay === null
-    || birthHour === null
-    || !gender
-  ) {
-    return null;
-  }
-
-  return `${birthYear}-${birthMonth}-${birthDay}-${birthHour}-${gender}`;
-};
-
-const buildFiveElementsPercent = (fiveElements) => {
-  if (!fiveElements || typeof fiveElements !== 'object') return null;
-  const total = Object.values(fiveElements).reduce((sum, value) => {
-    const next = Number(value);
-    return sum + (Number.isFinite(next) ? next : 0);
-  }, 0);
-
-  return ELEMENTS.reduce((acc, element) => {
-    const raw = Number(fiveElements[element]);
-    const safe = Number.isFinite(raw) ? raw : 0;
-    acc[element] = total ? Math.round((safe / total) * 100) : 0;
-    return acc;
-  }, {});
-};
-
-const normalizeBaziResult = (result) => {
-  if (!result || typeof result !== 'object') return result;
-  if (result.fiveElementsPercent || !result.fiveElements) return result;
-  const fiveElementsPercent = buildFiveElementsPercent(result.fiveElements);
-  if (!fiveElementsPercent) return result;
-  return { ...result, fiveElementsPercent };
-};
-
-const pruneBaziCache = () => {
-  if (!Number.isFinite(BAZI_CACHE_MAX_ENTRIES) || BAZI_CACHE_MAX_ENTRIES <= 0) {
-    return;
-  }
-  while (baziCalculationCache.size > BAZI_CACHE_MAX_ENTRIES) {
-    const oldestKey = baziCalculationCache.keys().next().value;
-    if (!oldestKey) break;
-    baziCalculationCache.delete(oldestKey);
-  }
-};
-
-const getCachedBaziCalculation = (key) => {
-  if (!key) return null;
-  const entry = baziCalculationCache.get(key);
-  if (!entry) return null;
-  if (entry.expiresAt && entry.expiresAt <= Date.now()) {
-    baziCalculationCache.delete(key);
-    return null;
-  }
-  // Refresh LRU position
-  baziCalculationCache.delete(key);
-  baziCalculationCache.set(key, entry);
-  return entry.value;
-};
-
-const setBaziCacheEntry = (key, value) => {
-  if (!key) return;
-  const normalized = normalizeBaziResult(value);
-  const expiresAt = Number.isFinite(BAZI_CACHE_TTL_MS) && BAZI_CACHE_TTL_MS > 0
-    ? Date.now() + BAZI_CACHE_TTL_MS
-    : null;
-  if (baziCalculationCache.has(key)) {
-    baziCalculationCache.delete(key);
-  }
-  baziCalculationCache.set(key, { value: normalized, expiresAt });
-  pruneBaziCache();
-};
-
-const primeBaziCalculationCache = (data, result) => {
-  const key = buildBaziCacheKey(data);
-  if (!key || !result) return;
-  setBaziCacheEntry(key, result);
-};
-
-const invalidateBaziCalculationCache = (data) => {
-  const key = typeof data === 'string' ? data : buildBaziCacheKey(data);
-  if (!key) return;
-  baziCalculationCache.delete(key);
-};
+ 
 
 const buildImportRecord = (raw, userId) => {
   if (!raw || typeof raw !== 'object') return null;
@@ -1538,34 +1165,6 @@ const parseIdParam = (value) => {
 };
 
 // --- I Ching Helpers ---
-
-const normalizeNumber = (value, modulo) => {
-  const safe = Math.abs(Number(value));
-  if (!Number.isFinite(safe)) return null;
-  const remainder = safe % modulo;
-  return remainder === 0 ? modulo : remainder;
-};
-
-const pickTrigram = (value) => {
-  const index = normalizeNumber(value, 8);
-  if (!index) return null;
-  return TRIGRAMS[index - 1];
-};
-
-const buildHexagram = (upper, lower) => {
-  if (!upper || !lower) return null;
-  return hexagramByTrigrams.get(`${upper.id}-${lower.id}`) || null;
-};
-
-const applyChangingLines = (hexagram, changingLines = []) => {
-  if (!hexagram || !changingLines.length) return hexagram;
-  const nextLines = [...hexagram.lines];
-  changingLines.forEach((line) => {
-    const index = Math.min(Math.max(line, 1), 6) - 1;
-    nextLines[index] = nextLines[index] ? 0 : 1;
-  });
-  return hexagramByLines.get(nextLines.join('')) || { ...hexagram, lines: nextLines };
-};
 
 // --- Core Calculation ---
 
@@ -2629,19 +2228,6 @@ app.post('/api/bazi/records', requireAuth, async (req, res) => {
   }
 
   const submitKey = buildBaziSubmitKey(req.user.id, validation.payload);
-  const inFlight = submitKey ? baziSubmitInFlight.get(submitKey) : null;
-  if (inFlight) {
-    try {
-      const record = await inFlight;
-      if (!record) {
-        return res.status(400).json({ error: 'Missing required fields' });
-      }
-      return res.json({ record: serializeRecordWithTimezone(record) });
-    } catch (e) {
-      console.error(e);
-      return res.status(500).json({ error: 'Internal server error' });
-    }
-  }
 
   const createRecord = async () => {
     const {
@@ -2704,9 +2290,22 @@ app.post('/api/bazi/records', requireAuth, async (req, res) => {
     });
   };
 
-  const createPromise = createRecord();
-  if (submitKey) {
-    baziSubmitInFlight.set(submitKey, createPromise);
+  const { promise: createPromise, isNew } = baziSubmitDeduper.getOrCreate(
+    submitKey,
+    createRecord
+  );
+
+  if (!isNew) {
+    try {
+      const record = await createPromise;
+      if (!record) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      return res.json({ record: serializeRecordWithTimezone(record) });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
   }
 
   try {
@@ -2719,8 +2318,8 @@ app.post('/api/bazi/records', requireAuth, async (req, res) => {
     console.error(e);
     return res.status(500).json({ error: 'Internal server error' });
   } finally {
-    if (submitKey) {
-      baziSubmitInFlight.delete(submitKey);
+    if (isNew) {
+      baziSubmitDeduper.clear(submitKey);
     }
   }
 });
@@ -2807,26 +2406,6 @@ const parseRecordsQuery = (source) => {
     normalizedStatus,
   };
 };
-
-const parseSearchTerms = (input) => {
-  if (!input) return [];
-  const terms = [];
-  const regex = /"([^"]+)"|'([^']+)'|(\S+)/g;
-  let match = null;
-  while ((match = regex.exec(input)) !== null) {
-    const rawTerm = (match[1] || match[2] || match[3] || '').trim();
-    const cleaned = rawTerm.replace(/^["']+|["']+$/g, '').trim();
-    if (cleaned) terms.push(cleaned);
-  }
-  return terms;
-};
-
-const buildSearchOr = (term) => ([
-  { birthLocation: { contains: term, mode: 'insensitive' } },
-  { timezone: { contains: term, mode: 'insensitive' } },
-  { gender: { contains: term, mode: 'insensitive' } },
-  { pillars: { contains: term, mode: 'insensitive' } },
-]);
 
 const getBaziRecords = async (req, res, source) => {
   const {
@@ -3347,72 +2926,9 @@ app.post('/api/bazi/ai-interpret', requireAuth, async (req, res) => {
 
 // --- Tarot Endpoints ---
 
-const TAROT_SPREADS = {
-  SingleCard: {
-    count: 1,
-    positions: [
-      { label: 'Insight', meaning: 'The core message to focus on right now.' }
-    ]
-  },
-  ThreeCard: {
-    count: 3,
-    positions: [
-      { label: 'Past', meaning: 'What led to this moment.' },
-      { label: 'Present', meaning: 'The current energy or situation.' },
-      { label: 'Future', meaning: 'Likely direction if the path continues.' }
-    ]
-  },
-  CelticCross: {
-    count: 10,
-    positions: [
-      { label: 'Present', meaning: 'Your current situation or heart of the matter.' },
-      { label: 'Challenge', meaning: 'The obstacle, tension, or crossing influence.' },
-      { label: 'Past', meaning: 'Recent past events or influences fading.' },
-      { label: 'Future', meaning: 'Near-future direction or next steps.' },
-      { label: 'Above', meaning: 'Conscious goals, aspirations, or ideals.' },
-      { label: 'Below', meaning: 'Subconscious roots, foundations, or hidden motives.' },
-      { label: 'Advice', meaning: 'Guidance on how to respond or proceed.' },
-      { label: 'External', meaning: 'Outside influences, people, or environment.' },
-      { label: 'Hopes/Fears', meaning: 'Inner desires, anxieties, or expectations.' },
-      { label: 'Outcome', meaning: 'Likely outcome if current course continues.' }
-    ]
-  }
-};
-
-const getTarotSpreadConfig = (spreadType) => {
-  if (!spreadType) return TAROT_SPREADS.SingleCard;
-  return TAROT_SPREADS[spreadType] || TAROT_SPREADS.SingleCard;
-};
-
 app.post('/api/tarot/draw', requireAuth, async (req, res) => {
   const { spreadType = 'SingleCard' } = req.body;
-  const normalizedSpread = spreadType || 'SingleCard';
-  const spreadConfig = getTarotSpreadConfig(normalizedSpread);
-  const positions = spreadConfig.positions || [];
-
-  // Simple shuffle
-  const shuffled = [...tarotDeck].sort(() => 0.5 - Math.random());
-
-  const drawCount = spreadConfig.count || 1;
-  const drawnCards = shuffled.slice(0, drawCount).map((card, index) => ({
-    ...card,
-    position: index + 1,
-    positionLabel: positions[index]?.label || spreadConfig.labels?.[index] || null,
-    positionMeaning: positions[index]?.meaning || null,
-    isReversed: Math.random() < 0.3 // 30% chance of reversal
-  }));
-
-  res.json({
-    spreadType: normalizedSpread,
-    cards: drawnCards,
-    spreadMeta: {
-      positions: positions.map((position, index) => ({
-        position: index + 1,
-        label: position.label,
-        meaning: position.meaning
-      }))
-    }
-  });
+  res.json(drawTarot({ spreadType }));
 });
 
 app.post('/api/tarot/ai-interpret', requireAuth, async (req, res) => {
@@ -3547,18 +3063,9 @@ app.post('/api/iching/divine', (req, res) => {
   const lowerTrigram = pickTrigram(parsedNumbers[1]);
   let changingLines = [];
   if (method === 'time' && timeContext) {
-    const baseSum = timeContext.year + timeContext.month + timeContext.day;
-    const timeSum = timeContext.hour + timeContext.minute;
-    const totalSum = baseSum + timeSum;
-    const candidates = [
-      normalizeNumber(baseSum, 6),
-      normalizeNumber(timeSum, 6),
-      normalizeNumber(totalSum, 6),
-    ].filter(Boolean);
-    changingLines = [...new Set(candidates)].sort((a, b) => a - b);
+    changingLines = deriveChangingLinesFromTimeContext(timeContext);
   } else {
-    const changingLine = normalizeNumber(parsedNumbers[0] + parsedNumbers[1] + parsedNumbers[2], 6);
-    if (changingLine) changingLines = [changingLine];
+    changingLines = deriveChangingLinesFromNumbers(parsedNumbers);
   }
   if (!upperTrigram || !lowerTrigram) {
     return res.status(400).json({ error: 'Unable to compute a hexagram from the provided numbers.' });
@@ -3848,10 +3355,45 @@ app.use((err, req, res, next) => {
   return next(err);
 });
 
-server.listen(PORT, () => {
+const isMain = (() => {
+  if (!process.argv[1]) return false;
+  try {
+    return import.meta.url === pathToFileURL(process.argv[1]).href;
+  } catch {
+    return false;
+  }
+})();
 
-  console.log(`BaZi Master API running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test' && isMain) {
+  server.listen(PORT, () => {
+    console.log(`BaZi Master API running on http://localhost:${PORT}`);
+  });
 
-void ensureUserSettingsTable();
-void ensureDefaultUser();
+  void ensureUserSettingsTable();
+  void ensureDefaultUser();
+}
+
+export {
+  BRANCHES_MAP,
+  ELEMENTS,
+  STEMS_MAP,
+  buildBaziCacheKey,
+  buildFiveElementsPercent,
+  buildImportRecord,
+  buildSearchOr,
+  buildPillar,
+  calculateTenGod,
+  getBaziCalculation,
+  getCachedBaziCalculation,
+  getElementRelation,
+  invalidateBaziCalculationCache,
+  normalizeBaziResult,
+  parseRecordsQuery,
+  parseSearchTerms,
+  performCalculation,
+  recordMatchesQuery,
+  primeBaziCalculationCache,
+  serializeRecordWithTimezone,
+  setBaziCacheEntry,
+  buildBirthTimeMeta,
+};

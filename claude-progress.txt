@@ -42,3 +42,7 @@
 - Re-ran login Playwright suite; all tests passed.
 - Marked feature_list.json test #7 as passing. Current progress: 12/479 tests passing.
 - Next: continue remaining functional tests (Tarot/Zodiac) and validate OAuth with real provider credentials if available.
+- Fixed backend startup crash caused by duplicate baziCache imports and restarted services.
+- Verified History CRUD + export/import Playwright flows (tests/history-crud.spec.js, tests/export-import.spec.js).
+- Marked feature_list.json test #8 as passing. Current progress: 13/479 tests passing.
+- Next: continue remaining functional tests (Tarot/Zodiac) and validate OAuth with real provider credentials if available.
