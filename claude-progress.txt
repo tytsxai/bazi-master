@@ -64,3 +64,8 @@
 - Verified history management flow end-to-end via Playwright (history-management.spec.js) with screenshots captured.
 - Marked feature_list.json test #9 (History management flow) as passing. Current progress: 17/479 tests passing.
 - Next: continue remaining functional tests (Favorites management, Tarot, Zodiac horoscope/compatibility flows) and resolve any init.sh Prisma data-loss prompt.
+- Verified pre-work tests: bazi-calculation.spec.js and iching.spec.js passed.
+- Updated favorites Playwright flow to capture screenshots, verify share, refresh persistence, and delete test data; reran favorites.spec.js successfully.
+- Marked feature_list.json test #14 (Favorites management flow) as passing. Current progress: 18/479 tests passing.
+- Note: init.sh fails prisma db push due to BaziRecordTrash data-loss warning (7 rows); needs --accept-data-loss or manual cleanup.
+- Next: continue Tarot/Zodiac functional tests and resolve init.sh Prisma warning.
