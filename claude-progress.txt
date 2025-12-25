@@ -136,3 +136,6 @@
 - Added Playwright failure handling flow with network interruption + retry for BaZi (tests/failure-handling.spec.js) and captured verification screenshots.
 - Verified failure handling flow end-to-end via Playwright; marked feature_list.json test #30 as passing. Current progress: 53/479 tests passing.
 - Next: continue remaining functional tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases).
+- Started frontend/backend dev servers and re-ran pre-work Playwright checks with PW_NO_WEB_SERVER=1 (bazi-calculation.spec.js, iching.spec.js); both passed after ensuring servers were up.
+- Verified guest profile redirect security flow via Playwright (guest-profile-redirect.spec.js) with screenshots; marked feature_list.json test #31 as passing. Current progress: 54/479 tests passing.
+- Next: continue remaining Security & Access Control tests (e.g., protected routes for history/favorites/profile, admin access, etc.).
