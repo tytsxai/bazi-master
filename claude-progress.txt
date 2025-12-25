@@ -60,3 +60,7 @@
 - Verified Zodiac rising sign flow end-to-end via Playwright; marked feature_list.json test #12 as passing. Current progress: 16/479 tests passing.
 - Init script currently stops on Prisma data-loss warning for BaziRecordTrash (non-empty).
 - Next: continue remaining Zodiac functional tests (horoscope periods, compatibility, rising sign edge cases) and ensure OAuth provider validation if needed.
+- Added History management Playwright coverage for filter/sort/delete/restore with screenshots, and enhanced History deleted list to show location plus data-testid hooks for stable automation.
+- Verified history management flow end-to-end via Playwright (history-management.spec.js) with screenshots captured.
+- Marked feature_list.json test #9 (History management flow) as passing. Current progress: 17/479 tests passing.
+- Next: continue remaining functional tests (Favorites management, Tarot, Zodiac horoscope/compatibility flows) and resolve any init.sh Prisma data-loss prompt.
