@@ -2,7 +2,10 @@ import express from 'express';
 import http from 'http';
 import crypto from 'crypto';
 import cors from 'cors';
+import compression from 'compression';
+import helmet from 'helmet';
 import { pathToFileURL } from 'url';
+import swaggerUi from 'swagger-ui-express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Solar } from 'lunar-javascript';
 import { drawTarot, getTarotSpreadConfig } from './tarot.js';
@@ -34,11 +37,62 @@ import {
   parseTimezoneOffsetMinutes,
   buildBirthTimeMeta,
 } from './timezone.js';
+import { getServerConfig } from './env.js';
 
 const prisma = new PrismaClient();
 const app = express();
-const PORT = process.env.PORT || 4000;
+const {
+  port: PORT,
+  jsonBodyLimit: JSON_BODY_LIMIT,
+  maxUrlLength: MAX_URL_LENGTH,
+  rateLimitWindowMs: RATE_LIMIT_WINDOW_MS,
+  rateLimitMax: RATE_LIMIT_MAX,
+  aiProvider: AI_PROVIDER,
+  openaiApiKey: OPENAI_API_KEY,
+  anthropicApiKey: ANTHROPIC_API_KEY,
+  openaiModel: OPENAI_MODEL,
+  anthropicModel: ANTHROPIC_MODEL,
+  aiMaxTokens: AI_MAX_TOKENS,
+  aiTimeoutMs: AI_TIMEOUT_MS,
+  availableProviders: AVAILABLE_PROVIDERS,
+  resetTokenTtlMs: RESET_TOKEN_TTL_MS,
+  googleClientId: GOOGLE_CLIENT_ID,
+  googleClientSecret: GOOGLE_CLIENT_SECRET,
+  googleRedirectUri: GOOGLE_REDIRECT_URI,
+  frontendUrl: FRONTEND_URL,
+  adminEmails: ADMIN_EMAILS,
+  wechatAppId: WECHAT_APP_ID,
+  wechatAppSecret: WECHAT_APP_SECRET,
+  wechatScope: WECHAT_SCOPE,
+  wechatFrontendUrl: WECHAT_FRONTEND_URL,
+  wechatRedirectUri: WECHAT_REDIRECT_URI,
+  openApiBaseUrl: OPENAPI_BASE_URL,
+  importBatchSize: IMPORT_BATCH_SIZE,
+  shutdownTimeoutMs: SHUTDOWN_TIMEOUT_MS,
+  corsAllowedOrigins: CORS_ALLOWED_ORIGINS,
+  nodeEnv: NODE_ENV,
+} = getServerConfig();
 console.log('--- SERVER STARTING: FIX APPLIED ---');
+
+const normalizeOrigin = (value) => {
+  if (!value || typeof value !== 'string') return '';
+  return value.trim().replace(/\/+$/, '');
+};
+const parseOriginList = (value) => {
+  if (!value || typeof value !== 'string') return [];
+  return value
+    .split(',')
+    .map((origin) => normalizeOrigin(origin))
+    .filter(Boolean);
+};
+const baseFrontendOrigin = normalizeOrigin(FRONTEND_URL);
+const wechatFrontendOrigin = normalizeOrigin(WECHAT_FRONTEND_URL);
+const allowedOrigins = new Set([
+  ...parseOriginList(CORS_ALLOWED_ORIGINS),
+  baseFrontendOrigin,
+  wechatFrontendOrigin,
+].filter(Boolean));
+const isAllowedOrigin = (origin) => allowedOrigins.has(normalizeOrigin(origin));
 
 const ensureSoftDeleteTables = async () => {
   await prisma.$executeRawUnsafe(`
@@ -72,18 +126,54 @@ const fetchDeletedRecordIds = async (userId) => {
 };
 
 const isRecordSoftDeleted = async (userId, recordId) => {
-  await ensureSoftDeleteReady();
-  const rows = await prisma.$queryRaw`
-    SELECT 1 as existsFlag FROM BaziRecordTrash WHERE userId = ${userId} AND recordId = ${recordId} LIMIT 1
-  `;
-  return rows.length > 0;
+  try {
+    await ensureSoftDeleteReady();
+    const rows = await prisma.$queryRaw`
+      SELECT 1 as existsFlag FROM BaziRecordTrash WHERE userId = ${userId} AND recordId = ${recordId} LIMIT 1
+    `;
+    return rows.length > 0;
+  } catch (error) {
+    console.error('Soft delete check failed:', error);
+    return false;
+  }
 };
 
-app.use(cors());
-const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '50mb';
+app.use(helmet());
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || isAllowedOrigin(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
+app.use(compression());
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
-const MAX_URL_LENGTH = Number(process.env.MAX_URL_LENGTH || 16384);
+void ensureSoftDeleteReady().catch((error) => {
+  console.error('Failed to initialize soft delete tables:', error);
+});
+
+const REQUEST_ID_HEADER = 'x-request-id';
+
+const getRequestId = (req) => {
+  const headerValue = req.headers[REQUEST_ID_HEADER];
+  if (typeof headerValue === 'string' && headerValue.trim() !== '') {
+    return headerValue.trim();
+  }
+  if (Array.isArray(headerValue) && headerValue.length > 0 && headerValue[0].trim() !== '') {
+    return headerValue[0].trim();
+  }
+  return crypto.randomUUID();
+};
+
+app.use((req, res, next) => {
+  const requestId = getRequestId(req);
+  req.requestId = requestId;
+  res.setHeader('X-Request-ID', requestId);
+  next();
+});
 
 const isUrlTooLong = (req) => {
   const url = req?.originalUrl || req?.url || '';
@@ -97,24 +187,60 @@ app.use((req, res, next) => {
   return next();
 });
 
+const rateLimitStore = new Map();
+
+const getRateLimitKey = (req) => {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.connection?.remoteAddress || 'unknown';
+};
+
+app.use((req, res, next) => {
+  if (!Number.isFinite(RATE_LIMIT_WINDOW_MS) || RATE_LIMIT_WINDOW_MS <= 0) {
+    return next();
+  }
+  if (!Number.isFinite(RATE_LIMIT_MAX) || RATE_LIMIT_MAX <= 0) {
+    return next();
+  }
+
+  const now = Date.now();
+  const key = getRateLimitKey(req);
+  const entry = rateLimitStore.get(key);
+
+  if (!entry || now >= entry.resetAt) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return next();
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    const retryAfterSeconds = Math.ceil((entry.resetAt - now) / 1000);
+    res.setHeader('Retry-After', String(retryAfterSeconds));
+    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+  }
+
+  entry.count += 1;
+  return next();
+});
+
+app.use((req, res, next) => {
+  const startTime = process.hrtime.bigint();
+  const timestamp = new Date().toISOString();
+  res.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - startTime) / 1e6;
+    const url = req?.originalUrl || req?.url || '';
+    console.log(
+      `[${timestamp}] ${req.method} ${url} ${res.statusCode} ${durationMs.toFixed(1)}ms id=${req.requestId}`
+    );
+  });
+  next();
+});
+
 // --- AI Provider Settings ---
-const AI_PROVIDER = (process.env.AI_PROVIDER
-  || (process.env.OPENAI_API_KEY ? 'openai' : null)
-  || (process.env.ANTHROPIC_API_KEY ? 'anthropic' : null)
-  || 'mock').toLowerCase();
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620';
-const AI_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS || 700);
-const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 15000);
 const AI_CONCURRENCY_ERROR = 'AI request already in progress. Please wait.';
 const { acquire: acquireAiGuard } = createAiGuard();
 const baziSubmitDeduper = createInFlightDeduper();
-
-const AVAILABLE_PROVIDERS = [
-  { name: 'openai', enabled: Boolean(process.env.OPENAI_API_KEY) },
-  { name: 'anthropic', enabled: Boolean(process.env.ANTHROPIC_API_KEY) },
-  { name: 'mock', enabled: true }
-];
 
 const fetchWithTimeout = async (url, options, timeoutMs = AI_TIMEOUT_MS) => {
   const controller = new AbortController();
@@ -211,12 +337,12 @@ const sendWsJson = (socket, data) => {
 };
 
 const callOpenAI = async ({ system, user }) => {
-  if (!process.env.OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
+  if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
   const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+      Authorization: `Bearer ${OPENAI_API_KEY}`
     },
     body: JSON.stringify({
       model: OPENAI_MODEL,
@@ -238,12 +364,12 @@ const callOpenAI = async ({ system, user }) => {
 };
 
 const callAnthropic = async ({ system, user }) => {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('Anthropic API key not configured');
+  if (!ANTHROPIC_API_KEY) throw new Error('Anthropic API key not configured');
   const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'x-api-key': ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
@@ -406,29 +532,11 @@ const buildBaziSubmitKey = (userId, payload) => {
 };
 
 // --- Mappings & Constants ---
-const RESET_TOKEN_TTL_MS = Number(process.env.RESET_TOKEN_TTL_MS || 30 * 60 * 1000);
 const sessionStore = new Map();
 const resetTokenStore = new Map();
 const resetTokenByUser = new Map();
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
-const GOOGLE_REDIRECT_URI =
-  process.env.GOOGLE_REDIRECT_URI || `http://localhost:${PORT}/api/auth/google/callback`;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const oauthStateStore = new Map();
-const ADMIN_EMAILS = new Set(
-  (process.env.ADMIN_EMAILS || 'admin@example.com')
-    .split(',')
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean)
-);
-const WECHAT_APP_ID = process.env.WECHAT_APP_ID || '';
-const WECHAT_APP_SECRET = process.env.WECHAT_APP_SECRET || '';
-const WECHAT_SCOPE = process.env.WECHAT_SCOPE || 'snsapi_login';
-const WECHAT_FRONTEND_URL = process.env.WECHAT_FRONTEND_URL || FRONTEND_URL || 'http://localhost:3000';
-const WECHAT_REDIRECT_URI = process.env.WECHAT_REDIRECT_URI
-  || `${process.env.BACKEND_BASE_URL || 'http://localhost:4000'}/api/auth/wechat/callback`;
 const WECHAT_STATE_TTL_MS = 10 * 60 * 1000;
 const wechatStateStore = new Map();
 
@@ -1528,18 +1636,24 @@ const calculateZiweiChart = (data) => {
   };
 };
 
+const apiRouter = express.Router();
+app.use('/api/v1', apiRouter);
+app.use('/api', apiRouter);
+
 // --- Routes ---
 
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
 
-app.get('/api/ai/providers', (req, res) => {
+apiRouter.get('/ai/providers', (req, res) => {
   res.json({
     activeProvider: AI_PROVIDER,
     providers: AVAILABLE_PROVIDERS
   });
 });
 
-app.get('/api/zodiac/:sign', (req, res) => {
+apiRouter.get('/zodiac/:sign', (req, res) => {
   const signKey = normalizeSign(req.params.sign);
   const sign = ZODIAC_SIGNS[signKey];
   if (!sign) return res.status(404).json({ error: 'Unknown sign' });
@@ -1547,7 +1661,7 @@ app.get('/api/zodiac/:sign', (req, res) => {
   res.json({ sign: { key: signKey, ...sign } });
 });
 
-app.post('/api/zodiac/rising', (req, res) => {
+apiRouter.post('/zodiac/rising', (req, res) => {
   const { birthDate, birthTime, latitude, longitude, timezoneOffsetMinutes } = req.body || {};
 
   if (!birthDate || !birthTime || latitude === undefined || longitude === undefined) {
@@ -1595,7 +1709,7 @@ app.post('/api/zodiac/rising', (req, res) => {
   }
 });
 
-app.get('/api/zodiac/:sign/horoscope', (req, res) => {
+apiRouter.get('/zodiac/:sign/horoscope', (req, res) => {
   const signKey = normalizeSign(req.params.sign);
   const sign = ZODIAC_SIGNS[signKey];
   if (!sign) return res.status(404).json({ error: 'Unknown sign' });
@@ -1620,7 +1734,7 @@ app.get('/api/zodiac/:sign/horoscope', (req, res) => {
   });
 });
 
-app.get('/api/zodiac/compatibility', (req, res) => {
+apiRouter.get('/zodiac/compatibility', (req, res) => {
   const primaryKey = sanitizeQueryParam(req.query.primary);
   const secondaryKey = sanitizeQueryParam(req.query.secondary);
 
@@ -1644,7 +1758,7 @@ app.get('/api/zodiac/compatibility', (req, res) => {
   });
 });
 
-app.get('/api/auth/google', (req, res) => {
+apiRouter.get('/auth/google', (req, res) => {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     const nextPath = sanitizeNextPath(req.query.next);
     const redirectUrl = buildOauthRedirectUrl({ error: 'not_configured', nextPath });
@@ -1666,7 +1780,7 @@ app.get('/api/auth/google', (req, res) => {
   return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
 
-app.get('/api/auth/google/callback', async (req, res) => {
+apiRouter.get('/auth/google/callback', async (req, res) => {
   const code = typeof req.query.code === 'string' ? req.query.code : null;
   const state = typeof req.query.state === 'string' ? req.query.state : null;
   const oauthError = typeof req.query.error === 'string' ? req.query.error : null;
@@ -1781,7 +1895,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
   }
 });
 
-app.post('/api/register', async (req, res) => {
+apiRouter.post('/register', async (req, res) => {
   const { email, password, name } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
@@ -1794,7 +1908,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-app.post('/api/login', async (req, res) => {
+apiRouter.post('/login', async (req, res) => {
   const { email, password } = req.body;
   try {
     const user = await prisma.user.findUnique({ where: { email } });
@@ -1815,7 +1929,7 @@ app.post('/api/login', async (req, res) => {
   } catch (error) { console.error(error); res.status(500).json({ error: 'Internal server error' }); }
 });
 
-app.get('/api/auth/wechat/redirect', (req, res) => {
+apiRouter.get('/auth/wechat/redirect', (req, res) => {
   const redirectPath = sanitizeNextPath(req.query?.next) || '/profile';
   if (!WECHAT_APP_ID) {
     const target = new URL('/login', WECHAT_FRONTEND_URL);
@@ -1831,7 +1945,7 @@ app.get('/api/auth/wechat/redirect', (req, res) => {
   res.redirect(wechatUrl);
 });
 
-app.get('/api/auth/wechat/callback', async (req, res) => {
+apiRouter.get('/auth/wechat/callback', async (req, res) => {
   const code = typeof req.query?.code === 'string' ? req.query.code : null;
   const state = typeof req.query?.state === 'string' ? req.query.state : null;
 
@@ -1933,7 +2047,7 @@ app.get('/api/auth/wechat/callback', async (req, res) => {
   }
 });
 
-app.post('/api/password/request', async (req, res) => {
+apiRouter.post('/password/request', async (req, res) => {
   const { email } = req.body || {};
   if (!email || typeof email !== 'string') {
     return res.status(400).json({ error: 'Email is required' });
@@ -1954,7 +2068,7 @@ app.post('/api/password/request', async (req, res) => {
   });
 });
 
-app.post('/api/password/reset', async (req, res) => {
+apiRouter.post('/password/reset', async (req, res) => {
   const { token, password } = req.body || {};
   if (!token || typeof token !== 'string' || !password || typeof password !== 'string') {
     return res.status(400).json({ error: 'Reset token and new password are required' });
@@ -1974,7 +2088,7 @@ app.post('/api/password/reset', async (req, res) => {
   }
 });
 
-app.get('/api/user/settings', requireAuth, async (req, res) => {
+apiRouter.get('/user/settings', requireAuth, async (req, res) => {
   try {
     const rows = await prisma.$queryRaw`
       SELECT locale, preferences, updatedAt FROM UserSettings WHERE userId = ${req.user.id} LIMIT 1
@@ -1998,7 +2112,7 @@ app.get('/api/user/settings', requireAuth, async (req, res) => {
   }
 });
 
-app.put('/api/user/settings', requireAuth, async (req, res) => {
+apiRouter.put('/user/settings', requireAuth, async (req, res) => {
   const { locale, preferences } = req.body || {};
   if (locale !== undefined && typeof locale !== 'string') {
     return res.status(400).json({ error: 'Invalid locale' });
@@ -2119,15 +2233,15 @@ app.put('/api/user/settings', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/auth/me', requireAuth, (req, res) => {
+apiRouter.get('/auth/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
-app.get('/api/admin/health', requireAuth, requireAdmin, (req, res) => {
+apiRouter.get('/admin/health', requireAuth, requireAdmin, (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.post('/api/bazi/calculate', (req, res) => {
+apiRouter.post('/bazi/calculate', (req, res) => {
   const validation = validateBaziInput(req.body);
   if (!validation.ok) {
     const message = validation.reason === 'whitespace'
@@ -2153,7 +2267,7 @@ app.post('/api/bazi/calculate', (req, res) => {
   }
 });
 
-app.post('/api/bazi/full-analysis', requireAuth, (req, res) => {
+apiRouter.post('/bazi/full-analysis', requireAuth, (req, res) => {
   const validation = validateBaziInput(req.body);
   if (!validation.ok) {
     const message = validation.reason === 'whitespace'
@@ -2173,7 +2287,7 @@ app.post('/api/bazi/full-analysis', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/ziwei/calculate', (req, res) => {
+apiRouter.post('/ziwei/calculate', (req, res) => {
   const { birthYear, birthMonth, birthDay, birthHour, gender } = req.body || {};
   if (!birthYear || !birthMonth || !birthDay || birthHour === undefined || !gender) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -2218,7 +2332,7 @@ app.post('/api/ziwei/calculate', (req, res) => {
   }
 });
 
-app.post('/api/bazi/records', requireAuth, async (req, res) => {
+apiRouter.post('/bazi/records', requireAuth, async (req, res) => {
   const validation = validateBaziInput(req.body);
   if (!validation.ok) {
     const message = validation.reason === 'whitespace'
@@ -2560,15 +2674,15 @@ const getBaziRecords = async (req, res, source) => {
   });
 };
 
-app.get('/api/bazi/records', requireAuth, async (req, res) => {
+apiRouter.get('/bazi/records', requireAuth, async (req, res) => {
   return getBaziRecords(req, res, req.query);
 });
 
-app.post('/api/bazi/records/search', requireAuth, async (req, res) => {
+apiRouter.post('/bazi/records/search', requireAuth, async (req, res) => {
   return getBaziRecords(req, res, req.body);
 });
 
-app.get('/api/bazi/records/export', requireAuth, async (req, res) => {
+apiRouter.get('/bazi/records/export', requireAuth, async (req, res) => {
   const {
     normalizedQuery,
     validGender,
@@ -2649,7 +2763,7 @@ app.get('/api/bazi/records/export', requireAuth, async (req, res) => {
   });
 });
 
-app.post('/api/bazi/records/import', requireAuth, async (req, res) => {
+apiRouter.post('/bazi/records/import', requireAuth, async (req, res) => {
   let incoming = null;
   if (Array.isArray(req.body)) {
     incoming = req.body;
@@ -2671,7 +2785,6 @@ app.post('/api/bazi/records/import', requireAuth, async (req, res) => {
 
   const errorIndices = [];
   const failedIndices = [];
-  const IMPORT_BATCH_SIZE = Number(process.env.IMPORT_BATCH_SIZE || 500);
   let created = 0;
   let validCount = 0;
   let batchEntries = [];
@@ -2733,7 +2846,7 @@ app.post('/api/bazi/records/import', requireAuth, async (req, res) => {
   });
 });
 
-app.post('/api/bazi/records/bulk-delete', requireAuth, async (req, res) => {
+apiRouter.post('/bazi/records/bulk-delete', requireAuth, async (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids : null;
   if (!ids || !ids.length) {
     return res.status(400).json({ error: 'No record ids provided' });
@@ -2772,7 +2885,7 @@ app.post('/api/bazi/records/bulk-delete', requireAuth, async (req, res) => {
   });
 });
 
-app.get('/api/bazi/records/:id', requireAuth, async (req, res) => {
+apiRouter.get('/bazi/records/:id', requireAuth, async (req, res) => {
   const recordId = parseIdParam(req.params.id);
   if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
   const record = await prisma.baziRecord.findFirst({
@@ -2785,7 +2898,7 @@ app.get('/api/bazi/records/:id', requireAuth, async (req, res) => {
   res.json({ record: serializeRecordWithTimezone(record) });
 });
 
-app.delete('/api/bazi/records/:id', requireAuth, async (req, res) => {
+apiRouter.delete('/bazi/records/:id', requireAuth, async (req, res) => {
   const recordId = parseIdParam(req.params.id);
   if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
   const record = await prisma.baziRecord.findFirst({
@@ -2808,7 +2921,7 @@ app.delete('/api/bazi/records/:id', requireAuth, async (req, res) => {
   res.json({ status: 'ok', softDeleted: true });
 });
 
-app.post('/api/bazi/records/:id/restore', requireAuth, async (req, res) => {
+apiRouter.post('/bazi/records/:id/restore', requireAuth, async (req, res) => {
   const recordId = parseIdParam(req.params.id);
   if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
   const record = await prisma.baziRecord.findFirst({
@@ -2831,7 +2944,7 @@ app.post('/api/bazi/records/:id/restore', requireAuth, async (req, res) => {
   res.json({ status: 'ok', record: serializeRecordWithTimezone(record) });
 });
 
-app.post('/api/favorites', requireAuth, async (req, res) => {
+apiRouter.post('/favorites', requireAuth, async (req, res) => {
   const { recordId } = req.body;
   if (!recordId) return res.status(400).json({ error: 'Record ID required' });
 
@@ -2870,7 +2983,7 @@ app.post('/api/favorites', requireAuth, async (req, res) => {
   });
 });
 
-app.get('/api/favorites', requireAuth, async (req, res) => {
+apiRouter.get('/favorites', requireAuth, async (req, res) => {
   const favorites = await prisma.favorite.findMany({
     where: { userId: req.user.id, record: { userId: req.user.id } },
     include: { record: true },
@@ -2888,7 +3001,7 @@ app.get('/api/favorites', requireAuth, async (req, res) => {
   });
 });
 
-app.delete('/api/favorites/:id', requireAuth, async (req, res) => {
+apiRouter.delete('/favorites/:id', requireAuth, async (req, res) => {
   const favoriteId = parseIdParam(req.params.id);
   if (!favoriteId) return res.status(400).json({ error: 'Invalid favorite id' });
   const favorite = await prisma.favorite.findFirst({ where: { id: favoriteId, userId: req.user.id } });
@@ -2899,7 +3012,7 @@ app.delete('/api/favorites/:id', requireAuth, async (req, res) => {
 });
 
 
-app.post('/api/bazi/ai-interpret', requireAuth, async (req, res) => {
+apiRouter.post('/bazi/ai-interpret', requireAuth, async (req, res) => {
   const { pillars, fiveElements, tenGods, strength } = req.body;
   if (!pillars) return res.status(400).json({ error: 'Bazi data required' });
 
@@ -2926,12 +3039,12 @@ app.post('/api/bazi/ai-interpret', requireAuth, async (req, res) => {
 
 // --- Tarot Endpoints ---
 
-app.post('/api/tarot/draw', requireAuth, async (req, res) => {
+apiRouter.post('/tarot/draw', requireAuth, async (req, res) => {
   const { spreadType = 'SingleCard' } = req.body;
   res.json(drawTarot({ spreadType }));
 });
 
-app.post('/api/tarot/ai-interpret', requireAuth, async (req, res) => {
+apiRouter.post('/tarot/ai-interpret', requireAuth, async (req, res) => {
   const { spreadType, cards, userQuestion } = req.body;
   if (!cards || cards.length === 0) return res.status(400).json({ error: 'No cards provided' });
 
@@ -2992,7 +3105,7 @@ ${cardList}
   res.json({ content });
 });
 
-app.get('/api/tarot/history', requireAuth, async (req, res) => {
+apiRouter.get('/tarot/history', requireAuth, async (req, res) => {
   try {
     const records = await prisma.tarotRecord.findMany({
       where: { userId: req.user.id },
@@ -3013,7 +3126,7 @@ app.get('/api/tarot/history', requireAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/tarot/history/:id', requireAuth, async (req, res) => {
+apiRouter.delete('/tarot/history/:id', requireAuth, async (req, res) => {
   const recordId = parseIdParam(req.params.id);
   if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
 
@@ -3032,11 +3145,11 @@ app.delete('/api/tarot/history/:id', requireAuth, async (req, res) => {
 
 // --- I Ching Endpoints ---
 
-app.get('/api/iching/hexagrams', (req, res) => {
+apiRouter.get('/iching/hexagrams', (req, res) => {
   res.json({ hexagrams });
 });
 
-app.post('/api/iching/divine', (req, res) => {
+apiRouter.post('/iching/divine', (req, res) => {
   const { method = 'number', numbers } = req.body || {};
   let inputNumbers = numbers;
   let timeContext = null;
@@ -3088,7 +3201,7 @@ app.post('/api/iching/divine', (req, res) => {
   });
 });
 
-app.post('/api/iching/ai-interpret', requireAuth, async (req, res) => {
+apiRouter.post('/iching/ai-interpret', requireAuth, async (req, res) => {
   const { hexagram, resultingHexagram, changingLines, userQuestion, method, timeContext } = req.body;
   if (!hexagram) return res.status(400).json({ error: 'Hexagram data required' });
 
@@ -3130,7 +3243,7 @@ Changing Lines: ${lines}
   }
 });
 
-app.post('/api/iching/history', requireAuth, async (req, res) => {
+apiRouter.post('/iching/history', requireAuth, async (req, res) => {
   const {
     method,
     numbers,
@@ -3167,7 +3280,7 @@ app.post('/api/iching/history', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/iching/history', requireAuth, async (req, res) => {
+apiRouter.get('/iching/history', requireAuth, async (req, res) => {
   try {
     const records = await prisma.ichingRecord.findMany({
       where: { userId: req.user.id },
@@ -3180,7 +3293,7 @@ app.get('/api/iching/history', requireAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/iching/history/:id', requireAuth, async (req, res) => {
+apiRouter.delete('/iching/history/:id', requireAuth, async (req, res) => {
   const recordId = parseIdParam(req.params.id);
   if (!recordId) return res.status(400).json({ error: 'Invalid record id' });
 
@@ -3197,7 +3310,126 @@ app.delete('/api/iching/history/:id', requireAuth, async (req, res) => {
   }
 });
 
+const normalizeOpenApiPath = (path) => {
+  if (!path) return '/';
+  const normalized = path.replace(/\/+/g, '/');
+  return normalized === '' ? '/' : normalized;
+};
+
+const extractPathParams = (path) => {
+  const params = [];
+  const regex = /:([A-Za-z0-9_]+)/g;
+  let match = regex.exec(path);
+  while (match) {
+    params.push(match[1]);
+    match = regex.exec(path);
+  }
+  return params;
+};
+
+const toOpenApiPath = (path) => path.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
+
+const collectRouterRoutes = (router, prefix = '') => {
+  const routes = [];
+  if (!router?.stack) return routes;
+
+  router.stack.forEach((layer) => {
+    if (layer?.route?.path) {
+      const routePath = normalizeOpenApiPath(`${prefix}${layer.route.path}`);
+      const methods = Object.keys(layer.route.methods || {}).filter((method) => layer.route.methods[method]);
+      methods.forEach((method) => {
+        routes.push({ method, path: routePath });
+      });
+      return;
+    }
+
+    if (layer?.name === 'router' && layer.handle?.stack) {
+      routes.push(...collectRouterRoutes(layer.handle, prefix));
+    }
+  });
+
+  return routes;
+};
+
+const buildOpenApiSpec = () => {
+  const paths = {};
+  const routes = [
+    { method: 'get', path: '/health' },
+    ...collectRouterRoutes(apiRouter, '/api/v1'),
+  ];
+
+  routes.forEach(({ method, path }) => {
+    const openApiPath = toOpenApiPath(path);
+    const pathParams = extractPathParams(path);
+
+    if (!paths[openApiPath]) {
+      paths[openApiPath] = {};
+    }
+
+    const operation = {
+      summary: `${method.toUpperCase()} ${openApiPath}`,
+      responses: {
+        200: { description: 'OK' },
+        400: { description: 'Bad request' },
+        401: { description: 'Unauthorized' },
+        500: { description: 'Server error' },
+      },
+    };
+
+    if (pathParams.length > 0) {
+      operation.parameters = pathParams.map((name) => ({
+        name,
+        in: 'path',
+        required: true,
+        schema: { type: 'string' },
+      }));
+    }
+
+    if (['post', 'put', 'patch'].includes(method)) {
+      operation.requestBody = {
+        required: false,
+        content: {
+          'application/json': {
+            schema: { type: 'object', additionalProperties: true },
+          },
+        },
+      };
+    }
+
+    paths[openApiPath][method] = operation;
+  });
+
+  const baseUrl = OPENAPI_BASE_URL;
+  return {
+    openapi: '3.0.0',
+    info: {
+      title: 'BaZi Master API',
+      version: '1.0.0',
+      description: 'Auto-generated Swagger documentation.',
+    },
+    servers: [{ url: baseUrl }],
+    paths,
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      },
+    },
+  };
+};
+
+const openApiSpec = buildOpenApiSpec();
+app.get('/api-docs.json', (req, res) => res.json(openApiSpec));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, { explorer: true }));
+
 const server = http.createServer(app);
+const activeSockets = new Set();
+
+server.on('connection', (socket) => {
+  activeSockets.add(socket);
+  socket.on('close', () => {
+    activeSockets.delete(socket);
+  });
+});
 
 server.on('upgrade', (req, socket, head) => {
   if ((req.url || '').length > MAX_URL_LENGTH) {
@@ -3349,10 +3581,24 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 app.use((err, req, res, next) => {
-  if (err?.type === 'entity.too.large') {
-    return res.status(413).json({ error: 'Request body too large' });
+  if (res.headersSent) {
+    return next(err);
   }
-  return next(err);
+
+  const isPayloadTooLarge = err?.type === 'entity.too.large';
+  const status = isPayloadTooLarge
+    ? 413
+    : Number(err?.statusCode || err?.status || 500);
+  const isClientError = status >= 400 && status < 500;
+  const message = isPayloadTooLarge
+    ? 'Request body too large'
+    : (isClientError ? (err?.message || 'Bad request') : 'Internal server error');
+
+  if (status >= 500) {
+    console.error('Unhandled error:', err);
+  }
+
+  return res.status(status).json({ error: message });
 });
 
 const isMain = (() => {
@@ -3364,13 +3610,48 @@ const isMain = (() => {
   }
 })();
 
-if (process.env.NODE_ENV !== 'test' && isMain) {
+const setupGracefulShutdown = (httpServer) => {
+  let shuttingDown = false;
+
+  const closeServer = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`Received ${signal}. Starting graceful shutdown.`);
+
+    const timeout = setTimeout(() => {
+      console.warn('Graceful shutdown timed out. Forcing socket close.');
+      for (const socket of activeSockets) {
+        socket.destroy();
+      }
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+
+    timeout.unref();
+
+    httpServer.close(async () => {
+      try {
+        await prisma.$disconnect();
+      } catch (error) {
+        console.error('Error during Prisma disconnect:', error);
+      } finally {
+        clearTimeout(timeout);
+        console.log('Graceful shutdown complete.');
+        process.exit(0);
+      }
+    });
+  };
+
+  process.once('SIGTERM', () => void closeServer('SIGTERM'));
+};
+
+if (NODE_ENV !== 'test' && isMain) {
   server.listen(PORT, () => {
     console.log(`BaZi Master API running on http://localhost:${PORT}`);
   });
 
   void ensureUserSettingsTable();
   void ensureDefaultUser();
+  setupGracefulShutdown(server);
 }
 
 export {

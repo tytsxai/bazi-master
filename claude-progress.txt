@@ -46,3 +46,9 @@
 - Verified History CRUD + export/import Playwright flows (tests/history-crud.spec.js, tests/export-import.spec.js).
 - Marked feature_list.json test #8 as passing. Current progress: 13/479 tests passing.
 - Next: continue remaining functional tests (Tarot/Zodiac) and validate OAuth with real provider credentials if available.
+- Added BaZi time context panel showing timezone input, resolved offset, and UTC birth timestamp; improved timezone offset payload handling to defer IANA offsets to backend.
+- Hardened soft-delete initialization: ensure BaziRecordTrash table is created on startup, added guard around soft-delete checks, and created missing table in dev.db.
+- Mounted API router on /api for frontend compatibility.
+- Added Playwright timezone flow test with screenshots, including full analysis, save/favorite/history verification, and cleanup.
+- Verified timezone flow end-to-end via Playwright; marked feature_list.json test #10 as passing. Current progress: 14/479 tests passing.
+- Next: continue remaining Bazi-related tests (true solar time/timezone accuracy) and move into Tarot/Zodiac modules.
