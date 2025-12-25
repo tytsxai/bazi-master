@@ -17,3 +17,7 @@
 - Verified auth guard redirect to login and API 401 without token.
 - Marked feature_list.json test #1 (registered user journey) as passing. Current progress: 6/479 tests passing.
 - Next: implement guest Bazi flow and expand Bazi analysis accuracy, then continue remaining functional tests.
+- Implemented guest Bazi calculation persistence via localStorage restore and status messaging.
+- Added Playwright guest verification script with refresh persistence checks and screenshots.
+- Verified guest Bazi flow end-to-end; marked test #2 as passing. Current progress: 7/479 tests passing.
+- Next: address remaining Bazi-related functional tests (timezone/true solar time) before Tarot/Iching modules.

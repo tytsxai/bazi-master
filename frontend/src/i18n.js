@@ -46,6 +46,7 @@ const resources = {
         saveRecord: 'Save to History',
         addFavorite: 'Add to Favorites',
         calculated: 'Basic chart generated.',
+        restored: 'Restored your last guest calculation.',
         fullReady: 'Full analysis ready.',
         saved: 'Record saved to history.',
         favorited: 'Added to favorites.',
@@ -109,6 +110,7 @@ const resources = {
         saveRecord: '保存到历史',
         addFavorite: '加入收藏',
         calculated: '基础命盘已生成。',
+        restored: '已恢复上次游客排盘结果。',
         fullReady: '完整解读已就绪。',
         saved: '记录已保存到历史。',
         favorited: '已加入收藏。',
@@ -130,16 +132,54 @@ const resources = {
   }
 };
 
-const savedLocale = localStorage.getItem('locale');
-const browserLocale = navigator.language === 'zh-CN' ? 'zh-CN' : 'en-US';
+const STORAGE_KEY = 'locale';
+const SUPPORTED_LOCALES = new Set(['en-US', 'zh-CN']);
+
+const normalizeLocale = (locale) => {
+  if (!locale) return 'en-US';
+  if (locale.toLowerCase().startsWith('zh')) return 'zh-CN';
+  if (SUPPORTED_LOCALES.has(locale)) return locale;
+  return 'en-US';
+};
+
+const safeGetStoredLocale = () => {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+};
+
+const safeSetStoredLocale = (locale) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, locale);
+  } catch {
+    // Ignore storage failures (e.g. private mode).
+  }
+};
+
+const getInitialLocale = () => {
+  const stored = safeGetStoredLocale();
+  if (stored) return normalizeLocale(stored);
+  return normalizeLocale(navigator.language);
+};
 
 void i18n
   .use(initReactI18next)
   .init({
     resources,
-    lng: savedLocale || browserLocale,
+    lng: getInitialLocale(),
     fallbackLng: 'en-US',
     interpolation: { escapeValue: false }
   });
+
+i18n.on('languageChanged', (locale) => {
+  const normalized = normalizeLocale(locale);
+  if (normalized !== locale) {
+    void i18n.changeLanguage(normalized);
+    return;
+  }
+  safeSetStoredLocale(normalized);
+});
 
 export default i18n;

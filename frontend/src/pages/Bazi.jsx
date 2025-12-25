@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext.jsx';
+
+const GUEST_STORAGE_KEY = 'bazi_guest_calculation_v1';
 
 export default function Bazi() {
   const { t } = useTranslation();
@@ -19,6 +21,67 @@ export default function Bazi() {
   const [savedRecord, setSavedRecord] = useState(null);
   const [favoriteStatus, setFavoriteStatus] = useState(null);
   const [status, setStatus] = useState(null);
+  const [errors, setErrors] = useState({});
+
+  const readErrorMessage = async (response, fallback) => {
+    const text = await response.text();
+    if (!text) return fallback;
+    try {
+      const parsed = JSON.parse(text);
+      return parsed?.error || parsed?.message || fallback;
+    } catch {
+      return text;
+    }
+  };
+
+  const getNetworkErrorMessage = (error) => {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    return 'Network error. Please check your connection and try again.';
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      localStorage.removeItem(GUEST_STORAGE_KEY);
+      return;
+    }
+
+    const raw = localStorage.getItem(GUEST_STORAGE_KEY);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.formData) {
+        setFormData((prev) => ({ ...prev, ...parsed.formData }));
+      }
+      if (parsed?.baseResult) {
+        setBaseResult(parsed.baseResult);
+      }
+      setStatus({ type: 'success', message: t('bazi.restored') });
+    } catch (error) {
+      localStorage.removeItem(GUEST_STORAGE_KEY);
+    }
+  }, [isAuthenticated, t]);
+
+  useEffect(() => {
+    if (isAuthenticated) return;
+    if (!baseResult) return;
+
+    const payload = {
+      formData,
+      baseResult,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(payload));
+  }, [baseResult, formData, isAuthenticated]);
+
+  useEffect(() => {
+    if (!status) return;
+    const timeoutMs = status.type === 'error' ? 6000 : 3500;
+    const timer = setTimeout(() => setStatus(null), timeoutMs);
+    return () => clearTimeout(timer);
+  }, [status]);
 
   const elements = useMemo(() => {
     if (!baseResult?.fiveElements) return [];
@@ -26,11 +89,55 @@ export default function Bazi() {
   }, [baseResult]);
 
   const updateField = (field) => (event) => {
-    setFormData((prev) => ({ ...prev, [field]: event.target.value }));
+    const value = event.target.value;
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  const validate = () => {
+    const nextErrors = {};
+    const year = Number(formData.birthYear);
+    const month = Number(formData.birthMonth);
+    const day = Number(formData.birthDay);
+    const hour = Number(formData.birthHour);
+
+    if (!formData.birthYear) {
+      nextErrors.birthYear = 'Birth year is required.';
+    } else if (!Number.isInteger(year) || year < 1 || year > 9999) {
+      nextErrors.birthYear = 'Enter a valid year.';
+    }
+
+    if (!formData.birthMonth) {
+      nextErrors.birthMonth = 'Birth month is required.';
+    } else if (!Number.isInteger(month) || month < 1 || month > 12) {
+      nextErrors.birthMonth = 'Enter a valid month (1-12).';
+    }
+
+    if (!formData.birthDay) {
+      nextErrors.birthDay = 'Birth day is required.';
+    } else if (!Number.isInteger(day) || day < 1 || day > 31) {
+      nextErrors.birthDay = 'Enter a valid day (1-31).';
+    }
+
+    if (formData.birthHour === '') {
+      nextErrors.birthHour = 'Birth hour is required.';
+    } else if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+      nextErrors.birthHour = 'Enter a valid hour (0-23).';
+    }
+
+    return nextErrors;
   };
 
   const handleCalculate = async (event) => {
     event.preventDefault();
+    const nextErrors = validate();
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      setStatus({ type: 'error', message: 'Please correct the highlighted fields.' });
+      return;
+    }
     setStatus(null);
     setFullResult(null);
     setSavedRecord(null);
@@ -43,21 +150,25 @@ export default function Bazi() {
       birthHour: Number(formData.birthHour),
     };
 
-    const res = await fetch('/api/bazi/calculate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const res = await fetch('/api/bazi/calculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      setStatus({ type: 'error', message: err.error || 'Calculation failed.' });
-      return;
+      if (!res.ok) {
+        const message = await readErrorMessage(res, 'Calculation failed.');
+        setStatus({ type: 'error', message });
+        return;
+      }
+
+      const data = await res.json();
+      setBaseResult(data);
+      setStatus({ type: 'success', message: t('bazi.calculated') });
+    } catch (error) {
+      setStatus({ type: 'error', message: getNetworkErrorMessage(error) });
     }
-
-    const data = await res.json();
-    setBaseResult(data);
-    setStatus({ type: 'success', message: t('bazi.calculated') });
   };
 
   const handleFullAnalysis = async () => {
@@ -75,24 +186,28 @@ export default function Bazi() {
       birthHour: Number(formData.birthHour),
     };
 
-    const res = await fetch('/api/bazi/full-analysis', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const res = await fetch('/api/bazi/full-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      setStatus({ type: 'error', message: err.error || 'Full analysis failed.' });
-      return;
+      if (!res.ok) {
+        const message = await readErrorMessage(res, 'Full analysis failed.');
+        setStatus({ type: 'error', message });
+        return;
+      }
+
+      const data = await res.json();
+      setFullResult(data);
+      setStatus({ type: 'success', message: t('bazi.fullReady') });
+    } catch (error) {
+      setStatus({ type: 'error', message: getNetworkErrorMessage(error) });
     }
-
-    const data = await res.json();
-    setFullResult(data);
-    setStatus({ type: 'success', message: t('bazi.fullReady') });
   };
 
   const handleSaveRecord = async () => {
@@ -110,24 +225,28 @@ export default function Bazi() {
       birthHour: Number(formData.birthHour),
     };
 
-    const res = await fetch('/api/bazi/records', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const res = await fetch('/api/bazi/records', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      setStatus({ type: 'error', message: err.error || 'Save failed.' });
-      return;
+      if (!res.ok) {
+        const message = await readErrorMessage(res, 'Save failed.');
+        setStatus({ type: 'error', message });
+        return;
+      }
+
+      const data = await res.json();
+      setSavedRecord(data.record);
+      setStatus({ type: 'success', message: t('bazi.saved') });
+    } catch (error) {
+      setStatus({ type: 'error', message: getNetworkErrorMessage(error) });
     }
-
-    const data = await res.json();
-    setSavedRecord(data.record);
-    setStatus({ type: 'success', message: t('bazi.saved') });
   };
 
   const handleAddFavorite = async () => {
@@ -137,24 +256,28 @@ export default function Bazi() {
     }
     setStatus(null);
 
-    const res = await fetch('/api/favorites', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ recordId: savedRecord.id }),
-    });
+    try {
+      const res = await fetch('/api/favorites', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ recordId: savedRecord.id }),
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      setStatus({ type: 'error', message: err.error || 'Favorite failed.' });
-      return;
+      if (!res.ok) {
+        const message = await readErrorMessage(res, 'Favorite failed.');
+        setStatus({ type: 'error', message });
+        return;
+      }
+
+      const data = await res.json();
+      setFavoriteStatus(data.favorite);
+      setStatus({ type: 'success', message: t('bazi.favorited') });
+    } catch (error) {
+      setStatus({ type: 'error', message: getNetworkErrorMessage(error) });
     }
-
-    const data = await res.json();
-    setFavoriteStatus(data.favorite);
-    setStatus({ type: 'success', message: t('bazi.favorited') });
   };
 
   const statusStyle =
@@ -183,24 +306,28 @@ export default function Bazi() {
       luckCycles: fullResult.luckCycles
     };
 
-    const res = await fetch('/api/bazi/ai-interpret', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const res = await fetch('/api/bazi/ai-interpret', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      setStatus({ type: 'error', message: err.error || 'AI Interpretation failed.' });
-      return;
+      if (!res.ok) {
+        const message = await readErrorMessage(res, 'AI Interpretation failed.');
+        setStatus({ type: 'error', message });
+        return;
+      }
+
+      const data = await res.json();
+      setAiResult(data.content);
+      setStatus({ type: 'success', message: t('bazi.aiReady') });
+    } catch (error) {
+      setStatus({ type: 'error', message: getNetworkErrorMessage(error) });
     }
-
-    const data = await res.json();
-    setAiResult(data.content);
-    setStatus({ type: 'success', message: t('bazi.aiReady') });
   };
 
   return (
@@ -219,7 +346,14 @@ export default function Bazi() {
                 className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"
                 placeholder="1993"
                 required
+                aria-invalid={Boolean(errors.birthYear)}
+                aria-describedby={errors.birthYear ? 'bazi-birthYear-error' : undefined}
               />
+              {errors.birthYear && (
+                <span id="bazi-birthYear-error" className="mt-2 block text-xs text-rose-200">
+                  {errors.birthYear}
+                </span>
+              )}
             </label>
             <label className="text-sm text-white/80">
               {t('bazi.birthMonth')}
@@ -232,7 +366,14 @@ export default function Bazi() {
                 min="1"
                 max="12"
                 required
+                aria-invalid={Boolean(errors.birthMonth)}
+                aria-describedby={errors.birthMonth ? 'bazi-birthMonth-error' : undefined}
               />
+              {errors.birthMonth && (
+                <span id="bazi-birthMonth-error" className="mt-2 block text-xs text-rose-200">
+                  {errors.birthMonth}
+                </span>
+              )}
             </label>
             <label className="text-sm text-white/80">
               {t('bazi.birthDay')}
@@ -245,7 +386,14 @@ export default function Bazi() {
                 min="1"
                 max="31"
                 required
+                aria-invalid={Boolean(errors.birthDay)}
+                aria-describedby={errors.birthDay ? 'bazi-birthDay-error' : undefined}
               />
+              {errors.birthDay && (
+                <span id="bazi-birthDay-error" className="mt-2 block text-xs text-rose-200">
+                  {errors.birthDay}
+                </span>
+              )}
             </label>
             <label className="text-sm text-white/80">
               {t('bazi.birthHour')}
@@ -258,7 +406,14 @@ export default function Bazi() {
                 min="0"
                 max="23"
                 required
+                aria-invalid={Boolean(errors.birthHour)}
+                aria-describedby={errors.birthHour ? 'bazi-birthHour-error' : undefined}
               />
+              {errors.birthHour && (
+                <span id="bazi-birthHour-error" className="mt-2 block text-xs text-rose-200">
+                  {errors.birthHour}
+                </span>
+              )}
             </label>
             <label className="text-sm text-white/80">
               {t('bazi.gender')}
