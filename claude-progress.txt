@@ -99,3 +99,7 @@
 - Marked feature_list.json test #22 (Responsive layout verification across desktop/tablet/mobile) as passing. Current progress: 45/479 tests passing.
 - Note: Iching flow was temporarily failing due to AI confirm modal; resolved and re-verified.
 - Next: continue with next failing feature test after #22.
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js); both passed.
+- Enhanced accessibility keyboard-only Playwright flow with screenshots, console error capture, and cleanup; verified accessibility-keyboard-smoke.spec.js.
+- Marked feature_list.json accessibility smoke flow as passing. Current progress: 46/479 tests passing.
+- Next: continue remaining functional tests (performance smoke, pagination/search/filter, Zodiac compatibility, Tarot edge cases).
