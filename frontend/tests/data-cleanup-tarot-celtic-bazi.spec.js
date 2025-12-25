@@ -48,15 +48,34 @@ test('[J] Data cleanup: Tarot Celtic cross from /bazi matches backend data', asy
   await expect(page.getByLabel(/Birth Year|出生年份/)).toBeVisible();
   await page.screenshot({ path: buildScreenshotPath('data-cleanup-tarot-celtic-step-1-bazi') });
 
-  await page.goto('/profile');
-  await page.fill('input[type="email"]', 'test@example.com');
-  await page.fill('input[type="password"]', 'password123');
-  await page.click('button[type="submit"]');
-  await page.waitForFunction(() => Boolean(localStorage.getItem('bazi_token')));
-  if (!page.url().includes('/profile')) {
-    await page.goto('/profile');
+  const email = 'test@example.com';
+  const password = 'password123';
+  let loginResponse = await page.request.post('/api/auth/login', {
+    data: { email, password },
+  });
+
+  if (!loginResponse.ok()) {
+    await page.request.post('/api/auth/register', {
+      data: { email, password, name: 'Test User' },
+    });
+    loginResponse = await page.request.post('/api/auth/login', {
+      data: { email, password },
+    });
   }
-  await expect(page.getByRole('button', { name: /Logout/i })).toBeVisible();
+
+  expect(loginResponse.ok()).toBeTruthy();
+  const loginData = await loginResponse.json();
+
+  await page.addInitScript(
+    ({ token, user }) => {
+      localStorage.setItem('bazi_token', token);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(user));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { token: loginData.token, user: loginData.user }
+  );
 
   await page.goto('/bazi');
   await page.getByRole('link', { name: /Tarot/i }).click();

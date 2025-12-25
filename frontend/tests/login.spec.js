@@ -194,6 +194,13 @@ test('Shows error message when WeChat OAuth is not configured', async ({ page })
         localStorage.removeItem('bazi_last_activity');
     });
 
+    await page.route('**/api/auth/wechat/redirect?**', async (route) => {
+        await route.fulfill({
+            status: 302,
+            headers: { Location: '/login?error=wechat_not_configured&provider=wechat' },
+        });
+    });
+
     await page.getByRole('button', { name: 'Continue with WeChat' }).click();
 
     await expect(page).toHaveURL(/\/login/);

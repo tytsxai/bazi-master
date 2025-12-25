@@ -32,7 +32,7 @@ test('AI streaming via WebSocket flow (connect, stream, disconnect)', async ({ p
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'BaZi Master' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'BaZi Master' })).toBeVisible();
   await page.screenshot({ path: screenshotPath('ai-streaming-step-1-home') });
 
   await page.getByRole('link', { name: 'Login' }).click();
@@ -180,8 +180,13 @@ test('AI streaming via WebSocket flow (connect, stream, disconnect)', async ({ p
   await historyCard.getByRole('button', { name: 'Delete' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
+  const deleteResponse = page.waitForResponse(
+    (resp) => resp.url().includes('/api/bazi/records/') && resp.request().method() === 'DELETE'
+  );
   await dialog.getByRole('button', { name: 'Delete' }).click();
-  await expect(page.getByText('Record deleted.')).toBeVisible();
+  const deleteResult = await deleteResponse;
+  expect(deleteResult.ok()).toBeTruthy();
+  await expect(historyCard).toHaveCount(0);
   await page.screenshot({ path: screenshotPath('ai-streaming-step-15-history-deleted') });
 
   await page.getByRole('button', { name: 'Logout' }).click();

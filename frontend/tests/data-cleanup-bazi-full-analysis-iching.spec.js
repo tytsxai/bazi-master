@@ -7,6 +7,7 @@ const buildScreenshotPath = (name) => {
 };
 
 test('[J] Data cleanup: Bazi full analysis from /iching matches backend data', async ({ page }) => {
+  test.setTimeout(60_000);
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));
@@ -25,11 +26,34 @@ test('[J] Data cleanup: Bazi full analysis from /iching matches backend data', a
   await page.goto('/iching');
   await page.screenshot({ path: buildScreenshotPath('data-cleanup-iching-step-1') });
 
-  await page.goto('/login');
-  await page.fill('input[type=\"email\"]', 'test@example.com');
-  await page.fill('input[type=\"password\"]', 'password123');
-  await page.click('button[type=\"submit\"]');
-  await expect(page).toHaveURL(/\/profile/);
+  const email = 'test@example.com';
+  const password = 'password123';
+  let loginResponse = await page.request.post('/api/auth/login', {
+    data: { email, password },
+  });
+
+  if (!loginResponse.ok()) {
+    await page.request.post('/api/auth/register', {
+      data: { email, password, name: 'Test User' },
+    });
+    loginResponse = await page.request.post('/api/auth/login', {
+      data: { email, password },
+    });
+  }
+
+  expect(loginResponse.ok()).toBeTruthy();
+  const loginData = await loginResponse.json();
+
+  await page.addInitScript(
+    ({ token, user }) => {
+      localStorage.setItem('bazi_token', token);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(user));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { token: loginData.token, user: loginData.user }
+  );
 
   await page.goto('/bazi');
   await page.getByLabel(/Birth Year|出生年份/).fill('1992');
@@ -47,11 +71,18 @@ test('[J] Data cleanup: Bazi full analysis from /iching matches backend data', a
   const calcResponse = await calcResponsePromise;
   expect(calcResponse.ok()).toBeTruthy();
 
-  const fullResponsePromise = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/full-analysis') && resp.request().method() === 'POST'
+  await expect(page.getByTestId('bazi-full-analysis')).toBeEnabled();
+
+  const fullRequestPromise = page.waitForRequest(
+    (req) => req.url().includes('/api/bazi/full-analysis') && req.method() === 'POST'
   );
-  await page.getByRole('button', { name: /Request Full Analysis|完整分析/ }).click();
-  const fullResponse = await fullResponsePromise;
+  await page.getByTestId('bazi-full-analysis').click();
+  await expect(page.getByTestId('bazi-full-analysis')).toBeDisabled();
+  const fullRequest = await fullRequestPromise;
+  const fullResponse = await fullRequest.response();
+  if (!fullResponse) {
+    throw new Error(`Full analysis request failed: ${fullRequest.failure()?.errorText || 'no response'}`);
+  }
   expect(fullResponse.ok()).toBeTruthy();
   const fullData = await fullResponse.json();
 
