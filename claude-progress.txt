@@ -83,3 +83,6 @@
 - Added global error suppression for failed resource load console noise during session expiry.
 - Verified security-session-expiry.spec.js via Playwright; marked test #17 as passing. Current progress: 21/479 tests passing.
 - Next: continue remaining functional tests (real data audit, deep link, Tarot/Zodiac flows) and resolve init.sh prisma data-loss prompt.
+- Added Playwright real data audit flow with unique BaZi record creation, history/favorites verification, refresh persistence, and cleanup; captured verification screenshots.
+- Verified real-data-audit.spec.js via Playwright; marked test #18 as passing. Current progress: 22/479 tests passing.
+- Next: continue remaining functional tests (deep link, Tarot/Zodiac flows) and resolve init.sh prisma data-loss prompt.
