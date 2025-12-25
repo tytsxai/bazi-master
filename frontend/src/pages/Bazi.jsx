@@ -69,6 +69,16 @@ const normalizeNumericInput = (value, limits) => {
   if (numeric > limits.max) return String(limits.max);
   return cleaned;
 };
+const formatCoordinate = (value) =>
+  Number.isFinite(value) ? Number(value).toFixed(4) : '—';
+const formatLocationLabel = (location) => {
+  if (!location || typeof location !== 'object') return '—';
+  const lat = formatCoordinate(location.latitude);
+  const lon = formatCoordinate(location.longitude);
+  if (location.name) return `${location.name} (${lat}, ${lon})`;
+  if (lat === '—' && lon === '—') return '—';
+  return `${lat}, ${lon}`;
+};
 const coerceInt = (value) => {
   if (value === '' || value === null || value === undefined) return null;
   const numeric = Number(value);
@@ -397,10 +407,14 @@ export default function Bazi() {
     const offsetMinutes = Number.isFinite(baseResult.timezoneOffsetMinutes)
       ? baseResult.timezoneOffsetMinutes
       : null;
+    const trueSolar = baseResult?.trueSolarTime && typeof baseResult.trueSolarTime === 'object'
+      ? baseResult.trueSolarTime
+      : null;
     return {
       offsetMinutes,
       offsetLabel: Number.isFinite(offsetMinutes) ? formatOffsetMinutes(offsetMinutes) : null,
       birthIso: typeof baseResult.birthIso === 'string' ? baseResult.birthIso : null,
+      trueSolar,
     };
   }, [baseResult]);
 
@@ -1089,6 +1103,9 @@ export default function Bazi() {
                 aria-invalid={Boolean(errors.birthLocation)}
                 aria-describedby={errors.birthLocation ? 'bazi-birthLocation-error' : undefined}
               />
+              <p className="mt-2 text-xs text-white/50">
+                {t('bazi.locationHint')}
+              </p>
               {errors.birthLocation && (
                 <span id="bazi-birthLocation-error" className="mt-2 block text-xs text-rose-200">
                   {errors.birthLocation}
@@ -1207,6 +1224,34 @@ export default function Bazi() {
                   </span>
                   <span data-testid="birth-utc">
                     {timeMeta.birthIso || t('bazi.timezoneUnavailable')}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-[0.2em] text-white/50">
+                    {t('bazi.trueSolarTime')}
+                  </span>
+                  <span data-testid="true-solar-time">
+                    {timeMeta.trueSolar?.applied
+                      ? timeMeta.trueSolar.correctedIso
+                      : t('bazi.trueSolarUnavailable')}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-[0.2em] text-white/50">
+                    {t('bazi.trueSolarCorrection')}
+                  </span>
+                  <span data-testid="true-solar-correction">
+                    {timeMeta.trueSolar?.applied
+                      ? `${timeMeta.trueSolar.correctionMinutes} min`
+                      : '—'}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-[0.2em] text-white/50">
+                    {t('bazi.trueSolarLocation')}
+                  </span>
+                  <span data-testid="true-solar-location">
+                    {formatLocationLabel(timeMeta.trueSolar?.location)}
                   </span>
                 </div>
               </div>

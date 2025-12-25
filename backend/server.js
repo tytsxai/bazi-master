@@ -18,6 +18,7 @@ import {
   deriveChangingLinesFromTimeContext,
 } from './iching.js';
 import { calculateRisingSign } from './zodiac.js';
+import { resolveLocationCoordinates, computeTrueSolarTime } from './solarTime.js';
 import { validateBaziInput } from './validation.js';
 import { buildSearchOr, parseSearchTerms, recordMatchesQuery } from './search.js';
 import { createAiGuard, createInFlightDeduper } from './lib/concurrency.js';
@@ -508,6 +509,68 @@ const parseIfMatchHeader = (headerValue) => {
     return token.slice(1, -1);
   }
   return token;
+};
+
+const buildTrueSolarMeta = (payload, timeMeta) => {
+  if (!payload) return null;
+  const location = resolveLocationCoordinates(payload.birthLocation);
+  if (!location) {
+    return {
+      applied: false,
+      location: null,
+      correctionMinutes: null,
+      corrected: null,
+      correctedIso: null,
+    };
+  }
+  const resolvedOffset = Number.isFinite(timeMeta?.timezoneOffsetMinutes)
+    ? timeMeta.timezoneOffsetMinutes
+    : parseTimezoneOffsetMinutes(payload.timezoneOffsetMinutes ?? payload.timezone);
+  const trueSolar = computeTrueSolarTime({
+    birthYear: payload.birthYear,
+    birthMonth: payload.birthMonth,
+    birthDay: payload.birthDay,
+    birthHour: payload.birthHour,
+    birthMinute: payload.birthMinute,
+    timezoneOffsetMinutes: resolvedOffset,
+    longitude: location.longitude,
+  });
+  if (!trueSolar) {
+    return {
+      applied: false,
+      location,
+      correctionMinutes: null,
+      corrected: null,
+      correctedIso: null,
+    };
+  }
+  return {
+    applied: true,
+    location,
+    correctionMinutes: trueSolar.correctionMinutes,
+    corrected: trueSolar.corrected,
+    correctedIso: trueSolar.correctedDate.toISOString(),
+  };
+};
+
+const resolveBaziCalculationInput = (payload) => {
+  const timeMeta = buildBirthTimeMeta(payload);
+  const trueSolarMeta = buildTrueSolarMeta(payload, timeMeta);
+  if (trueSolarMeta?.applied && trueSolarMeta?.corrected) {
+    const { year, month, day, hour } = trueSolarMeta.corrected;
+    return {
+      calculationPayload: {
+        ...payload,
+        birthYear: year,
+        birthMonth: month,
+        birthDay: day,
+        birthHour: hour,
+      },
+      timeMeta,
+      trueSolarMeta,
+    };
+  }
+  return { calculationPayload: payload, timeMeta, trueSolarMeta };
 };
 
 const buildBaziSubmitKey = (userId, payload) => {
@@ -2252,13 +2315,14 @@ apiRouter.post('/bazi/calculate', (req, res) => {
 
   try {
     const payload = validation.payload;
-    const result = getBaziCalculation(payload);
-    const timeMeta = buildBirthTimeMeta(payload);
+    const { calculationPayload, timeMeta, trueSolarMeta } = resolveBaziCalculationInput(payload);
+    const result = getBaziCalculation(calculationPayload);
     // basic returns pillars + fiveElements
     res.json({
       pillars: result.pillars,
       fiveElements: result.fiveElements,
       fiveElementsPercent: result.fiveElementsPercent,
+      trueSolarTime: trueSolarMeta,
       ...timeMeta,
     });
   } catch (e) {
@@ -2278,9 +2342,9 @@ apiRouter.post('/bazi/full-analysis', requireAuth, (req, res) => {
 
   try {
     const payload = validation.payload;
-    const result = getBaziCalculation(payload);
-    const timeMeta = buildBirthTimeMeta(payload);
-    res.json({ ...result, ...timeMeta });
+    const { calculationPayload, timeMeta, trueSolarMeta } = resolveBaziCalculationInput(payload);
+    const result = getBaziCalculation(calculationPayload);
+    res.json({ ...result, ...timeMeta, trueSolarTime: trueSolarMeta });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Calculation error' });
@@ -2355,14 +2419,14 @@ apiRouter.post('/bazi/records', requireAuth, async (req, res) => {
       result: providedResult,
     } = validation.payload;
 
-    const calculationPayload = {
+    const { calculationPayload } = resolveBaziCalculationInput({
       ...validation.payload,
       birthYear,
       birthMonth,
       birthDay,
       birthHour,
       gender,
-    };
+    });
     const normalizedProvidedResult =
       providedResult && typeof providedResult === 'object' ? providedResult : null;
     const needsCalculation =

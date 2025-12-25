@@ -52,3 +52,7 @@
 - Added Playwright timezone flow test with screenshots, including full analysis, save/favorite/history verification, and cleanup.
 - Verified timezone flow end-to-end via Playwright; marked feature_list.json test #10 as passing. Current progress: 14/479 tests passing.
 - Next: continue remaining Bazi-related tests (true solar time/timezone accuracy) and move into Tarot/Zodiac modules.
+- Added true solar time correction using birth location: resolves coordinates from known cities/lat-lon, applies longitude-based correction, and surfaces the corrected timestamp + metadata in BaZi time context.
+- Updated BaZi UI with location hint and true solar time fields, plus i18n strings for the new metadata.
+- Added Playwright true solar time flow test with screenshots; verified end-to-end and marked feature_list.json test #11 as passing. Current progress: 15/479 tests passing.
+- Next: continue remaining BaZi-related tests (true solar/time accuracy edge cases) then move into Tarot/Zodiac modules.
