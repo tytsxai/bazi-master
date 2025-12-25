@@ -2009,7 +2009,7 @@ export default function History() {
       <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-2xl text-gold-300">Tarot History</h2>
+            <h2 className="font-display text-2xl text-gold-300">Tarot Archive</h2>
             <p className="mt-1 text-sm text-white/60">
               Review saved tarot spreads pulled directly from your backend history.
             </p>

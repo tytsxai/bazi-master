@@ -41,7 +41,7 @@ test('AI provider selection with availability check and BaZi flow', async ({ pag
   await page.fill('input[type="password"]', 'password123');
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/profile/);
-  await expect(page.getByText('Test User')).toBeVisible();
+  await expect(page.getByTestId('header-user-name')).toHaveText('Test User');
   await page.screenshot({ path: screenshotPath('ai-provider-step-2-profile') });
 
   const providerSelect = page.getByLabel('Preferred provider');
@@ -108,7 +108,7 @@ test('AI provider selection with availability check and BaZi flow', async ({ pag
   await page.screenshot({ path: screenshotPath('ai-provider-step-10-favorited') });
 
   await page.goto('/history');
-  await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   await expect(page.getByText(uniqueLocation)).toBeVisible();
   await page.screenshot({ path: screenshotPath('ai-provider-step-11-history') });
 
@@ -129,7 +129,7 @@ test('AI provider selection with availability check and BaZi flow', async ({ pag
   await page.screenshot({ path: screenshotPath('ai-provider-step-13-favorites-removed') });
 
   await page.goto('/history');
-  await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   const historyCard = page
     .getByText(uniqueLocation)
     .locator('xpath=ancestor::div[contains(@data-testid,"history-record-card")][1]');

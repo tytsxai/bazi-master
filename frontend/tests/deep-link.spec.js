@@ -27,7 +27,7 @@ test('Deep link flow loads shared history record with filters', async ({ page })
   await page.fill('input[type="password"]', 'password123');
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/profile/);
-  await expect(page.getByText('Test User')).toBeVisible();
+  await expect(page.getByTestId('header-user-name')).toHaveText('Test User');
   await page.screenshot({ path: screenshotPath('step-2-profile') });
 
   await page.goto('/bazi');

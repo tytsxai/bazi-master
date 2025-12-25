@@ -299,6 +299,7 @@ export default function Login() {
     if (!tokenParam) return;
     const userFromParam = decodeUserParam(userParam);
     localStorage.setItem('bazi_token', tokenParam);
+    localStorage.setItem('bazi_token_origin', 'backend');
     if (userFromParam) {
       localStorage.setItem('bazi_user', JSON.stringify(userFromParam));
     }

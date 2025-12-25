@@ -27,7 +27,7 @@ test('Real data audit flow with unique BaZi record and cleanup', async ({ page }
   await page.fill('input[type="password"]', 'password123');
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/profile/);
-  await expect(page.getByText('Test User')).toBeVisible();
+  await expect(page.getByTestId('header-user-name')).toHaveText('Test User');
   await page.screenshot({ path: screenshotPath('step-2-profile') });
 
   await page.goto('/bazi');
@@ -81,7 +81,7 @@ test('Real data audit flow with unique BaZi record and cleanup', async ({ page }
   await page.screenshot({ path: screenshotPath('step-7-favorited') });
 
   await page.goto('/history');
-  await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   await page.getByPlaceholder('Location, timezone, pillar').fill(uniqueLocation);
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })).toHaveCount(1);

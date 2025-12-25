@@ -24,7 +24,7 @@ test('Stress flow with rapid submissions remains idempotent', async ({ page }) =
   await page.fill('input[type="password"]', 'password123');
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/profile/);
-  await expect(page.getByText('Test User')).toBeVisible();
+  await expect(page.getByTestId('header-user-name')).toHaveText('Test User');
   await page.screenshot({ path: screenshotPath('stress-step-1-profile') });
 
   await page.goto('/bazi');
@@ -78,7 +78,7 @@ test('Stress flow with rapid submissions remains idempotent', async ({ page }) =
   await page.screenshot({ path: screenshotPath('stress-step-6-favorited') });
 
   await page.goto('/history');
-  await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   const historyFilterResponse = page.waitForResponse(
     (resp) => resp.url().includes('/api/bazi/records') && resp.url().includes('q='),
   );

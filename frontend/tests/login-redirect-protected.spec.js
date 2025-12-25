@@ -24,5 +24,5 @@ test('Login preserves intended protected page after switching auth modes', async
   await page.click('button[type="submit"]');
 
   await expect(page).toHaveURL(/\/history/);
-  await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
 });

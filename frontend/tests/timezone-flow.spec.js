@@ -84,7 +84,7 @@ test('Timezone change affects derived time metadata and full Bazi flow', async (
   await page.screenshot({ path: screenshotPath('tz-step-7-favorited') });
 
   await page.goto('/history');
-  await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   await expect(page.getByText(uniqueLocation)).toBeVisible();
   const historyCard = page
     .getByText(uniqueLocation)
@@ -115,7 +115,7 @@ test('Timezone change affects derived time metadata and full Bazi flow', async (
   await page.screenshot({ path: screenshotPath('tz-step-11-favorites-removed') });
 
   await page.goto('/history');
-  await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   const historyCardAfter = page
     .getByText(uniqueLocation)
     .locator('xpath=ancestor::div[contains(@class,"rounded-2xl")]')

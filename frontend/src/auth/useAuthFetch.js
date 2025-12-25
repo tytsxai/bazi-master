@@ -46,7 +46,14 @@ export function useAuthFetch() {
       }
 
       const response = await fetch(input, { ...init, headers });
-      const shouldEnforceAuth = effectiveToken ? isBackendToken(effectiveToken) : true;
+      let tokenOrigin = null;
+      try {
+        tokenOrigin = localStorage.getItem('bazi_token_origin');
+      } catch {
+        tokenOrigin = null;
+      }
+      const shouldEnforceAuth = Boolean(effectiveToken)
+        && (tokenOrigin === 'backend' || isBackendToken(effectiveToken));
       if ((response.headers.get('x-session-expired') === '1' || response.status === 401) && shouldEnforceAuth) {
         if (retryAction) {
           setRetryAction({

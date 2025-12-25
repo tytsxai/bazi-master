@@ -96,7 +96,7 @@ test('User can add and remove a BaZi favorite', async ({ page }) => {
   await page.screenshot({ path: screenshotPath('favorites-step-9-refresh') });
 
   await page.goto('/history');
-  await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   await expect(page.getByText(uniqueLocation)).toBeVisible();
   await page.screenshot({ path: screenshotPath('favorites-step-10-history') });
 
