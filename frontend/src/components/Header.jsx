@@ -116,6 +116,7 @@ export default function Header() {
           type="button"
           onClick={toggleLocale}
           className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 hover:text-white"
+          aria-label={currentLocale === 'zh-CN' ? 'Switch to English' : 'Switch to Chinese'}
         >
           {currentLocale === 'zh-CN' ? 'EN' : '中文'}
         </button>
