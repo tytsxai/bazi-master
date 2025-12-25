@@ -1,7 +1,6 @@
 import { execSync, spawn } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
-import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { ensureLocalPostgres, stopLocalPostgres } from '../../backend/scripts/local-postgres.mjs';
 
@@ -11,7 +10,7 @@ const rootDir = path.resolve(__dirname, '..', '..');
 const backendDir = path.join(rootDir, 'backend');
 const frontendDir = path.join(rootDir, 'frontend');
 
-const frontendPort = Number(process.env.E2E_WEB_PORT || 3000);
+const frontendPort = Number(process.env.E2E_WEB_PORT || process.env.PW_PORT || 3000);
 process.env.PORT = process.env.PORT || '4000';
 
 const isWindows = process.platform === 'win32';
@@ -30,7 +29,7 @@ const checkPort = (port, host = '127.0.0.1') =>
     socket.connect(port, host, () => finalize(true));
   });
 
-const forceRestart = process.env.E2E_SERVER === '1';
+const forceRestart = process.env.E2E_SERVER === '1' || process.env.PW_SERVER === '1';
 
 const checkBackendHealth = async () => {
   const controller = new AbortController();
@@ -187,7 +186,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 process.on('exit', shutdown);
 
-if (forceRestart && process.env.E2E_SKIP_RESET !== '1') {
+if (forceRestart && process.env.E2E_SKIP_RESET !== '1' && process.env.PW_SKIP_RESET !== '1') {
   const backendRunning = await checkPort(4000);
   if (backendRunning) {
     if (killPort(4000)) {
@@ -243,8 +242,7 @@ if (!frontendListening) {
   process.exit(1);
 }
 
-if (!frontendProcess && !backendProcess) {
-  // Keep the process alive when reusing already-running services.
+if (!keepAliveTimer) {
   keepAliveTimer = setInterval(() => {}, 1000);
 }
 
