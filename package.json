@@ -1,4 +1,11 @@
 {
+  "private": true,
+  "scripts": {
+    "dev": "npm -C frontend run dev",
+    "test": "npm -C backend test && npm -C frontend test",
+    "test:backend": "npm -C backend test",
+    "test:frontend": "npm -C frontend test"
+  },
   "devDependencies": {
     "prisma": "^5.22.0"
   },

@@ -138,7 +138,7 @@ test('Session expiry prompts re-authentication and retries the pending save', as
   await page.screenshot({ path: screenshotPath('security-step-9-favorited') });
 
   await page.goto('/history');
-  await expect(page.getByRole('heading', { name: /History|历史/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(History|历史)$/ })).toBeVisible();
   const historyFilterResponse = page.waitForResponse(
     (resp) => resp.url().includes('/api/bazi/records') && resp.url().includes('q='),
   );

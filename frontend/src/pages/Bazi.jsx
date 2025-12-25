@@ -198,7 +198,7 @@ const isValidCalendarDate = (year, month, day) => {
   );
 };
 
-const getFieldErrors = (data) => {
+const getFieldErrors = (data, t) => {
   const nextErrors = {};
   const year = Number(data.birthYear);
   const month = Number(data.birthMonth);
@@ -207,53 +207,53 @@ const getFieldErrors = (data) => {
   const today = getTodayParts();
 
   if (!data.birthYear) {
-    nextErrors.birthYear = 'Birth year is required.';
+    nextErrors.birthYear = t('bazi.errors.yearRequired');
   } else if (!Number.isInteger(year) || year < 1 || year > today.year) {
-    nextErrors.birthYear = 'Enter a valid year.';
+    nextErrors.birthYear = t('bazi.errors.yearInvalid');
   }
 
   if (!data.birthMonth) {
-    nextErrors.birthMonth = 'Birth month is required.';
+    nextErrors.birthMonth = t('bazi.errors.monthRequired');
   } else if (!Number.isInteger(month) || month < 1 || month > 12) {
-    nextErrors.birthMonth = 'Enter a valid month (1-12).';
+    nextErrors.birthMonth = t('bazi.errors.monthInvalid');
   }
 
   if (!data.birthDay) {
-    nextErrors.birthDay = 'Birth day is required.';
+    nextErrors.birthDay = t('bazi.errors.dayRequired');
   } else if (!Number.isInteger(day) || day < 1 || day > 31) {
-    nextErrors.birthDay = 'Enter a valid day (1-31).';
+    nextErrors.birthDay = t('bazi.errors.dayInvalid');
   } else if (
     !nextErrors.birthYear &&
     !nextErrors.birthMonth &&
     !isValidCalendarDate(year, month, day)
   ) {
-    nextErrors.birthDay = 'Enter a valid date.';
+    nextErrors.birthDay = t('bazi.errors.dateInvalid');
   } else if (!nextErrors.birthYear && !nextErrors.birthMonth) {
     const isFuture =
       year > today.year ||
       (year === today.year && month > today.month) ||
       (year === today.year && month === today.month && day > today.day);
     if (isFuture) {
-      nextErrors.birthDay = 'Birth date cannot be in the future.';
+      nextErrors.birthDay = t('bazi.errors.futureDate');
     }
   }
 
   if (data.birthHour === '') {
-    nextErrors.birthHour = 'Birth hour is required.';
+    nextErrors.birthHour = t('bazi.errors.hourRequired');
   } else if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
-    nextErrors.birthHour = 'Enter a valid hour (0-23).';
+    nextErrors.birthHour = t('bazi.errors.hourInvalid');
   }
 
   if (!data.gender) {
-    nextErrors.gender = 'Gender is required.';
+    nextErrors.gender = t('bazi.errors.genderRequired');
   }
 
   if (isWhitespaceOnly(data.birthLocation)) {
-    nextErrors.birthLocation = 'Birth location cannot be only whitespace.';
+    nextErrors.birthLocation = t('bazi.errors.locationWhitespace');
   }
 
   if (isWhitespaceOnly(data.timezone)) {
-    nextErrors.timezone = 'Timezone cannot be only whitespace.';
+    nextErrors.timezone = t('bazi.errors.timezoneWhitespace');
   }
 
   return nextErrors;
@@ -668,7 +668,7 @@ export default function Bazi() {
       }
       setErrors((prevErrors) => {
         if (!prevErrors || Object.keys(prevErrors).length === 0) return prevErrors;
-        const fieldErrors = getFieldErrors(next);
+        const fieldErrors = getFieldErrors(next, t);
         const nextErrors = { ...prevErrors };
 
         if (nextErrors[field] && !fieldErrors[field]) {
@@ -690,7 +690,7 @@ export default function Bazi() {
   };
 
   const validate = () => {
-    return getFieldErrors(formData);
+    return getFieldErrors(formData, t);
   };
 
   const dateInputLimits = getDateInputLimits(formData);

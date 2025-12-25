@@ -15,7 +15,7 @@ test('Tarot Celtic Cross AI interpretation and history persistence', async ({ pa
   await expect(page).toHaveURL(/\/profile/);
 
   await page.goto('/tarot');
-  await page.selectOption('select', 'CelticCross');
+  await page.selectOption('#tarot-spread', 'CelticCross');
   await page.fill('input[type="text"]', uniqueQuestion);
   await page.click('button:has-text("Draw")');
 

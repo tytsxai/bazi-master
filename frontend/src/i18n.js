@@ -87,7 +87,22 @@ const resources = {
         year: 'Year',
         month: 'Month',
         day: 'Day',
-        hour: 'Hour'
+        hour: 'Hour',
+        errors: {
+          yearRequired: 'Birth year is required.',
+          yearInvalid: 'Enter a valid year.',
+          monthRequired: 'Birth month is required.',
+          monthInvalid: 'Enter a valid month (1-12).',
+          dayRequired: 'Birth day is required.',
+          dayInvalid: 'Enter a valid day (1-31).',
+          dateInvalid: 'Enter a valid date.',
+          futureDate: 'Birth date cannot be in the future.',
+          hourRequired: 'Birth hour is required.',
+          hourInvalid: 'Enter a valid hour (0-23).',
+          genderRequired: 'Gender is required.',
+          locationWhitespace: 'Birth location cannot be only whitespace.',
+          timezoneWhitespace: 'Timezone cannot be only whitespace.'
+        }
       },
       history: {
         detailsTitle: 'BaZi Record',
@@ -187,7 +202,22 @@ const resources = {
         year: '年柱',
         month: '月柱',
         day: '日柱',
-        hour: '时柱'
+        hour: '时柱',
+        errors: {
+          yearRequired: '需输入出生年份。',
+          yearInvalid: '请输入有效的年份。',
+          monthRequired: '需输入出生月份。',
+          monthInvalid: '请输入有效的月份 (1-12)。',
+          dayRequired: '需输入出生日期。',
+          dayInvalid: '请输入有效的日期 (1-31)。',
+          dateInvalid: '请输入有效的日期。',
+          futureDate: '出生日期不能晚于当前时间。',
+          hourRequired: '需输入出生时辰。',
+          hourInvalid: '请输入有效的时辰 (0-23)。',
+          genderRequired: '需选择性别。',
+          locationWhitespace: '出生地不能为空白。',
+          timezoneWhitespace: '时区不能为空白。'
+        }
       },
       history: {
         detailsTitle: '八字记录',

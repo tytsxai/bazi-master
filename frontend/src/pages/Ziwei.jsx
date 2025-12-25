@@ -76,22 +76,22 @@ export default function Ziwei() {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
-  const validate = () => {
+  const validate = (t) => {
     const nextErrors = {};
     const year = Number(form.birthYear);
     const month = Number(form.birthMonth);
     const day = Number(form.birthDay);
     const hour = Number(form.birthHour);
 
-    if (!String(form.birthYear).trim()) nextErrors.birthYear = 'Year required';
-    else if (!Number.isInteger(year)) nextErrors.birthYear = 'Year must be a number';
-    if (!String(form.birthMonth).trim()) nextErrors.birthMonth = 'Month required';
-    else if (!Number.isInteger(month) || month < 1 || month > 12) nextErrors.birthMonth = 'Month 1-12';
-    if (!String(form.birthDay).trim()) nextErrors.birthDay = 'Day required';
-    else if (!Number.isInteger(day) || day < 1 || day > 31) nextErrors.birthDay = 'Day 1-31';
-    if (!String(form.birthHour).trim()) nextErrors.birthHour = 'Hour required';
-    else if (!Number.isInteger(hour) || hour < 0 || hour > 23) nextErrors.birthHour = 'Hour 0-23';
-    if (!form.gender) nextErrors.gender = 'Gender required';
+    if (!String(form.birthYear).trim()) nextErrors.birthYear = t('bazi.errors.yearRequired');
+    else if (!Number.isInteger(year)) nextErrors.birthYear = t('bazi.errors.yearInvalid');
+    if (!String(form.birthMonth).trim()) nextErrors.birthMonth = t('bazi.errors.monthRequired');
+    else if (!Number.isInteger(month) || month < 1 || month > 12) nextErrors.birthMonth = t('bazi.errors.monthInvalid');
+    if (!String(form.birthDay).trim()) nextErrors.birthDay = t('bazi.errors.dayRequired');
+    else if (!Number.isInteger(day) || day < 1 || day > 31) nextErrors.birthDay = t('bazi.errors.dayInvalid');
+    if (!String(form.birthHour).trim()) nextErrors.birthHour = t('bazi.errors.hourRequired');
+    else if (!Number.isInteger(hour) || hour < 0 || hour > 23) nextErrors.birthHour = t('bazi.errors.hourInvalid');
+    if (!form.gender) nextErrors.gender = t('bazi.errors.genderRequired');
 
     return nextErrors;
   };
@@ -131,7 +131,7 @@ export default function Ziwei() {
       setStatus({ type: 'error', message: 'Please login to access Zi Wei charts.' });
       return;
     }
-    const nextErrors = validate();
+    const nextErrors = validate(t);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
 

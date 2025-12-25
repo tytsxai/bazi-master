@@ -6,7 +6,12 @@ frontend/dist/
 backend/dist/
 *.log
 *.db
+*.db-wal
+*.db-shm
+*.db-journal
 .env
 .DS_Store
 frontend/test-results/
+test-results/
+verification/
 frontend/.vite/

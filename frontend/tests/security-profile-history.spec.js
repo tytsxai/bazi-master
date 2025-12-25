@@ -30,7 +30,7 @@ test('Security: Profile flow from /history matches backend data', async ({ page,
   }
 
   await expect(page).toHaveURL(/\/history/);
-  await expect(page.getByRole('heading', { name: /History|历史/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(History|历史)$/ })).toBeVisible();
 
   const profileRequest = page.waitForResponse(
     (resp) => resp.url().includes('/api/auth/me') && resp.status() === 200

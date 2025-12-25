@@ -8,18 +8,9 @@ test('Session expires after inactivity and forces re-login', async ({ page }) =>
   });
 
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.evaluate(() => {
-    const token = `token_1_${Date.now()}`;
-    localStorage.setItem('bazi_token', token);
-    localStorage.setItem('bazi_user', JSON.stringify({
-      id: 1,
-      email: 'test@example.com',
-      name: 'Test User',
-    }));
-    localStorage.setItem('bazi_last_activity', String(Date.now()));
-  });
-
-  await page.goto('/profile', { waitUntil: 'domcontentloaded' });
+  await page.fill('input[type="email"]', 'test@example.com');
+  await page.fill('input[type="password"]', 'password123');
+  await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/profile/);
 
   await page.evaluate((idleMs) => {

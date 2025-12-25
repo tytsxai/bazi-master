@@ -36,7 +36,7 @@ test('Security: Ziwei V2 quick chart from /profile matches backend data', async 
   await page.fill('input[type="email"]', 'test@example.com');
   await page.fill('input[type="password"]', 'password123');
   const loginResponsePromise = page.waitForResponse(
-    (resp) => resp.url().includes('/api/login') && resp.request().method() === 'POST'
+    (resp) => resp.url().includes('/api/auth/login') && resp.request().method() === 'POST'
   );
   await page.click('button[type="submit"]');
   const loginResponse = await loginResponsePromise;

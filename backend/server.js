@@ -1,10 +1,12 @@
 import express from 'express';
 import http from 'http';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import cors from 'cors';
 import compression from 'compression';
 import helmet from 'helmet';
-import { pathToFileURL } from 'url';
+import { pathToFileURL, fileURLToPath } from 'url';
 import swaggerUi from 'swagger-ui-express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Solar } from 'lunar-javascript';
@@ -48,6 +50,44 @@ import { cleanupUserInMemory, deleteUserCascade } from './userCleanup.js';
 import { deleteBaziRecordHard } from './recordCleanup.js';
 import { hashPassword, isHashedPassword, verifyPassword } from './passwords.js';
 
+const readPrismaDatasourceInfo = () => {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const schemaPath = path.resolve(here, '..', 'prisma', 'schema.prisma');
+    const raw = fs.readFileSync(schemaPath, 'utf8');
+    const datasourceMatch = raw.match(/datasource\s+db\s*{([\s\S]*?)\n}\s*/m);
+    const block = datasourceMatch?.[1] ?? '';
+    const provider = (block.match(/\bprovider\s*=\s*"([^"]+)"/)?.[1] ?? '')
+      .trim()
+      .toLowerCase();
+    const urlExpr = (block.match(/\burl\s*=\s*([^\n\r]+)/)?.[1] ?? '').trim();
+    const urlUsesDatabaseUrlEnv = /env\(\s*"DATABASE_URL"\s*\)/.test(urlExpr);
+    return { provider, urlUsesDatabaseUrlEnv };
+  } catch {
+    return { provider: '', urlUsesDatabaseUrlEnv: false };
+  }
+};
+
+const PRISMA_DATASOURCE = readPrismaDatasourceInfo();
+const PRISMA_PROVIDER = PRISMA_DATASOURCE.provider;
+const PRISMA_URL_USES_DATABASE_URL_ENV = PRISMA_DATASOURCE.urlUsesDatabaseUrlEnv;
+
+const ensureDatabaseUrl = () => {
+  if (process.env.DATABASE_URL) return;
+  const nodeEnv = process.env.NODE_ENV || '';
+  if (nodeEnv === 'production') return;
+
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const sqlitePath = path.resolve(here, '..', 'prisma', 'dev.db');
+    process.env.DATABASE_URL = `file:${sqlitePath}`;
+  } catch {
+    process.env.DATABASE_URL = 'file:./dev.db';
+  }
+};
+
+ensureDatabaseUrl();
+
 const prisma = new PrismaClient();
 const app = express();
 app.disable('x-powered-by');
@@ -87,8 +127,9 @@ const {
 
 const IS_PRODUCTION = NODE_ENV === 'production';
 const DATABASE_URL = process.env.DATABASE_URL || '';
-const IS_SQLITE =
-  !DATABASE_URL || DATABASE_URL.startsWith('file:') || DATABASE_URL.includes('sqlite');
+const IS_SQLITE = PRISMA_PROVIDER
+  ? PRISMA_PROVIDER === 'sqlite'
+  : (!DATABASE_URL || DATABASE_URL.startsWith('file:') || DATABASE_URL.includes('sqlite'));
 const STRIP_SEARCH_MODE = IS_SQLITE;
 
 const parseTrustProxy = (raw) => {
@@ -244,17 +285,41 @@ const validateProductionConfig = () => {
   const errors = [];
   const warnings = [];
 
+  if (!PRISMA_PROVIDER) {
+    warnings.push('Unable to detect Prisma datasource provider from prisma/schema.prisma; DB safety checks may be incomplete.');
+  }
+  if (!PRISMA_URL_USES_DATABASE_URL_ENV) {
+    errors.push('Prisma schema must use url = env("DATABASE_URL") in production to avoid accidental hardcoded DB paths.');
+  }
   if (!DATABASE_URL) {
     errors.push('DATABASE_URL is required in production.');
   }
-  if (IS_SQLITE && process.env.ALLOW_SQLITE_PROD !== 'true') {
-    errors.push('SQLite detected in production. Set DATABASE_URL for PostgreSQL or ALLOW_SQLITE_PROD=true to override.');
+
+  if (PRISMA_PROVIDER === 'sqlite') {
+    if (process.env.ALLOW_SQLITE_PROD !== 'true') {
+      errors.push('SQLite detected in production. Set ALLOW_SQLITE_PROD=true to override (single instance + strict backups), or switch Prisma schema to PostgreSQL before go-live.');
+    }
+    if (DATABASE_URL && !DATABASE_URL.startsWith('file:') && !DATABASE_URL.includes('sqlite')) {
+      errors.push('DATABASE_URL must be a SQLite file URL (file:...) when Prisma provider is sqlite.');
+    }
+  }
+
+  if (PRISMA_PROVIDER === 'postgresql') {
+    if (process.env.ALLOW_SQLITE_PROD === 'true') {
+      warnings.push('ALLOW_SQLITE_PROD=true is set but Prisma provider is postgresql; remove the override for production.');
+    }
+    if (DATABASE_URL && !/^postgres(ql)?:\/\//i.test(DATABASE_URL)) {
+      errors.push('DATABASE_URL must be a PostgreSQL URL (postgres:// or postgresql://) when Prisma provider is postgresql.');
+    }
   }
   if (!FRONTEND_URL || isLocalUrl(FRONTEND_URL)) {
     errors.push('FRONTEND_URL must be a non-localhost URL in production.');
   }
   if (!process.env.BACKEND_BASE_URL || isLocalUrl(process.env.BACKEND_BASE_URL)) {
     errors.push('BACKEND_BASE_URL must be a non-localhost URL in production.');
+  }
+  if (!process.env.REDIS_URL) {
+    warnings.push('REDIS_URL is not set; sessions and caches will not be shared across instances.');
   }
   if (ADMIN_EMAILS.size === 0) {
     warnings.push('ADMIN_EMAILS is empty; admin-only endpoints will be inaccessible.');
@@ -323,7 +388,11 @@ app.use(cors({
     if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
-    return callback(new Error('Not allowed by CORS'));
+    const error = new Error('Not allowed by CORS');
+    error.statusCode = 403;
+    return callback(error);
+    error.status = 403;
+    return callback(error);
   },
   credentials: true,
 }));
@@ -548,7 +617,7 @@ app.use((req, res, next) => {
 // --- AI Provider Settings ---
 const AI_CONCURRENCY_ERROR = 'AI request already in progress. Please wait.';
 const aiGuard = createAiGuard();
-const acquireAiGuard = AI_GUARD_ENABLED ? aiGuard.acquire : () => () => {};
+const acquireAiGuard = AI_GUARD_ENABLED ? aiGuard.acquire : () => () => { };
 const baziSubmitDeduper = createInFlightDeduper();
 const baziCalculationDeduper = createInFlightDeduper();
 const baziFullAnalysisDeduper = createInFlightDeduper();
@@ -681,6 +750,63 @@ const callOpenAI = async ({ system, user }) => {
   return data?.choices?.[0]?.message?.content?.trim();
 };
 
+const callOpenAIStream = async ({ system, user, onChunk }) => {
+  if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      temperature: 0.7,
+      max_tokens: AI_MAX_TOKENS,
+      stream: true,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ]
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenAI error: ${res.status} ${errText}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let finished = false;
+
+  while (!finished) {
+    const { done, value } = await reader.read();
+    if (done) {
+      finished = true;
+      break;
+    }
+    const chunk = decoder.decode(value);
+    const lines = chunk.split('\n').filter(line => line.trim() !== '');
+    for (const line of lines) {
+      if (line === 'data: [DONE]') {
+        finished = true;
+        break;
+      }
+      if (line.startsWith('data: ')) {
+        try {
+          const json = JSON.parse(line.substring(6));
+          const content = json.choices[0]?.delta?.content;
+          if (content) {
+            onChunk(content);
+          }
+        } catch (e) {
+          // ignore parsing errors
+        }
+      }
+    }
+  }
+};
+
 const callAnthropic = async ({ system, user }) => {
   if (!ANTHROPIC_API_KEY) throw new Error('Anthropic API key not configured');
   const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
@@ -708,6 +834,61 @@ const callAnthropic = async ({ system, user }) => {
   return contentBlock?.trim();
 };
 
+const callAnthropicStream = async ({ system, user, onChunk }) => {
+  if (!ANTHROPIC_API_KEY) throw new Error('Anthropic API key not configured');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: AI_MAX_TOKENS,
+      temperature: 0.7,
+      system,
+      stream: true,
+      messages: [{ role: 'user', content: user }]
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Anthropic error: ${res.status} ${errText}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let finished = false;
+
+  while (!finished) {
+    const { done, value } = await reader.read();
+    if (done) {
+      finished = true;
+      break;
+    }
+    const chunk = decoder.decode(value);
+    const lines = chunk.split('\n').filter(line => line.trim() !== '');
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const json = JSON.parse(line.substring(6));
+          if (json.type === 'content_block_delta' && json.delta?.text) {
+            onChunk(json.delta.text);
+          }
+          if (json.type === 'message_stop') {
+            finished = true;
+            break;
+          }
+        } catch (e) {
+          // ignore parsing errors
+        }
+      }
+    }
+  }
+};
+
 const normalizeProviderName = (value) =>
   typeof value === 'string' ? value.trim().toLowerCase() : '';
 
@@ -724,22 +905,53 @@ const resolveAiProvider = (requestedProvider) => {
   return provider;
 };
 
-const generateAIContent = async ({ system, user, fallback, provider }) => {
+const generateAIContent = async ({ system, user, fallback, provider, onChunk }) => {
   const resolvedProvider = resolveAiProvider(provider);
   if (resolvedProvider === 'mock') {
-    return fallback();
+    const content = fallback();
+    if (onChunk) {
+      const words = content.split(' ');
+      for (let i = 0; i < words.length; i++) {
+        onChunk(words[i] + (i === words.length - 1 ? '' : ' '));
+        await new Promise(r => setTimeout(r, 15));
+      }
+      return content;
+    }
+    return content;
   }
   try {
     if (resolvedProvider === 'openai') {
+      if (onChunk) {
+        let full = '';
+        await callOpenAIStream({
+          system, user, onChunk: (c) => {
+            full += c;
+            onChunk(c);
+          }
+        });
+        return full;
+      }
       return await callOpenAI({ system, user });
     }
     if (resolvedProvider === 'anthropic') {
+      if (onChunk) {
+        let full = '';
+        await callAnthropicStream({
+          system, user, onChunk: (c) => {
+            full += c;
+            onChunk(c);
+          }
+        });
+        return full;
+      }
       return await callAnthropic({ system, user });
     }
   } catch (error) {
     console.error('AI provider error:', error);
   }
-  return fallback();
+  const fb = fallback();
+  if (onChunk) onChunk(fb);
+  return fb;
 };
 
 const buildBaziPrompt = ({ pillars, fiveElements, tenGods, luckCycles, strength }) => {
@@ -771,16 +983,21 @@ ${luckLines}
 Strength Notes: ${strength || 'Not provided'}
   `.trim();
 
-  const fallback = () => `
+  const fallback = () => {
+    const summary = `A ${pillars?.day?.elementStem || 'balanced'} Day Master chart with notable elemental distribution.`;
+    const patterns = tenGodLines;
+    const advice = 'Focus on balancing elements that are lower in count and lean into favorable cycles.';
+    return `
 ## 🔮 BaZi Insight
-**Summary:** A ${pillars?.day?.elementStem || 'balanced'} Day Master chart with notable elemental distribution.
+**Summary:** ${summary}
 
 **Key Patterns:**
-${tenGodLines}
+${patterns}
 
 **Advice:**
-Focus on balancing elements that are lower in count and lean into favorable cycles.
-  `.trim();
+${advice}
+    `.trim();
+  };
 
   return { system, user, fallback };
 };
@@ -814,16 +1031,22 @@ Shen Palace: ${shenPalace?.palace?.cn || shenPalace?.palace?.name || 'Unknown'} 
 Shen Major Stars: ${shenStars || 'None'}
 Four Transformations: ${transformations}
   `.trim();
-  const fallback = () => `
+  const fallback = () => {
+    const overview = 'Your chart highlights distinct strengths rooted in the Ming and Shen palaces, with transformations signaling key growth themes.';
+    const keyPalaces = 'Focus on the Ming palace qualities and how the Shen palace supports your life direction.';
+    const transformationsText = 'Notice where your chart emphasizes momentum or restraint.';
+    const guidance = 'Align daily decisions with the strongest palace energies and lean into balanced actions.';
+    return `
 ## 🌌 Zi Wei Interpretation
-**Overview:** Your chart highlights distinct strengths rooted in the Ming and Shen palaces, with transformations signaling key growth themes.
+**Overview:** ${overview}
 
-**Key Palaces:** Focus on the Ming palace qualities and how the Shen palace supports your life direction.
+**Key Palaces:** ${keyPalaces}
 
-**Transformations:** Notice where your chart emphasizes momentum or restraint.
+**Transformations:** ${transformationsText}
 
-**Guidance:** Align daily decisions with the strongest palace energies and lean into balanced actions.
-  `.trim();
+**Guidance:** ${guidance}
+    `.trim();
+  };
 
   return { system, user, fallback };
 };
@@ -1112,13 +1335,20 @@ const consumeOauthState = (state) => {
 
 const buildOauthRedirectUrl = ({ token, user, nextPath, error }) => {
   const redirectUrl = new URL('/login', FRONTEND_URL);
-  if (token) redirectUrl.searchParams.set('token', token);
+  const hashParams = new URLSearchParams();
+
+  if (token) {
+    hashParams.set('token', token);
+  }
   if (user) {
     const encodedUser = Buffer.from(JSON.stringify(user)).toString('base64url');
-    redirectUrl.searchParams.set('user', encodedUser);
+    hashParams.set('user', encodedUser);
   }
   if (nextPath) redirectUrl.searchParams.set('next', nextPath);
   if (error) redirectUrl.searchParams.set('error', error);
+  if (hashParams.size) {
+    redirectUrl.hash = hashParams.toString();
+  }
   return redirectUrl.toString();
 };
 
@@ -1797,7 +2027,7 @@ const coerceInt = (value) => {
   return Math.trunc(numberValue);
 };
 
- 
+
 
 const buildImportRecord = async (raw, userId) => {
   if (!raw || typeof raw !== 'object') return null;
@@ -2268,9 +2498,10 @@ const checkDatabase = async () => {
 };
 
 const checkRedis = async () => {
+  const configured = Boolean(process.env.REDIS_URL);
   const client = await initRedis();
   if (!client) {
-    return { ok: true, status: 'disabled' };
+    return configured ? { ok: false, status: 'unavailable' } : { ok: true, status: 'disabled' };
   }
   if (!client.isOpen) {
     return { ok: false, status: 'disconnected' };
@@ -2688,11 +2919,19 @@ apiRouter.get('/auth/wechat/callback', async (req, res) => {
 
   const redirectToFrontend = (params) => {
     const target = new URL('/login', WECHAT_FRONTEND_URL);
+    const hashParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value !== null && value !== undefined) {
-        target.searchParams.set(key, String(value));
+        if (key === 'token' || key === 'user') {
+          hashParams.set(key, String(value));
+        } else {
+          target.searchParams.set(key, String(value));
+        }
       }
     });
+    if (hashParams.size) {
+      target.hash = hashParams.toString();
+    }
     res.redirect(target.toString());
   };
 
@@ -4324,12 +4563,16 @@ Question: ${userQuestion || 'General Reading'}
 Cards:
 ${cardList}
   `.trim();
-  const fallback = () => `
+  const fallback = () => {
+    const interpretation = 'The spread points to momentum building around your question, with key lessons emerging from the central cards.';
+    const advice = 'Reflect on the card themes and take one grounded action aligned with the most constructive card.';
+    return `
 ## 🔮 Tarot Reading: ${normalizedSpread || 'Unknown'}
-**Interpretation:** The spread points to momentum building around your question, with key lessons emerging from the central cards.
+**Interpretation:** ${interpretation}
 
-**Advice:** Reflect on the card themes and take one grounded action aligned with the most constructive card.
-  `.trim();
+**Advice:** ${advice}
+    `.trim();
+  };
 
   const release = acquireAiGuard(req.user.id);
   if (!release) {
@@ -4486,12 +4729,16 @@ Hexagram: ${hexagramName}
 Resulting Hexagram: ${resultName}
 Changing Lines: ${lines}
   `.trim();
-  const fallback = () => `
+  const fallback = () => {
+    const interpretation = 'The primary hexagram points to steady progress through mindful adaptation, while the resulting hexagram signals how the situation may evolve.';
+    const advice = 'Align with your core values while remaining flexible about timing and approach.';
+    return `
 ## ☯️ I Ching Interpretation
-**Interpretation:** The primary hexagram points to steady progress through mindful adaptation, while the resulting hexagram signals how the situation may evolve.
+**Interpretation:** ${interpretation}
 
-**Advice:** Align with your core values while remaining flexible about timing and approach.
-  `.trim();
+**Advice:** ${advice}
+    `.trim();
+  };
 
   const release = acquireAiGuard(req.user.id);
   if (!release) {
@@ -4814,8 +5061,19 @@ server.on('upgrade', (req, socket, head) => {
 
       sendWsJson(socket, { type: 'start' });
       const { system, user: userPrompt, fallback } = buildBaziPrompt(payload);
-      const content = await generateAIContent({ system, user: userPrompt, fallback, provider });
-      await streamContent(content || '');
+
+      await generateAIContent({
+        system,
+        user: userPrompt,
+        fallback,
+        provider,
+        onChunk: (chunk) => {
+          if (!isClosed) {
+            sendWsJson(socket, { type: 'chunk', content: chunk });
+          }
+        }
+      });
+
       if (!isClosed) {
         sendWsJson(socket, { type: 'done' });
         sendClose(1000);

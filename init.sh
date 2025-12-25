@@ -28,6 +28,9 @@ if [ -d "$ROOT_DIR/backend" ]; then
   
   # Ensure Prisma DB is ready
   echo "Ensuring Database is synced..."
+  if [ -z "${DATABASE_URL:-}" ]; then
+    export DATABASE_URL="file:$ROOT_DIR/prisma/dev.db"
+  fi
   if ! (cd "$ROOT_DIR/backend" && npx prisma db push --schema=../prisma/schema.prisma); then
     echo "Prisma db push reported potential data loss."
     if [ "${PRISMA_ACCEPT_DATA_LOSS:-}" = "true" ]; then

@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
+    "start": "NODE_ENV=production node server.js",
     "test": "NODE_ENV=test node --test",
-    "prisma:generate": "prisma generate --schema=../prisma/schema.prisma",
-    "prisma:push": "prisma db push --schema=../prisma/schema.prisma"
+    "postinstall": "node scripts/prisma.mjs generate --schema=../prisma/schema.prisma",
+    "prisma:generate": "node scripts/prisma.mjs generate --schema=../prisma/schema.prisma",
+    "prisma:push": "node scripts/prisma.mjs db push --schema=../prisma/schema.prisma"
   },
   "dependencies": {
     "@prisma/client": "^5.10.2",

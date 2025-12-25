@@ -285,12 +285,16 @@ export default function Login() {
   }, [location.search, location.state, navigate, t]);
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const tokenParam = params.get('token');
-    const userParam = params.get('user');
-    const nextParam = params.get('next');
-    const errorParam = params.get('error');
-    const providerParam = params.get('provider');
+    const searchParams = new URLSearchParams(location.search);
+    const hashParams = new URLSearchParams(
+      location.hash && location.hash.startsWith('#') ? location.hash.slice(1) : ''
+    );
+
+    const tokenParam = hashParams.get('token') || searchParams.get('token');
+    const userParam = hashParams.get('user') || searchParams.get('user');
+    const nextParam = searchParams.get('next');
+    const errorParam = searchParams.get('error');
+    const providerParam = searchParams.get('provider');
 
     if (errorParam) {
       setOauthError(getOauthErrorMessage(errorParam, providerParam));
@@ -307,7 +311,7 @@ export default function Login() {
 
     const nextPath = sanitizeNextPath(nextParam) || resolveRedirectPath(location.state?.from, location.search);
     window.location.replace(nextPath);
-  }, [location.search, location.state, navigate]);
+  }, [location.search, location.hash, location.state, navigate]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();

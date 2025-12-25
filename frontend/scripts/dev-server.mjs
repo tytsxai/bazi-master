@@ -9,6 +9,8 @@ const rootDir = path.resolve(__dirname, '..', '..');
 const backendDir = path.join(rootDir, 'backend');
 const frontendDir = path.join(rootDir, 'frontend');
 
+const frontendPort = Number(process.env.PW_PORT || 3000);
+
 const isWindows = process.platform === 'win32';
 
 const checkPort = (port, host = '127.0.0.1') =>
@@ -75,12 +77,27 @@ const waitForPort = async (port, timeoutMs = 15000) => {
   return false;
 };
 
+const waitForPortClosed = async (port, timeoutMs = 5000) => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const available = await checkPort(port);
+    if (!available) return true;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return false;
+};
+
 const startBackendIfNeeded = async () => {
   const isRunning = await checkPort(4000);
   if (isRunning) {
     if (forceRestart) {
       if (killPort(4000)) {
         console.warn('[dev-server] Force-restarting backend on port 4000.');
+      }
+      const closed = await waitForPortClosed(4000);
+      if (!closed) {
+        console.error('[dev-server] Unable to stop existing backend on port 4000.');
+        process.exit(1);
       }
     } else {
     const healthy = await checkBackendHealth();
@@ -102,10 +119,20 @@ const startBackendIfNeeded = async () => {
 };
 
 const startFrontend = async () => {
-  if (forceRestart) {
-    const running = await checkPort(3000);
-    if (running && killPort(3000)) {
-      console.warn('[dev-server] Force-restarting frontend on port 3000.');
+  const running = await checkPort(frontendPort);
+  if (running) {
+    if (forceRestart) {
+      if (killPort(frontendPort)) {
+        console.warn(`[dev-server] Force-restarting frontend on port ${frontendPort}.`);
+      }
+      const closed = await waitForPortClosed(frontendPort);
+      if (!closed) {
+        console.error(`[dev-server] Unable to stop existing frontend on port ${frontendPort}.`);
+        process.exit(1);
+      }
+    } else {
+      console.log(`[dev-server] Frontend already running on port ${frontendPort}.`);
+      return null;
     }
   }
   const viteCmd = path.join(
@@ -117,7 +144,7 @@ const startFrontend = async () => {
   console.log('[dev-server] Starting frontend dev server...');
   return run(
     viteCmd,
-    ['--port', '3000', '--strictPort', '--host', '127.0.0.1'],
+    ['--port', String(frontendPort), '--strictPort', '--host', '127.0.0.1'],
     { cwd: frontendDir, env: process.env }
   );
 };
@@ -128,11 +155,20 @@ if (!backendReady) {
   console.warn('[dev-server] Backend did not become ready in time.');
 }
 const frontendProcess = await startFrontend();
+let keepAliveTimer = null;
+if (!frontendProcess && !backendProcess) {
+  // Keep the process alive when reusing already-running services.
+  keepAliveTimer = setInterval(() => {}, 1000);
+}
 
 let shuttingDown = false;
 const shutdown = () => {
   if (shuttingDown) return;
   shuttingDown = true;
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
   if (frontendProcess) frontendProcess.kill('SIGTERM');
   if (backendProcess) backendProcess.kill('SIGTERM');
 };
@@ -149,10 +185,12 @@ if (backendProcess) {
   });
 }
 
-frontendProcess.on('exit', (code) => {
-  if (code && code !== 0) {
-    console.error(`[dev-server] Frontend exited with code ${code}`);
-  }
-  shutdown();
-  process.exit(code ?? 0);
-});
+if (frontendProcess) {
+  frontendProcess.on('exit', (code) => {
+    if (code && code !== 0) {
+      console.error(`[dev-server] Frontend exited with code ${code}`);
+    }
+    shutdown();
+    process.exit(code ?? 0);
+  });
+}

@@ -174,13 +174,15 @@ export function AuthProvider({ children }) {
     if (!token) return null;
     try {
       const res = await fetch('/api/user/settings', {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'x-session-expired-silent': '1',
+        },
       });
+      if (res.headers.get('x-session-expired') === '1') {
+        return null;
+      }
       if (res.status === 401) {
-        const storedOrigin = localStorage.getItem(TOKEN_ORIGIN_KEY);
-        if (storedOrigin === 'backend' || isBackendToken(token)) {
-          expireSession();
-        }
         return null;
       }
       if (!res.ok) {
@@ -322,34 +324,18 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!token) return;
     let isMounted = true;
-    const controller = new AbortController();
     const loadProfileName = async () => {
       try {
-        const res = await fetch('/api/user/settings', {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        if (res.status === 401) {
-          return;
-        }
-        if (!res.ok) return;
-        const data = await res.json();
-        const nextProfileName = data?.settings?.preferences?.profileName || '';
-        if (isMounted) {
-          setProfileName(nextProfileName);
-        }
-      } catch (error) {
-        if (error?.name !== 'AbortError') {
-          console.error('Failed to load profile name', error);
-        }
+        await refreshProfileName();
+      } finally {
+        if (!isMounted) return;
       }
     };
-    loadProfileName();
+    void loadProfileName();
     return () => {
       isMounted = false;
-      controller.abort();
     };
-  }, [expireSession, setProfileName, token]);
+  }, [refreshProfileName, token]);
 
   const value = useMemo(
     () => ({

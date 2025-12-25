@@ -2,7 +2,8 @@
 
 ## Required Environment
 - NODE_ENV=production
-- DATABASE_URL: PostgreSQL connection string (recommended). If you must use SQLite, set ALLOW_SQLITE_PROD=true.
+- DATABASE_URL: SQLite file URL (current Prisma provider). Example: file:/var/lib/bazi-master/bazi-master.db
+- ALLOW_SQLITE_PROD=true (required when Prisma provider is sqlite)
 - FRONTEND_URL: Public web origin (non-localhost).
 - BACKEND_BASE_URL: Public API base URL (non-localhost).
 - ADMIN_EMAILS: Comma-separated admin emails (leave empty to disable admin access).
@@ -15,9 +16,8 @@
 - PASSWORD_RESET_DEBUG_LOG: Set to true in non-production to print reset tokens to logs.
 
 ## Migrations & Schema
-- Use Prisma migrations for production (`prisma migrate deploy`).
-- Avoid `prisma db push` in production.
-- Current Prisma schema is SQLite by default; confirm PostgreSQL target and generate migrations before go-live.
+- Current Prisma provider is SQLite (see `prisma/schema.prisma`). If you need PostgreSQL for production, you must switch the Prisma provider to `postgresql` and generate/apply migrations before go-live.
+- Avoid runtime schema sync in production (already disabled by default).
 
 ## Health Checks
 - Liveness: GET /health

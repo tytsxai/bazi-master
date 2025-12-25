@@ -27,6 +27,7 @@ const PERIODS = [
 const PREFILL_STORAGE_KEY = 'bazi_prefill_request_v1';
 
 export default function Zodiac() {
+  const { t } = useTranslation();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -165,12 +166,12 @@ export default function Zodiac() {
     void handleFetchHoroscope();
   }, [handleFetchHoroscope, selectedPeriod, selectedSign]);
 
-  const getRisingErrors = (form) => {
+  const getRisingErrors = (form, t) => {
     const nextErrors = {};
     const { birthDate, birthTime, timezoneOffset, latitude, longitude } = form;
 
     if (!birthDate) {
-      nextErrors.birthDate = 'Birth date is required.';
+      nextErrors.birthDate = t('bazi.errors.dayRequired'); // Reuse date/day required
     } else {
       const [year, month, day] = birthDate.split('-').map(Number);
       const date = new Date(Date.UTC(year, month - 1, day));
@@ -182,12 +183,12 @@ export default function Zodiac() {
         date.getUTCMonth() !== month - 1 ||
         date.getUTCDate() !== day
       ) {
-        nextErrors.birthDate = 'Enter a valid birth date.';
+        nextErrors.birthDate = t('bazi.errors.dateInvalid');
       }
     }
 
     if (!birthTime) {
-      nextErrors.birthTime = 'Birth time is required.';
+      nextErrors.birthTime = t('bazi.errors.hourRequired');
     } else {
       const [hour, minute] = birthTime.split(':').map(Number);
       if (
@@ -198,40 +199,40 @@ export default function Zodiac() {
         minute < 0 ||
         minute > 59
       ) {
-        nextErrors.birthTime = 'Enter a valid birth time.';
+        nextErrors.birthTime = t('bazi.errors.hourInvalid');
       }
     }
 
     if (timezoneOffset === '' || timezoneOffset === null || timezoneOffset === undefined) {
-      nextErrors.timezoneOffset = 'Timezone offset is required.';
+      nextErrors.timezoneOffset = t('bazi.errors.timezoneWhitespace');
     } else {
       const offset = Number(timezoneOffset);
       if (!Number.isFinite(offset)) {
-        nextErrors.timezoneOffset = 'Enter a valid timezone offset.';
+        nextErrors.timezoneOffset = t('bazi.errors.timezoneWhitespace');
       } else if (offset < -14 || offset > 14) {
-        nextErrors.timezoneOffset = 'Timezone offset must be between -14 and 14 hours.';
+        nextErrors.timezoneOffset = t('bazi.errors.timezoneWhitespace');
       }
     }
 
     if (latitude === '' || latitude === null || latitude === undefined) {
-      nextErrors.latitude = 'Latitude is required.';
+      nextErrors.latitude = t('bazi.errors.locationWhitespace');
     } else {
       const lat = Number(latitude);
       if (!Number.isFinite(lat)) {
-        nextErrors.latitude = 'Enter a valid latitude.';
+        nextErrors.latitude = t('bazi.errors.locationWhitespace');
       } else if (lat < -90 || lat > 90) {
-        nextErrors.latitude = 'Latitude must be between -90 and 90.';
+        nextErrors.latitude = t('bazi.errors.locationWhitespace');
       }
     }
 
     if (longitude === '' || longitude === null || longitude === undefined) {
-      nextErrors.longitude = 'Longitude is required.';
+      nextErrors.longitude = t('bazi.errors.locationWhitespace');
     } else {
       const lon = Number(longitude);
       if (!Number.isFinite(lon)) {
-        nextErrors.longitude = 'Enter a valid longitude.';
+        nextErrors.longitude = t('bazi.errors.locationWhitespace');
       } else if (lon < -180 || lon > 180) {
-        nextErrors.longitude = 'Longitude must be between -180 and 180.';
+        nextErrors.longitude = t('bazi.errors.locationWhitespace');
       }
     }
 
@@ -252,7 +253,7 @@ export default function Zodiac() {
       const next = { ...prev, [name]: value };
       setRisingErrors((prevErrors) => {
         if (!prevErrors || !prevErrors[name]) return prevErrors;
-        const nextErrors = getRisingErrors(next);
+        const nextErrors = getRisingErrors(next, t);
         if (!nextErrors[name]) {
           const trimmed = { ...prevErrors };
           delete trimmed[name];
@@ -270,7 +271,7 @@ export default function Zodiac() {
     setRisingStatus(null);
     setRisingResult(null);
 
-    const nextErrors = getRisingErrors(risingForm);
+    const nextErrors = getRisingErrors(risingForm, t);
     setRisingErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       setRisingStatus({ type: 'error', message: getFirstErrorMessage(nextErrors) });

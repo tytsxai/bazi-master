@@ -11,7 +11,7 @@ test('Tarot draw flow for single and three card spreads', async ({ page }) => {
 
   const drawButton = page.getByRole('button', { name: /Draw/ });
 
-  await page.selectOption('select', 'SingleCard');
+  await page.selectOption('#tarot-spread', 'SingleCard');
   await expect(drawButton).toContainText('Draw Single Card');
   await drawButton.click();
 
@@ -19,7 +19,7 @@ test('Tarot draw flow for single and three card spreads', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Your Spread' })).toBeVisible();
   await expect(cards).toHaveCount(1);
 
-  await page.selectOption('select', 'ThreeCard');
+  await page.selectOption('#tarot-spread', 'ThreeCard');
   await expect(drawButton).toContainText('Draw Three Card');
   await drawButton.click();
   await expect(cards).toHaveCount(3);
