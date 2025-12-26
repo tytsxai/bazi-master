@@ -187,10 +187,11 @@ const setupGracefulShutdown = (server) => {
   const closeServer = (signal) => {
     logger.info({ signal }, `Received signal, initiating graceful shutdown...`);
 
+    const timeoutMs = parseInt(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS, 10) || 10000;
     const timeout = setTimeout(() => {
       logger.error('Graceful shutdown timeout, forcing exit...');
       process.exit(1);
-    }, 10000);
+    }, timeoutMs);
 
     timeout.unref();
 
