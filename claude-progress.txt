@@ -201,3 +201,8 @@
 - Added Playwright security flow for Ziwei V2 chart from /zodiac (security-ziwei-zodiac.spec.js) with backend-response verification and screenshots.
 - Verified Ziwei from Zodiac flow end-to-end via Playwright; marked feature_list.json test #48 as passing. Current progress: 70/479 tests passing.
 - Next: continue remaining Ziwei/Zodiac/Tarot failing scenarios and follow remaining security/navigation/data validation tests.
+- Pre-work Playwright checks: bazi-calculation.spec.js + iching.spec.js; fixed Iching changing-lines locator by adding data-testid and updated test; both passed.
+- Added Ziwei history delete confirmation UI + i18n strings, and created Playwright security-ziwei-history.spec.js with screenshots to verify save → refresh persistence → delete cleanup.
+- Verified Ziwei history security flow end-to-end via Playwright; marked feature_list.json test #49 as passing. Current progress: 71/479 tests passing.
+- Mock-data scan: no mockData matches; TODO/FIXME and placeholder matches only in node_modules/dist assets.
+- Next: continue remaining Security & Access Control scenarios (#50+) or move to next highest-priority failing feature.

@@ -53,7 +53,7 @@ test('I Ching divination flow with AI interpretation and history save', async ({
 
   await page.getByRole('button', { name: 'Divine with Numbers' }).click();
   await expect(page.getByRole('heading', { name: 'Primary Hexagram' })).toBeVisible();
-  await expect(page.getByText('Changing lines:')).toBeVisible();
+  await expect(page.getByTestId('iching-changing-lines')).toBeVisible();
   await snap('04-result');
 
   await page.getByRole('button', { name: 'Reveal AI Interpretation' }).click();
