@@ -1,79 +1,57 @@
 # Production Readiness Checklist
 
-> 详细部署指南请参考 [PRODUCTION.md](../PRODUCTION.md)
+> 详细部署步骤参见 `../PRODUCTION.md`
 
-## 部署前检查清单
+## 基础设施
+- [ ] PostgreSQL 13+（启用连接池与慢查询日志）
+- [ ] Redis 6+（会话与缓存；多实例必须配置）
+- [ ] 反向代理/HTTPS（Nginx/Traefik 等）
+- [ ] 证书自动续期（Let’s Encrypt 或等效方案）
+- [ ] 备份存储（数据库定期备份并演练恢复）
 
-### 基础设施
-- [ ] **PostgreSQL 13+**: 配置连接池，设置适当的超时
-- [ ] **Redis 6+**: 用于会话存储和缓存，确保持久化配置
-- [ ] **反向代理**: Nginx 配置 SSL/TLS 终止和负载均衡
-- [ ] **SSL/TLS 证书**: Let's Encrypt 或商业证书，配置自动续期
-- [ ] **域名和 DNS 配置**: 指向后端 API 和前端应用的 CNAME/A 记录
-- [ ] **CDN**: 可选，用于静态资源分发
-- [ ] **备份存储**: S3 或类似服务用于数据库备份
+## 环境变量（生产建议值）
+- `NODE_ENV=production`
+- `PORT=4000`
+- `DATABASE_URL=postgresql://user:pass@host:5432/dbname`
+- `SESSION_TOKEN_SECRET=<32+ chars>`
+- `FRONTEND_URL=https://your-domain.com`
+- `BACKEND_BASE_URL=https://api.your-domain.com`
+- `REDIS_URL=redis://redis:6379`
+- `RATE_LIMIT_WINDOW_MS=60000`
+- `RATE_LIMIT_MAX=120`
+- AI（可选）：`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`
+- OAuth（可选）：`GOOGLE_CLIENT_ID/SECRET`，`WECHAT_APP_ID/SECRET`
+- 代理：`TRUST_PROXY=1`
 
-### 必需环境变量
-```bash
-# 应用配置
-NODE_ENV=production
-PORT=4000
-FRONTEND_URL=https://your-domain.com
-BACKEND_BASE_URL=https://api.your-domain.com
+## 应用健康
+- [ ] `/health` 返回 200
+- [ ] `/api/ready` 返回 200（DB/Redis 正常）
+- [ ] 日志输出为 JSON，集中收集
 
-# 数据库
-DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
+## 安全
+- [ ] HTTPS 全站强制
+- [ ] CORS 限定为 `FRONTEND_URL`
+- [ ] 管理员邮箱通过 `ADMIN_EMAILS` 显式配置
+- [ ] 会话密钥定期轮换（建议 90 天）
+- [ ] 速率限制启用
 
-# 缓存和会话
-REDIS_URL=redis://redis:6379
-SESSION_TOKEN_SECRET=<32+字符的安全密钥>
-SESSION_IDLE_MS=1800000
+## 监控与告警
+- [ ] API 延迟/错误率（p95, p99, 5xx）
+- [ ] DB 连接池、慢查询
+- [ ] Redis 内存/命中率/连接数
+- [ ] 容器存活与重启次数
 
-# AI 服务 (至少配置一个)
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
+## 备份与恢复
+- [ ] 每日自动备份 PostgreSQL，保留 ≥30 天
+- [ ] 定期演练备份恢复
+- [ ] 配置文件与环境变量另行备份
 
-# OAuth 配置 (生产环境必需)
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-WECHAT_APP_ID=...
-WECHAT_APP_SECRET=...
+## 性能与容量
+- [ ] 压测基础路径（Auth、Bazi、Tarot AI）
+- [ ] 评估 Redis/DB 资源水位并设置报警
+- [ ] 前端 bundle 体积与首屏时间基线
 
-# 安全配置
-ADMIN_EMAILS=admin@your-domain.com
-CORS_ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
-
-# 性能配置
-RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_MAX=120
-JSON_BODY_LIMIT=50mb
-MAX_URL_LENGTH=16384
-
-# 监控和日志
-LOG_LEVEL=info
-SENTRY_DSN=https://...@sentry.io/...
-```
-
-### 安全配置
-- [ ] CORS 限制为生产域名
-- [ ] HTTPS 强制启用
-- [ ] 密钥定期轮换 (建议 90 天)
-
-### 监控和可观测性
-- [ ] **健康检查**: `/health` 和 `/api/ready` 端点正常响应
-- [ ] **应用监控**: PM2 或类似进程管理器监控应用状态
-- [ ] **数据库监控**: 连接池使用率，慢查询日志
-- [ ] **Redis 监控**: 内存使用率，连接数
-- [ ] **日志聚合**: 结构化 JSON 日志，ELK stack 或类似
-- [ ] **错误追踪**: Sentry 或类似错误监控服务
-- [ ] **性能监控**: 响应时间，吞吐量，错误率
-- [ ] **业务指标**: 用户注册数，API 调用次数，付费转化率
-
-### 备份和灾难恢复
-- [ ] **数据库备份**: 每日自动备份，保留 30 天
-- [ ] **备份验证**: 定期测试备份恢复流程
-- [ ] **异地备份**: 备份存储到不同地理位置
-- [ ] **应用配置备份**: 环境变量和配置文件备份
-- [ ] **恢复时间目标 (RTO)**: 定义并测试恢复时间
-- [ ] **恢复点目标 (RPO)**: 定义数据丢失容忍度
-- [ ] **灾难恢复计划**: 完整的故障恢复文档
+## 变更与回滚
+- [ ] 迁移脚本可重复执行（Prisma migrate deploy）
+- [ ] 旧版本镜像可用以快速回滚
+- [ ] 部署后验证脚本（健康检查 + 核心用例）

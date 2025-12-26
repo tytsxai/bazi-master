@@ -1,471 +1,111 @@
-# 生产环境部署指南
+# 生产部署指南
 
-## 快速开始
+本指南以 Docker Compose 为例，目标环境：PostgreSQL + Redis + Nginx 反向代理。
 
+## 0. 准备配置
+1) 复制 `env.example` 为 `.env.production`，并按需修改：
+   - `DATABASE_URL=postgresql://user:pass@postgres:5432/bazi_master`  
+   - `SESSION_TOKEN_SECRET=<32+ 随机字符>`
+   - `FRONTEND_URL=https://your-domain.com`
+   - `BACKEND_BASE_URL=https://api.your-domain.com`
+   - `REDIS_URL=redis://redis:6379` (强烈推荐生产开启)
+   - AI 密钥可选：`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`
+2) 将 `.env.production` 与 `docker-compose.prod.yml` 放在同一目录。
+
+## 1. 构建与启动
 ```bash
-# 1. 准备环境变量
-cp .env.production.example .env.production
-vim .env.production  # 编辑配置
-
-# 2. 构建并启动
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
-
-# 3. 验证部署
-curl http://localhost:4000/health
-curl http://localhost:4000/api/ready
 ```
+> 如果未使用 prod 编排文件，可在现有 `docker-compose.yml` 上添加/覆盖相同环境变量。
 
-## 服务架构
-
-| 服务 | 端口 | 说明 | 健康检查 |
-|------|------|------|----------|
-| Frontend | 3000 | Nginx (React SPA) | HTTP 200 on / |
-| Backend | 4000 | Node.js API | GET /health |
-| PostgreSQL | 5432 | 主数据库 | pg_isready |
-| Redis | 6379 | 缓存/会话 | redis-cli ping |
-
-## 必需环境变量
-
-### 核心配置
-
-```bash
-# 环境
-NODE_ENV=production
-
-# 数据库
-DATABASE_URL=postgresql://user:password@postgres:5432/bazi_master
-
-# 应用 URL
-FRONTEND_URL=https://your-domain.com
-BACKEND_BASE_URL=https://api.your-domain.com
-
-# 安全
-SESSION_TOKEN_SECRET=<生成一个 32+ 字符的随机字符串>
-
-# Redis
-REDIS_URL=redis://redis:6379
-
-# 管理员
-ADMIN_EMAILS=admin@example.com,admin2@example.com
-```
-
-### 可选配置
-
-```bash
-# AI 提供商
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-
-# OAuth (可选)
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-WECHAT_APP_ID=...
-WECHAT_APP_SECRET=...
-
-# 日志
-LOG_LEVEL=info  # debug, info, warn, error
-
-# 性能
-BAZI_CACHE_TTL_MS=3600000  # 1 小时
-BAZI_CACHE_MAX_ENTRIES=1000
-```
-
-## 生成安全密钥
-
-```bash
-# 方法 1: OpenSSL
-openssl rand -base64 32
-
-# 方法 2: Node.js
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-
-# 方法 3: Python
-python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-```
-
-## 健康检查
-
-### 存活检查 (Liveness)
-
-```bash
-# 检查应用是否运行
-curl http://localhost:4000/health
-```
-
-**预期响应:**
-```json
-{
-  "status": "ok",
-  "service": "bazi-master-backend",
-  "timestamp": "2025-12-26T10:00:00.000Z",
-  "uptime": 3600.5
-}
-```
-
-### 就绪检查 (Readiness)
-
-```bash
-# 检查依赖服务是否就绪
-curl http://localhost:4000/api/ready
-```
-
-**预期响应:**
-```json
-{
-  "status": "ready",
-  "checks": {
-    "db": { "ok": true },
-    "redis": { "ok": true }
-  },
-  "timestamp": "2025-12-26T10:00:00.000Z"
-}
-```
-
-## 数据库管理
-
-### 自动迁移
-
-数据库迁移在容器启动时自动运行 (`prisma migrate deploy`)。
-
-### 手动迁移
-
+## 2. 数据库迁移
 ```bash
 # 进入后端容器
 docker compose -f docker-compose.prod.yml exec backend sh
-
-# 运行迁移
+# 应用迁移
 node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma
-
-# 查看迁移状态
-node scripts/prisma.mjs migrate status --schema=../prisma/schema.prisma
 ```
 
-### 数据库备份
+## 3. 健康检查
+- 存活检查: `GET /health`
+- 就绪检查: `GET /api/ready`
 
+示例：
 ```bash
-# 自动备份 (推荐每日运行)
-./scripts/backup-db.sh
-
-# 备份文件位置
-ls -lh ./backups/
-
-# 示例输出
-# bazi_master_20251226_100000.sql.gz
+curl -f https://api.your-domain.com/health
+curl -f https://api.your-domain.com/api/ready
 ```
 
-### 数据库恢复
-
-```bash
-# 从备份恢复
-./scripts/restore-db.sh ./backups/bazi_master_20251226_100000.sql.gz
-
-# 注意: 这将覆盖现有数据!
-```
-
-## 安全配置
-
-### 1. HTTPS 配置
-
-**生产环境必须使用 HTTPS!**
-
+## 4. Nginx 反向代理示例
 ```nginx
-# nginx.conf 示例
 server {
-    listen 443 ssl http2;
-    server_name your-domain.com;
+  listen 80;
+  server_name your-domain.com;
+  return 301 https://$host$request_uri;
+}
 
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
+server {
+  listen 443 ssl http2;
+  server_name your-domain.com;
 
-    location / {
-        proxy_pass http://frontend:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
+  ssl_certificate /path/to/fullchain.pem;
+  ssl_certificate_key /path/to/privkey.pem;
 
-    location /api {
-        proxy_pass http://backend:4000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
+  location / {
+    proxy_pass http://frontend:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+
+  location /api {
+    proxy_pass http://backend:4000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
 }
 ```
 
-### 2. CORS 配置
+## 5. 运行时注意事项
+- **Redis 必选**：生产环境必须配置 `REDIS_URL`，用于多实例间的会话共享与缓存一致性；未配置将阻止启动。
+- `AI_PROVIDER` 会根据密钥自动选择；无密钥时回退 `mock`。
+- 生产启用速率限制：设置 `RATE_LIMIT_WINDOW_MS` 与 `RATE_LIMIT_MAX`。
+- `TRUST_PROXY` 在反向代理后应设为 `1` 或具体 hop 数。
 
-CORS 自动限制为 `FRONTEND_URL` 指定的域名。
+## 6. 监控与日志
+- 日志：Pino JSON 输出到 stdout，可接入 ELK/CloudWatch。
+- 建议监控：
+  - API p95/错误率
+  - DB 连接池使用率、慢查询
+  - Redis 命中率与内存占用
+  - `/api/ready` 返回状态
 
-### 3. 速率限制
-
-- **未认证用户**: 60 请求/分钟
-- **认证用户**: 120 请求/分钟
-- **AI 请求**: 10 请求/分钟
-
-### 4. 密钥轮换
-
-建议每 90 天轮换一次 `SESSION_TOKEN_SECRET`。
-
-**轮换步骤:**
-1. 生成新密钥
-2. 更新环境变量
-3. 重启服务
-4. 用户需要重新登录
-
-## 监控和日志
-
-### 日志格式
-
-生产环境使用 JSON 格式日志,便于日志聚合工具 (ELK, CloudWatch) 处理。
-
-```json
-{
-  "level": "info",
-  "time": 1703577600000,
-  "pid": 1,
-  "hostname": "backend-1",
-  "reqId": "req-123",
-  "userId": 42,
-  "msg": "Request completed",
-  "responseTime": 45
-}
-```
-
-### 查看日志
-
+## 7. 备份与恢复（PostgreSQL 示例）
 ```bash
-# 实时日志
-docker compose -f docker-compose.prod.yml logs -f
+# 备份
+docker compose -f docker-compose.prod.yml exec postgres pg_dump -U postgres bazi_master | gzip > backups/bazi_master_$(date +%Y%m%d_%H%M%S).sql.gz
 
-# 特定服务日志
-docker compose -f docker-compose.prod.yml logs -f backend
-
-# 最近 100 行
-docker compose -f docker-compose.prod.yml logs --tail=100 backend
+# 恢复（覆盖现有库）
+zcat backups/<file>.sql.gz | docker compose -f docker-compose.prod.yml exec -T postgres psql -U postgres bazi_master
 ```
 
-### 监控指标
-
-建议监控以下指标:
-
-1. **应用健康**
-   - `/health` 端点响应时间
-   - `/api/ready` 端点状态
-
-2. **错误率**
-   - 5xx 错误数量
-   - 4xx 错误数量
-
-3. **性能**
-   - API 响应时间 (p50, p95, p99)
-   - 数据库查询时间
-
-4. **资源使用**
-   - CPU 使用率
-   - 内存使用率
-   - 磁盘空间
-
-### 告警建议
-
-- `/api/ready` 返回 503 → 立即告警
-- 5xx 错误率 > 1% → 告警
-- API p95 响应时间 > 1s → 警告
-- 磁盘使用 > 80% → 警告
-
-## 性能优化
-
-### 1. 数据库优化
-
-```sql
--- 创建索引 (如果尚未创建)
-CREATE INDEX idx_bazi_user_id ON "BaziRecord"("userId");
-CREATE INDEX idx_bazi_created_at ON "BaziRecord"("createdAt");
-CREATE INDEX idx_user_email ON "User"("email");
-```
-
-### 2. Redis 缓存
-
-确保 Redis 正常运行以获得最佳性能:
-
-```bash
-# 检查 Redis 状态
-docker compose -f docker-compose.prod.yml exec redis redis-cli ping
-# 应返回: PONG
-
-# 查看缓存统计
-docker compose -f docker-compose.prod.yml exec redis redis-cli INFO stats
-```
-
-### 3. 连接池配置
-
-PostgreSQL 连接池已在 Prisma 中配置:
-
-```prisma
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  // 连接池配置在 DATABASE_URL 中:
-  // ?connection_limit=10&pool_timeout=20
-}
-```
-
-## 故障排查
-
-### 问题: 容器无法启动
-
-```bash
-# 查看容器状态
-docker compose -f docker-compose.prod.yml ps
-
-# 查看容器日志
-docker compose -f docker-compose.prod.yml logs backend
-
-# 常见原因:
-# 1. 环境变量配置错误
-# 2. 端口冲突
-# 3. 数据库连接失败
-```
-
-### 问题: 数据库连接失败
-
-```bash
-# 检查 PostgreSQL 是否运行
-docker compose -f docker-compose.prod.yml ps postgres
-
-# 测试数据库连接
-docker compose -f docker-compose.prod.yml exec postgres \
-  psql -U postgres -d bazi_master -c "SELECT 1"
-
-# 检查 DATABASE_URL 格式
-echo $DATABASE_URL
-# 应该类似: postgresql://user:pass@postgres:5432/bazi_master
-```
-
-### 问题: Redis 连接失败
-
-```bash
-# 检查 Redis 是否运行
-docker compose -f docker-compose.prod.yml ps redis
-
-# 测试 Redis 连接
-docker compose -f docker-compose.prod.yml exec redis redis-cli ping
-
-# 注意: Redis 是可选的,应用会回退到内存存储
-```
-
-### 问题: 前端无法访问后端
-
-```bash
-# 检查 CORS 配置
-# 确保 FRONTEND_URL 和 BACKEND_BASE_URL 正确设置
-
-# 检查网络连接
-docker compose -f docker-compose.prod.yml exec frontend \
-  wget -O- http://backend:4000/health
-```
-
-## 扩展和高可用
-
-### 水平扩展
-
-```bash
-# 启动多个后端实例
-docker compose -f docker-compose.prod.yml up -d --scale backend=3
-
-# 需要配置负载均衡器 (Nginx, HAProxy)
-```
-
-### 数据库高可用
-
-考虑使用:
-- PostgreSQL 主从复制
-- 读写分离
-- 连接池管理 (PgBouncer)
-
-### Redis 高可用
-
-考虑使用:
-- Redis Sentinel (主从切换)
-- Redis Cluster (分片)
-
-## 维护计划
-
-### 日常维护
-
-- ✅ 每日数据库备份
-- ✅ 监控日志错误
-- ✅ 检查磁盘空间
-
-### 每周维护
-
-- 🔄 审查性能指标
-- 🔄 检查安全更新
-- 🔄 清理旧日志
-
-### 每月维护
-
-- 📅 依赖包更新
-- 📅 安全审计
-- 📅 性能优化评估
-
-### 每季度维护
-
-- 🗓 密钥轮换
-- 🗓 灾难恢复演练
-- 🗓 容量规划评估
-
-## 回滚策略
-
-### 应用回滚
-
-```bash
-# 1. 停止当前版本
-docker compose -f docker-compose.prod.yml down
-
-# 2. 切换到之前的镜像版本
-# 编辑 docker-compose.prod.yml 中的镜像标签
-
-# 3. 启动旧版本
-docker compose -f docker-compose.prod.yml up -d
-```
-
-### 数据库回滚
-
-```bash
-# 1. 停止应用
-docker compose -f docker-compose.prod.yml stop backend
-
-# 2. 恢复数据库备份
-./scripts/restore-db.sh ./backups/bazi_master_YYYYMMDD.sql.gz
-
-# 3. 重启应用
-docker compose -f docker-compose.prod.yml start backend
-```
-
-## 最佳实践
-
-1. **始终使用 HTTPS** - 生产环境必须
-2. **定期备份** - 自动化每日备份
-3. **监控告警** - 设置关键指标告警
-4. **日志聚合** - 使用 ELK 或 CloudWatch
-5. **密钥管理** - 使用密钥管理服务 (AWS Secrets Manager, HashiCorp Vault)
-6. **蓝绿部署** - 零停机更新
-7. **灾难恢复** - 定期演练恢复流程
-8. **文档更新** - 保持运维文档最新
-
-## 更多资源
-
-- [架构文档](./docs/architecture.md) - 系统架构详解
-- [API 文档](./docs/api.md) - API 端点参考
-- [开发指南](./docs/development.md) - 开发环境搭建
-- [生产就绪清单](./docs/production-ready.md) - 部署前检查清单
-
-## 支持
-
-遇到问题?
-
-- 📖 查看文档: [docs/](./docs/)
-- 🐛 报告问题: [GitHub Issues](https://github.com/your-repo/issues)
-- 💬 讨论: [GitHub Discussions](https://github.com/your-repo/discussions)
-- 🔒 安全问题: security@example.com
+## 8. 故障排查速查
+- 容器状态：`docker compose -f docker-compose.prod.yml ps`
+- 后端日志：`docker compose -f docker-compose.prod.yml logs -f backend`
+- 数据库连通：`docker compose -f docker-compose.prod.yml exec postgres pg_isready`
+- Redis 连通：`docker compose -f docker-compose.prod.yml exec redis redis-cli ping`
+
+## 9. 安全要点
+- **HTTPS 强制启用**：所有生产流量必须通过 HTTPS；配置 Nginx 或负载均衡器处理 SSL 证书
+- **CORS 配置**：通过 `FRONTEND_URL` 和 `CORS_ALLOWED_ORIGINS` 限制允许的源域名；生产环境不应包含 localhost
+- **管理邮箱配置**：生产环境通过 `ADMIN_EMAILS` 显式配置管理员邮箱；默认值仅适用于开发环境
+- **反向代理设置**：配置 `TRUST_PROXY` 为 `1` 或具体跳数，确保正确解析客户端 IP
+- **会话安全**：使用强随机 `SESSION_TOKEN_SECRET`（32+字符）；生产环境必须配置 Redis 避免会话丢失
+- **API 密钥保护**：定期轮换 AI provider API keys；使用环境变量而非硬编码
+- **速率限制**：生产环境启用 `RATE_LIMIT_WINDOW_MS` 和 `RATE_LIMIT_MAX` 防止滥用
+- **端口安全**：关闭不必要的端口；仅暴露 HTTPS (443) 和可能的 SSH (22)
+
+## 10. 升级步骤（简版）
+1) 拉取新镜像或代码
+2) 运行数据库迁移
+3) 滚动重启 backend/front
+4) 验证 `/api/ready` 与核心业务
