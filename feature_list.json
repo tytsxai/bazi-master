@@ -66,7 +66,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -89,7 +89,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -135,7 +135,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -158,7 +158,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -204,7 +204,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -227,7 +227,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -250,7 +250,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -273,7 +273,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -296,7 +296,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -319,7 +319,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -342,7 +342,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -365,7 +365,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -388,7 +388,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -411,7 +411,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -434,7 +434,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -457,7 +457,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -480,7 +480,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -503,7 +503,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -526,7 +526,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -549,7 +549,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -572,7 +572,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -595,7 +595,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -618,7 +618,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -641,7 +641,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -664,7 +664,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -687,7 +687,7 @@
       "Step 15: Open favorites page and verify record",
       "Step 16: Logout"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -697,7 +697,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -707,7 +707,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -717,7 +717,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -727,7 +727,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -737,7 +737,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -747,7 +747,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -757,7 +757,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -767,7 +767,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -777,7 +777,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -787,7 +787,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -797,7 +797,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -807,7 +807,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -817,7 +817,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -837,7 +837,7 @@
       "Step 2: Trigger Ziwei chart (V2) flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -847,7 +847,7 @@
       "Step 2: Trigger Bazi full analysis flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -857,7 +857,7 @@
       "Step 2: Trigger Profile flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -867,7 +867,7 @@
       "Step 2: Trigger Ziwei chart (V2) flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -897,7 +897,7 @@
       "Step 2: Trigger Profile flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -907,7 +907,7 @@
       "Step 2: Trigger Zodiac monthly horoscope flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -947,7 +947,7 @@
       "Step 2: Trigger Tarot single draw flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -2037,7 +2037,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -2067,7 +2067,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "category": "functional",
@@ -4607,7 +4607,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "style",

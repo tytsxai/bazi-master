@@ -220,3 +220,9 @@
 - Verified Zodiac monthly tarot flow end-to-end via Playwright; marked feature_list.json test #52 as passing. Current progress: 74/479 tests passing.
 - Mock-data scan: matches only in node_modules/dist assets.
 - Next: continue remaining Security & Access Control scenarios (#53+) or move to next highest-priority failing feature (navigation integrity, Zodiac compatibility, search/filter).
+
+- Pre-work Playwright checks: initial run failed due to PW_PORT missing (baseURL 127.0.0.1:3415); reran with PW_PORT=3000 and bazi-calculation.spec.js + iching.spec.js passed.
+- Re-verified guest BaZi calculation flow via Playwright (bazi-calculation.spec.js) with screenshots.
+- Marked feature_list.json test "End-to-end guest journey for Bazi basic calculation with data verification and refresh persistence" as passing. Current progress: 27/479 tests passing.
+- Mock-data scan: TODO/FIXME/placeholder matches only in node_modules/dist assets.
+- Next: continue with next highest-priority failing feature (Tarot Celtic Cross flow or other functional tests).
