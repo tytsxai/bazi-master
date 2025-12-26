@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Profile flow from tarot matches backend data', async ({ page, request }) => {
   await page.addInitScript(() => {

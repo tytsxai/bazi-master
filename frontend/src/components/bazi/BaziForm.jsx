@@ -167,9 +167,9 @@ export default function BaziForm({
             aria-describedby={errors.birthLocation ? 'bazi-birthLocation-error' : undefined}
           />
           <datalist id="bazi-location-options">
-            {locationOptions.map((location) => {
+            {locationOptions.map((location, index) => {
               const label = formatLocationLabel(location);
-              const key = `${location.name || 'coords'}-${location.latitude}-${location.longitude}`;
+              const key = location.name || location.value || `location-${index}`;
               return <option key={key} value={label} />;
             })}
           </datalist>

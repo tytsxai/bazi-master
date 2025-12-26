@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import axe from 'axe-core';
 
 test('Login page has no serious or critical accessibility violations', async ({ page }) => {

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Flow integrity: zodiac monthly horoscope matches backend data', async ({ page, request }) => {
   test.setTimeout(60000);

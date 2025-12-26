@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Zodiac weekly horoscope from /tarot matches backend data', async ({ page }) => {
   await page.addInitScript(() => {

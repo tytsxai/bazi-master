@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import path from 'path';
 
 test('Deep link flow loads shared history record with filters', async ({ page }) => {

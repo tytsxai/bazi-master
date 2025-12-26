@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Responsive layout verification across desktop/tablet/mobile in one run', async ({ page }) => {
   test.setTimeout(180000);

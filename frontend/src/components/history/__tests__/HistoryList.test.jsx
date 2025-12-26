@@ -120,7 +120,7 @@ describe('HistoryList', () => {
 
     renderWithRouter(<HistoryList {...props} />);
 
-    expect(screen.getByText('history.bulkDelete')).toBeInTheDocument();
+    expect(screen.getByText('history.deleteSelected')).toBeInTheDocument();
   });
 
   it('renders deleted records section when there are deleted records', () => {
@@ -184,7 +184,7 @@ describe('HistoryList', () => {
 
     renderWithRouter(<HistoryList {...props} />);
 
-    const restoreButton = screen.getByText('history.restore');
+    const restoreButton = screen.getByText('history.recover');
     fireEvent.click(restoreButton);
 
     expect(mockOnRestore).toHaveBeenCalledWith(3);
@@ -241,7 +241,7 @@ describe('HistoryList', () => {
 
     renderWithRouter(<HistoryList {...props} />);
 
-    const clearButton = screen.getByText('history.clearSelection');
+    const clearButton = screen.getByText('history.clear');
     fireEvent.click(clearButton);
 
     expect(mockOnClearSelected).toHaveBeenCalled();
@@ -250,14 +250,16 @@ describe('HistoryList', () => {
   it('renders pagination controls', () => {
     renderWithRouter(<HistoryList {...defaultProps} />);
 
-    expect(screen.getByText('1 / 3')).toBeInTheDocument();
+    expect(screen.getByText('history.pageOf')).toBeInTheDocument();
   });
 
   it('shows previous/next navigation when available', () => {
     renderWithRouter(<HistoryList {...defaultProps} />);
 
-    expect(screen.getByText('history.next')).toBeInTheDocument();
+    expect(screen.getByText('common.next')).toBeInTheDocument();
+    expect(screen.getByText('common.prev')).toBeInTheDocument();
   });
 });
+
 
 

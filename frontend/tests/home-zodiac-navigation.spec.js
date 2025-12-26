@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Home card navigates to Zodiac page', async ({ page }) => {
   await page.goto('/');

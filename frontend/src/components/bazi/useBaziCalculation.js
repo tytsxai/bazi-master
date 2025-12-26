@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext.jsx';
 import { useAuthFetch } from '../../auth/useAuthFetch.js';
+import { useBaziContext } from '../../context/BaziContext.jsx';
 import { getPreferredAiProvider } from '../../utils/aiProvider.js';
 import { getClientId } from '../../utils/clientId.js';
 import { readApiErrorMessage } from '../../utils/apiError.js';
@@ -62,6 +63,7 @@ const useUnsavedChangesWarning = (shouldBlock, message = UNSAVED_WARNING_MESSAGE
 
 export default function useBaziCalculation() {
   const { t } = useTranslation();
+  const { setBaziResult: setGlobalBaziResult } = useBaziContext(); // New Context Usage
   const {
     token,
     isAuthenticated,
@@ -555,6 +557,7 @@ export default function useBaziCalculation() {
       const data = await res.json();
       runIfMounted(() => {
         setBaseResult(normalizeBaziApiResponse(data));
+        setGlobalBaziResult(normalizeBaziApiResponse(data)); // Set global context
         pushToast({ type: 'success', message: t('bazi.calculated') });
       });
       lastCommittedFormRef.current = formData;
@@ -621,6 +624,7 @@ export default function useBaziCalculation() {
         const normalized = normalizeBaziApiResponse(data);
         setFullResult(normalized);
         setBaseResult(normalized);
+        setGlobalBaziResult(normalized); // Set global context
         pushToast({ type: 'success', message: t('bazi.fullReady') });
       });
       lastCommittedFormRef.current = formData;

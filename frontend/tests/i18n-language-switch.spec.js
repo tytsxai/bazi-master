@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('i18n language switch toggles and persists locale', async ({ page }) => {
   await page.addInitScript(() => {

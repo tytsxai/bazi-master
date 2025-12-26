@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('History pagination flow', async ({ page, request }) => {
   const testId = `e2e_${Date.now()}_${Math.floor(Math.random() * 10000)}`;

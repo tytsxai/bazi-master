@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Profile can trigger Zi Wei (V2) quick chart and render backend data', async ({ page }) => {
   await page.addInitScript(() => {

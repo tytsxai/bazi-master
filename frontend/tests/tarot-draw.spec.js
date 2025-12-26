@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Tarot draw flow for single and three card spreads', async ({ page }) => {
   await page.goto('/login');

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Guest can calculate BaZi chart and see results persist', async ({ page }) => {
   const uniqueLocation = `TEST_LOCATION_${Date.now()}`;

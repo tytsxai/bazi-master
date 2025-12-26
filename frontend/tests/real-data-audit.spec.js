@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import path from 'path';
 
 test('Real data audit flow with unique BaZi record and cleanup', async ({ page }) => {

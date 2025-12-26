@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import path from 'path';
 
 test('Failure handling with network interruption and retry in BaZi flow', async ({ page }) => {

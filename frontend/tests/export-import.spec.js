@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('History export/import flow', async ({ page }, testInfo) => {
   await page.addInitScript(() => {

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 const takeShot = async (page, label) => {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');

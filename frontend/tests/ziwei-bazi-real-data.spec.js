@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('BaZi page can trigger Zi Wei (V2) flow and match backend data', async ({ page }) => {
   await page.addInitScript(() => {

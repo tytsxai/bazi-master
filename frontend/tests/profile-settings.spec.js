@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('User can update profile settings and see them persisted', async ({ page }) => {
   const uniqueName = `E2E Profile ${Date.now()}`;

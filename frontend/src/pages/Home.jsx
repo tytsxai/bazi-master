@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
+import DailyFortuneWidget from '../components/dashboard/DailyFortuneWidget'; // Added import
 
 const modules = [
   { title: 'nav.bazi', path: '/bazi', desc: 'home.modules.bazi.desc' },

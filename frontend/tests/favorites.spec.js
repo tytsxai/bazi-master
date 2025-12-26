@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import path from 'path';
 
 test('User can add and remove a BaZi favorite', async ({ page }) => {

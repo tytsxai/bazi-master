@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Zodiac compatibility flow from /zodiac matches backend data', async ({ page }) => {
   const consoleErrors = [];

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext.jsx';
+import ChatInterface from './chat/ChatInterface.jsx';
 
 export default function Header() {
   const { t, i18n } = useTranslation();
@@ -9,6 +10,7 @@ export default function Header() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const lastNavClickRef = useRef({ at: 0, href: '' });
   const isGuest = !isAuthenticated || !user;
   const userName = user?.name || user?.email || '';
@@ -36,7 +38,9 @@ export default function Header() {
     { path: '/tarot', label: t('nav.tarot', { defaultValue: 'Tarot' }) },
     { path: '/iching', label: t('nav.iching', { defaultValue: 'I Ching' }) },
     { path: '/zodiac', label: t('nav.zodiac', { defaultValue: 'Zodiac' }) },
-    { path: '/ziwei', label: t('nav.ziwei', { defaultValue: 'Zi Wei' }), requiresAuth: true }
+    { path: '/ziwei', label: t('nav.ziwei', { defaultValue: 'Zi Wei' }), requiresAuth: true },
+    { path: '/soul-portrait', label: 'Soul Portrait', requiresAuth: true },
+    { path: '/synastry', label: 'Compatibility', requiresAuth: false }
   ];
   const visiblePrimaryLinks = primaryLinks.filter((link) => !link.requiresAuth || !isGuest);
 
@@ -250,6 +254,19 @@ export default function Header() {
             </button>
           </div>
         </nav>
+      )}
+
+      {/* Floating Chat Interface */}
+      <ChatInterface isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+
+      {/* Floating Chat Button (if closed) */}
+      {!isChatOpen && isAuthenticated && (
+        <button
+          onClick={() => setIsChatOpen(true)}
+          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 shadow-2xl transition hover:scale-110 hover:bg-indigo-500"
+        >
+          <span className="text-2xl">🔮</span>
+        </button>
       )}
     </header>
   );

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import path from 'path';
 
 const fillNumberField = async (page, label, value) => {
@@ -88,6 +88,8 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
   await page.waitForTimeout(450);
   await baziLink.press('Enter');
   await expect(page).toHaveURL(/\/bazi/);
+  // Wait for BaZi form to load
+  await page.waitForSelector('form', { timeout: 30000 });
   await page.screenshot({ path: screenshotPath('step-4-bazi') });
 
   await fillNumberField(page, 'Birth Year', 1990);
@@ -96,6 +98,7 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
   await fillNumberField(page, 'Birth Hour (0-23)', 10);
 
   const genderSelect = page.getByLabel('Gender');
+  await expect(genderSelect).toBeVisible({ timeout: 10000 });
   await genderSelect.focus();
   await genderSelect.selectOption('female');
   await expect(genderSelect).toHaveValue('female');

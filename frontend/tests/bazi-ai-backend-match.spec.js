@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 const normalizeText = (value) => (value || '').replace(/\r\n/g, '\n').trim();
 

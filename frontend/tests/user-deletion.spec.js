@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('User can delete their own account', async ({ page }) => {
   const uniqueEmail = `delete_me_${Date.now()}@example.com`;

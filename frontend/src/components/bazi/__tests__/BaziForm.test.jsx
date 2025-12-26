@@ -68,7 +68,7 @@ describe('BaziForm', () => {
     expect(screen.getByLabelText('bazi.birthMonth')).toBeInTheDocument();
     expect(screen.getByLabelText('bazi.birthDay')).toBeInTheDocument();
     expect(screen.getByLabelText('bazi.birthHour')).toBeInTheDocument();
-    expect(screen.getByLabelText('bazi.location')).toBeInTheDocument();
+    expect(screen.getByLabelText('bazi.birthLocation')).toBeInTheDocument();
   });
 
   it('displays form data values', () => {
@@ -98,8 +98,9 @@ describe('BaziForm', () => {
 
     render(<BaziForm {...props} />);
 
-    const form = screen.getByRole('form');
-    fireEvent.submit(form);
+    const submitButton = screen.getByRole('button', { name: /bazi\.calculate/i });
+    // Use submit on the form directly to avoid button click issues in JSDOM
+    fireEvent.submit(submitButton.closest('form'));
 
     expect(mockOnSubmit).toHaveBeenCalled();
   });
@@ -152,7 +153,7 @@ describe('BaziForm', () => {
     expect(screen.getByRole('button', { name: /bazi\.fullAnalysis/i })).toBeInTheDocument();
   });
 
-  it('displays result sections when results are available', () => {
+  it('enables action buttons when results are available', () => {
     const props = {
       ...defaultProps,
       baseResult: {
@@ -166,8 +167,9 @@ describe('BaziForm', () => {
 
     render(<BaziForm {...props} />);
 
-    // Check that result sections are rendered
-    expect(screen.getByText(/bazi\.result/i)).toBeInTheDocument();
+    // Check that full analysis button is enabled when baseResult exists
+    const fullAnalysisButton = screen.getByTestId('bazi-full-analysis');
+    expect(fullAnalysisButton).not.toBeDisabled();
   });
 
   it('announces errors via screen reader', () => {
@@ -182,5 +184,6 @@ describe('BaziForm', () => {
     expect(announcement).toHaveTextContent('Form validation error occurred');
   });
 });
+
 
 

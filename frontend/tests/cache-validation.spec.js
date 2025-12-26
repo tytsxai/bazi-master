@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Cache validation flow for Redis session and calculation cache', async ({ page }, testInfo) => {
   const uniqueLocation = `CACHE_LOCATION_${Date.now()}`;

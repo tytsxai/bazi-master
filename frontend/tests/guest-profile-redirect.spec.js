@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import path from 'path';
 
 test('Guest cannot access /profile and is redirected to /login', async ({ page }) => {

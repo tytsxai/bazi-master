@@ -141,6 +141,9 @@ export function AuthProvider({ children }) {
       idleTimeoutRef.current = setTimeout(() => {
         expireSession();
       }, remainingMs);
+      if (typeof idleTimeoutRef.current?.unref === 'function') {
+        idleTimeoutRef.current.unref();
+      }
     },
     [clearIdleTimeout, expireSession]
   );
@@ -323,13 +326,16 @@ export function AuthProvider({ children }) {
       if (!document.hidden) syncFromStorage();
     };
 
-    const intervalId = setInterval(syncFromStorage, 2000);
+    const shouldPollStorage = import.meta.env.MODE !== 'test';
+    const intervalId = shouldPollStorage ? setInterval(syncFromStorage, 2000) : null;
 
     window.addEventListener('storage', handleStorage);
     window.addEventListener('focus', syncFromStorage);
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      clearInterval(intervalId);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('focus', syncFromStorage);
       document.removeEventListener('visibilitychange', handleVisibility);

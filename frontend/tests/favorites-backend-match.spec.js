@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 const formatDate = (record) => `${record.birthYear}-${record.birthMonth}-${record.birthDay} · ${record.birthHour}:00`;
 const formatProfile = (record) => {

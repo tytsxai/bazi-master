@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('History search and filter flow', async ({ page }) => {
   test.setTimeout(120000);

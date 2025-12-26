@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import path from 'path';
 
 test('Session expiry prompts re-authentication and retries the pending save', async ({ page }) => {

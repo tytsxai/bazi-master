@@ -4,6 +4,15 @@ import HistoryList from './HistoryList';
 import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
+// Mock HistoryItem component
+vi.mock('./HistoryItem.jsx', () => ({
+    default: ({ record }) => (
+        <div data-testid={`history-item-${record.id}`}>
+            {record.birthYear}-{record.birthMonth}-{record.birthDay}
+        </div>
+    ),
+}));
+
 // Wrapper for router links
 const renderWithRouter = (ui) => {
     return render(

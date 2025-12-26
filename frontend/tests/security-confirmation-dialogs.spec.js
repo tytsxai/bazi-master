@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Sensitive actions require confirmation (delete, AI request)', async ({ page }) => {
   test.setTimeout(150000);

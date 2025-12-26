@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import path from 'path';
 
 test('Data cleanup cascade after user deletion removes history and favorites', async ({ page }) => {

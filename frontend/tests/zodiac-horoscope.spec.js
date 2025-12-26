@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('User can fetch a zodiac horoscope for a selected sign and period', async ({ page }) => {
   await page.addInitScript(() => {

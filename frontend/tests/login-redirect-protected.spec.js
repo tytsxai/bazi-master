@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Login preserves intended protected page after switching auth modes', async ({ page }) => {
   await page.addInitScript(() => {

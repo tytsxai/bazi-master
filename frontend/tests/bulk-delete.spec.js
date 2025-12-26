@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Bulk operation flow for batch deletion', async ({ page }) => {
   test.setTimeout(150000);

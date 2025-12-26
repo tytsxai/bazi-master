@@ -97,6 +97,7 @@ export default defineConfig({
     retries: process.env.CI ? 2 : 0,
     workers: 1,
     reporter: 'line',
+    globalSetup: './tests/global-setup.js',
     expect: {
         timeout: 15000,
     },
@@ -104,6 +105,10 @@ export default defineConfig({
         baseURL,
         trace: 'on-first-retry',
         headless: true, // Explicitly requesting headless mode
+        // Set locale to English for all tests
+        locale: 'en-US',
+        // Inject localStorage before each page load to ensure i18n uses English
+        storageState: undefined,
     },
     projects: [
         {

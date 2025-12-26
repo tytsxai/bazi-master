@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import fs from 'node:fs/promises';
 
 test('Full export/import preserves counts', async ({ page, request }, testInfo) => {

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('I Ching divination flow with AI interpretation and history save', async ({ page }) => {
   const consoleErrors = [];

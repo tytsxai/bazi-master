@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import path from 'path';
 
 const snippet = (value, length = 28) => (value ? value.slice(0, length) : '');

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Guest is redirected to login when visiting history', async ({ page }) => {
   const screenshotPath = (name) => `verification/security-guest-history-${name}.png`;

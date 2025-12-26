@@ -3,7 +3,9 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from './auth/AuthContext.jsx';
 import Header from './components/Header.jsx';
-import ProtectedRoute from './components/ProtectedRoute.jsx';
+import SoulPortrait from './components/soul/SoulPortrait';
+import Synastry from './components/synastry/Synastry';
+import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home.jsx';
 import Login from './pages/Login.jsx';
 import Profile from './pages/Profile.jsx';
@@ -39,7 +41,7 @@ function AdminRoute({ children }) {
       setStatus('checking');
       try {
         const res = await fetch('/api/admin/health', {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token} ` },
           signal: controller.signal,
         });
         if (!isActive) return;
@@ -92,7 +94,7 @@ function AdminRoute({ children }) {
 
 function NotFoundRedirect() {
   const location = useLocation();
-  const missingPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
+  const missingPath = `${location.pathname}${location.search || ''}${location.hash || ''} `;
   return <Navigate to="/404" replace state={{ from: missingPath }} />;
 }
 
@@ -118,79 +120,83 @@ function AdminArea() {
   );
 }
 
+import { BaziProvider } from './context/BaziContext.jsx';
+
+// ... (existing imports)
+
 export default function App() {
   const { i18n } = useTranslation();
 
-  useEffect(() => {
-    document.documentElement.lang = i18n.language || 'en-US';
-  }, [i18n.language]);
-
-  useEffect(() => {
-    const handleError = (event) => {
-      if (typeof event?.message === 'string' && event.message.includes('Failed to load resource')) {
-        event.preventDefault();
-      }
-    };
-    window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
-  }, []);
+  // ... (existing effects)
 
   return (
-    <section className="min-h-screen">
-      <Header />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Login />} />
-        <Route path="/bazi" element={<Bazi />} />
-        <Route path="/tarot" element={<Tarot />} />
-        <Route path="/iching" element={<Iching />} />
-        <Route path="/zodiac" element={<Zodiac />} />
-        <Route
-          path="/ziwei"
-          element={
-            <ProtectedRoute>
-              <Ziwei />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/404" element={<NotFound />} />
-        <Route path="/403" element={<Forbidden />} />
-        <Route
-          path="/admin"
-          element={
-            <AdminRoute>
-              <AdminArea />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/history"
-          element={
-            <ProtectedRoute>
-              <History />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/history/:id"
-          element={
-            <ProtectedRoute>
-              <BaziRecordDetails />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </section>
+    <BaziProvider>
+      <section className="min-h-screen">
+        <Header />
+        <Routes>
+          {/* ... existing routes ... */}
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Login />} />
+          <Route path="/bazi" element={<Bazi />} />
+          <Route path="/tarot" element={<Tarot />} />
+          <Route path="/iching" element={<Iching />} />
+          <Route path="/zodiac" element={<Zodiac />} />
+          <Route path="/synastry" element={<Synastry />} />
+          <Route
+            path="/soul-portrait"
+            element={
+              <ProtectedRoute>
+                <SoulPortrait />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ziwei"
+            element={
+              <ProtectedRoute>
+                <Ziwei />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/404" element={<NotFound />} />
+          <Route path="/403" element={<Forbidden />} />
+          <Route
+            path="/admin"
+            element={
+              <AdminRoute>
+                <AdminArea />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute>
+                <History />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/history/:id"
+            element={
+              <ProtectedRoute>
+                <BaziRecordDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </section>
+    </BaziProvider>
   );
 }

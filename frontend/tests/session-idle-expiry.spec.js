@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import path from 'node:path';
 
 const SESSION_IDLE_MS = 30 * 60 * 1000;

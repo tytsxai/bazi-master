@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('Non-admin user is redirected to 403 when accessing admin area', async ({ page }) => {
   const screenshotPath = (name) => `verification/admin-access-non-admin-${name}.png`;

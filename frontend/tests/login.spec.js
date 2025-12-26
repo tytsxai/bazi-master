@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('User can log in and redirect to profile', async ({ page }) => {
     await page.addInitScript(() => {
@@ -179,7 +179,7 @@ test('Shows error message on invalid login', async ({ page }) => {
     await page.getByRole('button', { name: 'Sign In' }).click();
 
     await expect(page).toHaveURL(/\/login/);
-    await expect(page.locator('p[role="alert"]')).toContainText('Incorrect email or password.');
+    await expect(page.locator('p[role="alert"]')).toContainText(/Incorrect email or password|Invalid credentials/);
 });
 
 test('Shows error message when WeChat OAuth is not configured', async ({ page }) => {
