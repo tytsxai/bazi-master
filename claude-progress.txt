@@ -156,3 +156,7 @@
 - Next: continue remaining Security & Access Control API tests (unauthenticated tarot/iching endpoints, etc.) and proceed to next failing feature.
 - Added Playwright security test for unauthenticated /api/iching/ai-interpret returning 401 with screenshots; verified flow end-to-end and marked feature_list.json test #36 as passing. Current progress: 59/479 tests passing.
 - Next: continue remaining Security & Access Control API tests (unauthenticated tarot/iching endpoints, etc.) and proceed to next failing feature.
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js); both passed.
+- Added Playwright security test for /api/auth/me invalid and expired tokens with screenshots (security-auth-me-invalid-token.spec.js).
+- Verified /api/auth/me invalid/expired token flow via Playwright; marked feature_list.json test #37 as passing. Current progress: 60/479 tests passing.
+- Next: continue remaining Security & Access Control API tests (401/403 for unauthenticated endpoints) and proceed to next failing feature.
