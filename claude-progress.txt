@@ -226,3 +226,8 @@
 - Marked feature_list.json test "End-to-end guest journey for Bazi basic calculation with data verification and refresh persistence" as passing. Current progress: 27/479 tests passing.
 - Mock-data scan: TODO/FIXME/placeholder matches only in node_modules/dist assets.
 - Next: continue with next highest-priority failing feature (Tarot Celtic Cross flow or other functional tests).
+- Fixed tarot Celtic AI Playwright flow to align with updated AI confirm button/status copy.
+- Verified Tarot Celtic Cross AI interpretation + history persistence via Playwright (tarot-celtic.spec.js) with new screenshots.
+- Marked feature_list.json test #3 (Complete Tarot Celtic Cross flow with AI interpretation and history persistence) as passing. Current progress: 28/479 tests passing.
+- Mock-data scan: matches only in node_modules/dist assets.
+- Next: continue remaining failing tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases).

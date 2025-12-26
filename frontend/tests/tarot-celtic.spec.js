@@ -26,8 +26,8 @@ test('Tarot Celtic Cross AI interpretation and history persistence', async ({ pa
   await page.getByRole('button', { name: /Reveal AI Meaning/i }).click();
   const confirmDialog = page.getByRole('dialog', { name: 'Request AI interpretation?' });
   await expect(confirmDialog).toBeVisible();
-  await confirmDialog.getByRole('button', { name: 'Request AI' }).click();
-  await expect(page.getByRole('status')).toContainText('Interpretation received.', { timeout: 30000 });
+  await confirmDialog.getByRole('button', { name: /Open AI|Request AI Interpretation|Request AI/i }).click();
+  await expect(page.getByRole('status')).toContainText(/AI interpretation ready|Interpretation received/i, { timeout: 30000 });
   await expect(page.getByRole('heading', { name: 'Often the cards whisper...' })).toBeVisible();
   await takeShot(page, 'tarot-celtic-ai');
 
