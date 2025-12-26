@@ -12,20 +12,26 @@ const backendPort =
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.js'],
+    include: ['src/**/*.{test,spec}.{js,jsx}'],
+  },
   build: {
     rollupOptions: {
       output: {
         manualChunks: (id) => {
           // React and core libraries
           if (id.includes('node_modules/react') ||
-              id.includes('node_modules/react-dom') ||
-              id.includes('node_modules/react-router-dom')) {
+            id.includes('node_modules/react-dom') ||
+            id.includes('node_modules/react-router-dom')) {
             return 'react-vendor';
           }
 
           // i18n libraries
           if (id.includes('node_modules/i18next') ||
-              id.includes('node_modules/react-i18next')) {
+            id.includes('node_modules/react-i18next')) {
             return 'i18n-vendor';
           }
 
@@ -37,7 +43,7 @@ export default defineConfig({
 
           // Large utility libraries
           if (id.includes('node_modules/date-fns') ||
-              id.includes('node_modules/lodash')) {
+            id.includes('node_modules/lodash')) {
             return 'utils-vendor';
           }
         },
