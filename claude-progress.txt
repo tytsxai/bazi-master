@@ -231,3 +231,9 @@
 - Marked feature_list.json test #3 (Complete Tarot Celtic Cross flow with AI interpretation and history persistence) as passing. Current progress: 28/479 tests passing.
 - Mock-data scan: matches only in node_modules/dist assets.
 - Next: continue remaining failing tests (search/filter/pagination, Zodiac compatibility, Tarot edge cases).
+- Init.sh still fails during Prisma migrate due to SQLite vs PostgreSQL migration lock mismatch (P3019). Postgres/Redis containers running; frontend/backend already up.
+- Updated I Ching Playwright flow to verify refresh persistence, delete cleanup, logout, and console error checks; captured new screenshots.
+- Ran mock-data scan commands; matches only in node_modules/dist.
+- Verified I Ching changing-lines + AI + history save/delete flow via Playwright (tests/iching.spec.js) with screenshots.
+- Marked feature_list.json test #4 as passing. Current progress: 29/479 tests passing.
+- Next: continue remaining failing tests (OAuth flows #6/#7, navigation/search/filter/pagination, Zodiac compatibility, Tarot edge cases).

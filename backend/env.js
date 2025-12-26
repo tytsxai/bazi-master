@@ -65,6 +65,9 @@ export const getServerConfig = () => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS, nodeEnv);
   const sessionTokenSecret = process.env.SESSION_TOKEN_SECRET || '';
+  const allowDevOauth =
+    process.env.ALLOW_DEV_OAUTH === '1'
+    || process.env.ALLOW_DEV_OAUTH === 'true';
 
   const wechatAppId = process.env.WECHAT_APP_ID || '';
   const wechatAppSecret = process.env.WECHAT_APP_SECRET || '';
@@ -106,6 +109,7 @@ export const getServerConfig = () => {
     frontendUrl,
     adminEmails,
     sessionTokenSecret,
+    allowDevOauth,
     wechatAppId,
     wechatAppSecret,
     wechatScope,

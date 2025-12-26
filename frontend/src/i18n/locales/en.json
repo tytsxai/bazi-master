@@ -677,7 +677,7 @@
     "subtitle": "V2 preview · Generate a lightweight Zi Wei chart with palace stars and transformations.",
     "generateChart": "Generate Zi Wei Chart",
     "reset": "Reset",
-    "chartReady": "Chart ready",
+    "chartReady": "Zi Wei chart generated",
     "chartReadyDesc": "Save this Zi Wei chart to your history.",
     "aiInterpret": "Request AI Interpretation",
     "interpreting": "Interpreting...",

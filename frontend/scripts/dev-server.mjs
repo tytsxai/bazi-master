@@ -10,9 +10,11 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..', '..');
 const backendDir = path.join(rootDir, 'backend');
 const frontendDir = path.join(rootDir, 'frontend');
+const prismaSourceSchemaPath = path.join(rootDir, 'prisma', 'schema.prisma');
+const prismaGeneratedSchemaPath = path.join(backendDir, 'node_modules', '.prisma', 'client', 'schema.prisma');
 const prismaSchemaCandidates = [
-  path.join(rootDir, 'prisma', 'schema.prisma'),
-  path.join(backendDir, 'node_modules', '.prisma', 'client', 'schema.prisma'),
+  prismaGeneratedSchemaPath,
+  prismaSourceSchemaPath,
 ];
 
 const readPrismaProvider = (schemaPath) => {
@@ -36,6 +38,13 @@ const resolvePrismaProvider = () => {
 };
 
 const prismaProvider = resolvePrismaProvider();
+const sourceProvider = readPrismaProvider(prismaSourceSchemaPath);
+const generatedProvider = readPrismaProvider(prismaGeneratedSchemaPath);
+if (sourceProvider && generatedProvider && sourceProvider !== generatedProvider) {
+  console.warn(
+    `[dev-server] Prisma provider mismatch (generated=${generatedProvider}, source=${sourceProvider}); using generated client provider.`
+  );
+}
 const isSqliteProvider = prismaProvider === 'sqlite';
 const isPostgresProvider = prismaProvider === 'postgresql' || prismaProvider === 'postgres';
 

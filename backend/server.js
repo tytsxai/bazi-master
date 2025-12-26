@@ -79,13 +79,7 @@ const ensureDatabaseUrl = () => {
   const nodeEnv = process.env.NODE_ENV || '';
   if (nodeEnv === 'production') return;
 
-  if (PRISMA_PROVIDER === 'postgresql') {
-    process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/bazi_master?schema=public';
-    return;
-  }
-
-  if (PRISMA_PROVIDER && PRISMA_PROVIDER !== 'sqlite') return;
-
+  // Force SQLite for development
   try {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const sqlitePath = path.resolve(here, '..', 'prisma', 'dev.db');
@@ -164,6 +158,7 @@ const {
   shutdownTimeoutMs: SHUTDOWN_TIMEOUT_MS,
   corsAllowedOrigins: CORS_ALLOWED_ORIGINS,
   sessionTokenSecret: SESSION_TOKEN_SECRET,
+  allowDevOauth: ALLOW_DEV_OAUTH,
   nodeEnv: NODE_ENV,
 } = getServerConfigFromEnv();
 
@@ -172,6 +167,9 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const IS_SQLITE = PRISMA_PROVIDER
   ? PRISMA_PROVIDER === 'sqlite'
   : (!DATABASE_URL || DATABASE_URL.startsWith('file:') || DATABASE_URL.includes('sqlite'));
+const IS_POSTGRES = PRISMA_PROVIDER
+  ? PRISMA_PROVIDER === 'postgresql' || PRISMA_PROVIDER === 'postgres'
+  : (DATABASE_URL && (DATABASE_URL.startsWith('postgresql://') || DATABASE_URL.startsWith('postgres://')));
 const STRIP_SEARCH_MODE = IS_SQLITE;
 
 const parseTrustProxy = (raw) => {
@@ -408,7 +406,7 @@ const ensureSoftDeleteTables = async () => {
 
 const ensureBaziRecordTrashTable = async () => {
   if (IS_SQLITE) return;
-  if (PRISMA_PROVIDER !== 'postgresql') return;
+  if (!IS_POSTGRES) return;
   try {
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "BaziRecordTrash" (
@@ -1252,10 +1250,14 @@ const ensureBaziRecordUpdatedAt = async () => {
 };
 
 const ensureDefaultUser = async () => {
-  const email = 'test@example.com';
-  const password = 'password123';
-  const name = 'Test User';
   if (!SHOULD_SEED_DEFAULT_USER) return;
+  const email = process.env.SEED_USER_EMAIL;
+  const password = process.env.SEED_USER_PASSWORD;
+  const name = process.env.SEED_USER_NAME || 'Test User';
+  if (!email || !password) {
+    console.warn('Skipping default user seed: SEED_USER_EMAIL/SEED_USER_PASSWORD not set.');
+    return;
+  }
   try {
     const existing = await prisma.user.findUnique({ where: { email } });
     if (!existing) {
@@ -1406,7 +1408,7 @@ const buildBaziSubmitKey = (userId, payload) => {
 const ALLOW_RUNTIME_SCHEMA_SYNC =
   !IS_PRODUCTION && IS_SQLITE && process.env.ALLOW_RUNTIME_SCHEMA_SYNC !== 'false';
 const SHOULD_SEED_DEFAULT_USER =
-  !IS_PRODUCTION && process.env.SEED_DEFAULT_USER !== 'false';
+  process.env.NODE_ENV !== 'production' && process.env.SEED_DEFAULT_USER !== 'false';
 const PASSWORD_RESET_DEBUG_LOG =
   !IS_PRODUCTION && process.env.PASSWORD_RESET_DEBUG_LOG === 'true';
 const sessionStore = createSessionStore({ ttlMs: SESSION_IDLE_MS });
@@ -1501,6 +1503,61 @@ const buildOauthRedirectUrl = ({ token, user, nextPath, error }) => {
     redirectUrl.hash = hashParams.toString();
   }
   return redirectUrl.toString();
+};
+
+const DEV_OAUTH_ENABLED = !IS_PRODUCTION && ALLOW_DEV_OAUTH;
+
+const normalizeDevOauthValue = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+};
+
+const buildDevOauthIdentity = (provider, req) => {
+  const rawEmail = normalizeDevOauthValue(req.query?.dev_email);
+  const rawName = normalizeDevOauthValue(req.query?.dev_name);
+  const safeProvider = provider.replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'oauth';
+  const timestamp = Date.now();
+  const email = rawEmail && rawEmail.includes('@')
+    ? rawEmail
+    : `dev-${safeProvider}-${timestamp}@example.com`;
+  const name = rawName || `Dev ${safeProvider.charAt(0).toUpperCase()}${safeProvider.slice(1)} User`;
+  return { email, name };
+};
+
+const handleDevOauthLogin = async ({ provider, req, res, nextPath }) => {
+  const identity = buildDevOauthIdentity(provider, req);
+  let user = await prisma.user.findUnique({ where: { email: identity.email } });
+  if (!user) {
+    const randomPassword = crypto.randomBytes(24).toString('hex');
+    const hashed = await hashPassword(randomPassword);
+    if (!hashed) {
+      const redirectUrl = buildOauthRedirectUrl({ error: 'server_error', nextPath });
+      return res.redirect(redirectUrl);
+    }
+    user = await prisma.user.create({
+      data: { email: identity.email, name: identity.name, password: hashed },
+    });
+  } else if (!user.name && identity.name) {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { name: identity.name },
+    });
+  }
+
+  const token = createSessionToken(user.id);
+  sessionStore.set(token, Date.now());
+
+  const redirectUrl = buildOauthRedirectUrl({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      isAdmin: isAdminUser(user),
+    },
+    nextPath,
+  });
+  return res.redirect(redirectUrl);
 };
 
 const isAdminUser = (user) => {
@@ -2868,6 +2925,9 @@ apiRouter.get('/zodiac/:sign/horoscope', (req, res) => {
 apiRouter.get('/auth/google', (req, res) => {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     const nextPath = sanitizeNextPath(req.query.next);
+    if (DEV_OAUTH_ENABLED) {
+      return handleDevOauthLogin({ provider: 'google', req, res, nextPath });
+    }
     const redirectUrl = buildOauthRedirectUrl({ error: 'not_configured', nextPath });
     return res.redirect(redirectUrl);
   }

@@ -16,3 +16,5 @@ test-results/
 verification/
 frontend/.vite/
 prisma/.pgdata-e2e/
+frontend/test-error*.txt
+frontend/test-output*.txt

@@ -1,6 +1,13 @@
 import { test, expect } from '@playwright/test';
 
 test('I Ching divination flow with AI interpretation and history save', async ({ page }) => {
+  const consoleErrors = [];
+  page.on('pageerror', (error) => consoleErrors.push(error.message || String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      consoleErrors.push(message.text());
+    }
+  });
   const uniqueQuestion = `E2E_ICHING_${Date.now()}`;
   const runId = Date.now();
   const snap = async (label) => {
@@ -65,4 +72,22 @@ test('I Ching divination flow with AI interpretation and history save', async ({
   await expect(page.getByText('Reading saved to history.')).toBeVisible();
   await expect(page.getByText(uniqueQuestion)).toBeVisible();
   await snap('06-saved');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByText(uniqueQuestion)).toBeVisible();
+  await snap('07-refresh-history');
+
+  const historySection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'History' }) });
+  const historyCard = historySection.locator('div.rounded-2xl').filter({ hasText: uniqueQuestion }).first();
+  await historyCard.scrollIntoViewIfNeeded();
+  await historyCard.getByRole('button', { name: /Remove/i }).click();
+  await page.getByRole('dialog').getByRole('button', { name: /Remove/i }).click();
+  await expect(page.getByText(uniqueQuestion)).toHaveCount(0);
+  await snap('08-deleted');
+
+  await page.getByRole('button', { name: /Logout/i }).click();
+  await expect(page).toHaveURL(/\/login/);
+  await snap('09-logout');
+
+  expect(consoleErrors).toEqual([]);
 });

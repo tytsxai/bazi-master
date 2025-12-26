@@ -702,11 +702,14 @@ export default function Ziwei() {
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <h2 className="text-sm uppercase text-gold-400/80">{t('ziwei.lunarDate')}</h2>
                 <p className="mt-2 text-white">
-                  {result?.lunar?.year}{t('common.year')} {result?.lunar?.month}{t('common.month')} {result?.lunar?.day}{t('common.day')}
-                  {result?.lunar?.isLeap ? ` (${t('ziwei.leap')})` : ''}
+                  {result?.lunar
+                    ? `${result.lunar.year}年 ${result.lunar.month}月 ${result.lunar.day}日${result.lunar.isLeap ? ' (Leap)' : ''}`
+                    : '—'}
                 </p>
                 <p className="mt-1 text-xs text-white/60">
-                  {result?.lunar?.yearStem}{result?.lunar?.yearBranch}{t('common.year')} · {result?.lunar?.monthStem}{result?.lunar?.monthBranch}{t('common.month')}
+                  {result?.lunar
+                    ? `${result.lunar.yearStem}${result.lunar.yearBranch}年 · ${result.lunar.monthStem}${result.lunar.monthBranch}月`
+                    : '—'}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -899,7 +902,9 @@ export default function Ziwei() {
                             {t('ziwei.palace')}: {mingPalace} · {mingBranch}
                           </p>
                           <p className="text-xs text-white/60" data-testid="ziwei-history-lunar">
-                            {t('ziwei.lunarDate')}: {lunar.year}{t('common.year')} {lunar.month}{t('common.month')} {lunar.day}{t('common.day')} {lunar.isLeap ? `(${t('ziwei.leap')})` : ''}
+                            {t('ziwei.lunarDate')}: {lunar.year && lunar.month && lunar.day
+                              ? `${lunar.year}年 ${lunar.month}月 ${lunar.day}日${lunar.isLeap ? ' (Leap)' : ''}`
+                              : '—'}
                           </p>
                         </div>
                         <div className="flex flex-col items-end gap-2">
