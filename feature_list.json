@@ -747,7 +747,7 @@
       "Step 2: Perform the action",
       "Step 3: Verify expected result"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

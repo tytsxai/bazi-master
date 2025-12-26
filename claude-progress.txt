@@ -154,3 +154,5 @@
 - Added Playwright security test ensuring unauthenticated /api/tarot/ai-interpret returns 401 with verification screenshots.
 - Verified tarot AI unauthenticated security flow via Playwright; marked feature_list.json test #35 as passing. Current progress: 58/479 tests passing.
 - Next: continue remaining Security & Access Control API tests (unauthenticated tarot/iching endpoints, etc.) and proceed to next failing feature.
+- Added Playwright security test for unauthenticated /api/iching/ai-interpret returning 401 with screenshots; verified flow end-to-end and marked feature_list.json test #36 as passing. Current progress: 59/479 tests passing.
+- Next: continue remaining Security & Access Control API tests (unauthenticated tarot/iching endpoints, etc.) and proceed to next failing feature.
