@@ -7,6 +7,7 @@ const buildScreenshotPath = (name) => {
 };
 
 test('[J] Data cleanup: I Ching time divination from /history matches backend data', async ({ page }) => {
+  test.setTimeout(60_000);
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));
@@ -18,11 +19,29 @@ test('[J] Data cleanup: I Ching time divination from /history matches backend da
     localStorage.setItem('locale', 'en-US');
   });
 
-  await page.goto('/login');
-  await page.fill('input[type="email"]', 'test@example.com');
-  await page.fill('input[type="password"]', 'password123');
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL(/\/profile/);
+  await page.goto('/');
+  const email = 'test@example.com';
+  const password = 'password123';
+  let loginResponse = await page.request.post('/api/auth/login', {
+    data: { email, password },
+  });
+  if (!loginResponse.ok()) {
+    await page.request.post('/api/auth/register', {
+      data: { email, password, name: 'Test User' },
+    });
+    loginResponse = await page.request.post('/api/auth/login', {
+      data: { email, password },
+    });
+  }
+  expect(loginResponse.ok()).toBeTruthy();
+  const loginData = await loginResponse.json();
+  await page.evaluate(({ token, user }) => {
+    localStorage.setItem('bazi_token', token);
+    localStorage.setItem('bazi_token_origin', 'backend');
+    localStorage.setItem('bazi_user', JSON.stringify(user));
+    localStorage.setItem('bazi_last_activity', String(Date.now()));
+    localStorage.removeItem('bazi_session_expired');
+  }, { token: loginData.token, user: loginData.user });
 
   await page.goto('/history');
   await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();

@@ -61,8 +61,9 @@ test('Full export/import preserves counts', async ({ page, request }, testInfo) 
 
   await page.goto('/history');
   const exportAllButton = page.getByRole('button', { name: 'Export all' });
+  await expect(exportAllButton).toBeEnabled({ timeout: 30000 });
   const [download] = await Promise.all([
-    page.waitForEvent('download'),
+    page.waitForEvent('download', { timeout: 60000 }),
     exportAllButton.click(),
   ]);
   const downloadPath = testInfo.outputPath(`history-full-export-${testId}.json`);

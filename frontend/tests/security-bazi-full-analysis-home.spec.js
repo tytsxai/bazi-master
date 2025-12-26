@@ -15,10 +15,15 @@ test('Security: Bazi full analysis from / matches backend data', async ({ page }
   });
 
   await page.addInitScript(() => {
+    const key = '__e2e_prep_security_home__';
     localStorage.setItem('locale', 'en-US');
-    localStorage.removeItem('bazi_token');
-    localStorage.removeItem('bazi_user');
-    localStorage.removeItem('bazi_last_activity');
+    if (localStorage.getItem(key) !== '1') {
+      localStorage.setItem(key, '1');
+      localStorage.removeItem('bazi_token');
+      localStorage.removeItem('bazi_user');
+      localStorage.removeItem('bazi_last_activity');
+      localStorage.removeItem('bazi_session_expired');
+    }
   });
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -37,7 +42,9 @@ test('Security: Bazi full analysis from / matches backend data', async ({ page }
   expect(loginResponse.ok()).toBeTruthy();
   await expect(page).toHaveURL(/\/profile/, { timeout: 15000 });
 
-  await page.getByRole('link', { name: 'BaZi', exact: true }).click();
+  await page.waitForLoadState('networkidle');
+
+  await page.goto('/bazi', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/bazi/);
 
   await page.getByLabel(/Birth Year|出生年份/).fill('1994');

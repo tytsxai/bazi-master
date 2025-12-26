@@ -11,11 +11,35 @@ test('I Ching divination flow with AI interpretation and history save', async ({
     localStorage.setItem('locale', 'en-US');
   });
 
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.fill('input[type="email"]', 'test@example.com');
-  await page.fill('input[type="password"]', 'password123');
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL(/\/profile/);
+  const email = 'test@example.com';
+  const password = 'password123';
+  let loginResponse = await page.request.post('/api/auth/login', {
+    data: { email, password },
+  });
+  if (!loginResponse.ok()) {
+    await page.request.post('/api/auth/register', {
+      data: { email, password, name: 'Test User' },
+    });
+    loginResponse = await page.request.post('/api/auth/login', {
+      data: { email, password },
+    });
+  }
+  expect(loginResponse.ok()).toBeTruthy();
+  const loginData = await loginResponse.json();
+
+  await page.addInitScript(
+    ({ token, user }) => {
+      localStorage.setItem('bazi_token', token);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(user));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { token: loginData.token, user: loginData.user }
+  );
+
+  await page.goto('/profile', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('button', { name: /Logout/i })).toBeVisible();
   await snap('01-profile');
 
   await page.goto('/iching');

@@ -1,7 +1,24 @@
 import { defineConfig, devices } from '@playwright/test';
 import net from 'node:net';
 
-const fallbackPort = 3100 + Math.floor(Math.random() * 800);
+const UNSAFE_BROWSER_PORTS = new Set([
+    1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101,
+    102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 179, 389, 427, 465,
+    512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 993, 995, 2049,
+    3659, 4045, 6000, 6665, 6666, 6667, 6668, 6669, 6697, 10080,
+]);
+
+const isSafeBrowserPort = (port) => !UNSAFE_BROWSER_PORTS.has(port);
+
+const pickSafeFallbackPort = () => {
+    let port = 3100 + Math.floor(Math.random() * 800);
+    while (!isSafeBrowserPort(port)) {
+        port = 3100 + Math.floor(Math.random() * 800);
+    }
+    return port;
+};
+
+const fallbackPort = pickSafeFallbackPort();
 const resolvePort = (value) => {
     const parsed = Number(value);
     const port = Number.isFinite(parsed) ? Math.trunc(parsed) : NaN;
@@ -26,18 +43,27 @@ const pickFreePort = async () =>
     });
 
 const noWebServer = process.env.PW_NO_WEB_SERVER === '1';
-const webPort = resolvePort(process.env.E2E_WEB_PORT)
-    ?? resolvePort(process.env.PW_PORT)
-    ?? fallbackPort;
-const baseURL = `http://127.0.0.1:${webPort}`;
-
-const pickBackendPort = async () => {
+const pickSafePort = async (avoidPorts = new Set()) => {
     let port = await pickFreePort();
-    while (port === webPort) {
+    while (!isSafeBrowserPort(port) || avoidPorts.has(port)) {
         port = await pickFreePort();
     }
     return port;
 };
+
+const explicitWebPort = resolvePort(process.env.E2E_WEB_PORT)
+    ?? resolvePort(process.env.PW_PORT);
+const webPort = explicitWebPort
+    ?? (noWebServer ? fallbackPort : await pickSafePort());
+
+if (!isSafeBrowserPort(webPort)) {
+    throw new Error(
+        `E2E web port ${webPort} is blocked by Chromium as an unsafe port. Choose a different E2E_WEB_PORT/PW_PORT.`
+    );
+}
+const baseURL = `http://127.0.0.1:${webPort}`;
+
+const pickBackendPort = async () => await pickSafePort(new Set([webPort]));
 
 const explicitBackendPort = resolvePort(process.env.E2E_API_PORT)
     ?? resolvePort(process.env.BACKEND_PORT);

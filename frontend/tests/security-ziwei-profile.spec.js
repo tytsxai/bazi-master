@@ -24,28 +24,46 @@ test('Security: Ziwei V2 quick chart from /profile matches backend data', async 
   });
 
   await page.addInitScript(() => {
+    const key = '__e2e_prep_security_ziwei_profile__';
     localStorage.setItem('locale', 'en-US');
-    localStorage.removeItem('bazi_token');
-    localStorage.removeItem('bazi_user');
-    localStorage.removeItem('bazi_last_activity');
+    if (localStorage.getItem(key) !== '1') {
+      localStorage.setItem(key, '1');
+      localStorage.removeItem('bazi_token');
+      localStorage.removeItem('bazi_user');
+      localStorage.removeItem('bazi_last_activity');
+      localStorage.removeItem('bazi_session_expired');
+    }
   });
 
   await page.goto('/profile');
   await expect(page).toHaveURL(/\/login/);
 
-  await page.fill('input[type="email"]', 'test@example.com');
-  await page.fill('input[type="password"]', 'password123');
-  const loginResponsePromise = page.waitForResponse(
-    (resp) => resp.url().includes('/api/auth/login') && resp.request().method() === 'POST'
-  );
-  await page.click('button[type="submit"]');
-  const loginResponse = await loginResponsePromise;
+  const loginResponse = await page.request.post('/api/auth/login', {
+    data: { email: 'test@example.com', password: 'password123' },
+  });
   expect(loginResponse.ok()).toBeTruthy();
+  const loginData = await loginResponse.json();
+  const token = loginData?.token;
+  expect(token).toBeTruthy();
+
+  await page.evaluate(
+    ({ tokenValue, userValue }) => {
+      localStorage.setItem('bazi_token', tokenValue);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(userValue));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { tokenValue: token, userValue: loginData?.user }
+  );
+
+  await page.goto('/profile', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/profile/, { timeout: 15000 });
   await page.screenshot({ path: buildScreenshotPath('security-ziwei-profile-step-1') });
 
-  const token = await page.evaluate(() => localStorage.getItem('bazi_token'));
-  expect(token).toBeTruthy();
+  await expect.poll(async () => page.evaluate(() => localStorage.getItem('bazi_token')), {
+    timeout: 5000,
+  }).toBeTruthy();
 
   const recordPayload = {
     birthYear: 1991,
@@ -64,21 +82,28 @@ test('Security: Ziwei V2 quick chart from /profile matches backend data', async 
       'Content-Type': 'application/json',
     },
   });
-  expect(recordResponse.ok()).toBeTruthy();
+  if (!recordResponse.ok()) {
+    const bodyText = await recordResponse.text().catch(() => '');
+    throw new Error(
+      `Expected /api/bazi/records to succeed, got ${recordResponse.status()} ${bodyText}`
+    );
+  }
 
   await page.reload();
-  await expect(page.getByText('Zi Wei (V2) quick chart')).toBeVisible();
+  await expect(page.getByText(/Zi Wei \(V2\) quick chart|紫微 \(V2\) 快速排盘/)).toBeVisible();
 
   const responsePromise = page.waitForResponse(
     (resp) => resp.url().includes('/api/ziwei/calculate') && resp.request().method() === 'POST'
   );
-  await page.getByRole('button', { name: 'Generate Zi Wei Chart' }).click();
+  await page.getByRole('button', { name: /Generate Zi Wei Chart|生成紫微命盘/i }).click();
   const response = await responsePromise;
   expect(response.ok()).toBeTruthy();
   const data = await response.json();
 
   const resultCard = page.getByTestId('profile-ziwei-result');
-  await expect(page.getByTestId('profile-ziwei-status')).toContainText('Zi Wei chart generated');
+  await expect(page.getByTestId('profile-ziwei-status')).toContainText(
+    /Zi Wei chart generated|已根据你最近的八字记录生成紫微命盘/,
+  );
   await expect(resultCard).toContainText(buildLunarText(data.lunar));
   await expect(resultCard).toContainText(buildPalaceText('命宫', data.mingPalace));
   await expect(resultCard).toContainText(buildPalaceText('身宫', data.shenPalace));

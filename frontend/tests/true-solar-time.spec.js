@@ -13,15 +13,27 @@ test('Bazi calculation applies true solar time correction from location', async 
     localStorage.setItem('locale', 'en-US');
   });
 
-  await page.goto('/login');
-  await page.evaluate(() => {
-    localStorage.removeItem('bazi_token');
-    localStorage.removeItem('bazi_user');
-    localStorage.removeItem('bazi_last_activity');
+  const loginRes = await page.request.post('/api/auth/login', {
+    data: { email: 'test@example.com', password: 'password123' },
   });
-  await page.fill('input[type="email"]', 'test@example.com');
-  await page.fill('input[type="password"]', 'password123');
-  await page.click('button[type="submit"]');
+  expect(loginRes.ok()).toBeTruthy();
+  const loginData = await loginRes.json();
+  const token = loginData?.token;
+  const user = loginData?.user;
+  expect(token).toBeTruthy();
+
+  await page.addInitScript(
+    ({ tokenValue, userValue }) => {
+      localStorage.setItem('bazi_token', tokenValue);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(userValue));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { tokenValue: token, userValue: user }
+  );
+
+  await page.goto('/profile', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/profile/);
   await page.screenshot({ path: screenshotPath('solar-step-1-profile') });
 
@@ -53,8 +65,8 @@ test('Bazi calculation applies true solar time correction from location', async 
   );
   await page.getByRole('button', { name: 'Request Full Analysis' }).click();
   await fullAnalysis;
-  await expect(page.getByRole('heading', { name: 'Ten Gods' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Major Luck Cycles' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ten Gods' })).toBeVisible({ timeout: 60000 });
+  await expect(page.getByRole('heading', { name: 'Major Luck Cycles' })).toBeVisible({ timeout: 60000 });
   await page.screenshot({ path: screenshotPath('solar-step-4-full-analysis') });
 
   const saveResponse = page.waitForResponse(

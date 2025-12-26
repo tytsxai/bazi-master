@@ -16,11 +16,19 @@ test('Error handling: favorites flow matches backend data', async ({ page, reque
     localStorage.setItem('locale', 'en-US');
   });
 
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.fill('input[type="email"]', 'test@example.com');
-  await page.fill('input[type="password"]', 'password123');
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL(/\/profile/);
+  await page.goto('/');
+  const loginResponse = await request.post('/api/auth/login', {
+    data: { email: 'test@example.com', password: 'password123' },
+  });
+  expect(loginResponse.ok()).toBeTruthy();
+  const loginData = await loginResponse.json();
+  await page.evaluate(({ token, user }) => {
+    localStorage.setItem('bazi_token', token);
+    localStorage.setItem('bazi_token_origin', 'backend');
+    localStorage.setItem('bazi_user', JSON.stringify(user));
+    localStorage.setItem('bazi_last_activity', String(Date.now()));
+    localStorage.removeItem('bazi_session_expired');
+  }, { token: loginData.token, user: loginData.user });
 
   try {
     await page.goto('/bazi');

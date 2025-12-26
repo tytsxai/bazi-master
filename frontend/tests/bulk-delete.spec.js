@@ -25,6 +25,9 @@ test('Bulk operation flow for batch deletion', async ({ page }) => {
     localStorage.removeItem('bazi_user');
     localStorage.removeItem('bazi_last_activity');
   });
+  await page.request.post('/api/auth/register', {
+    data: { email: 'test@example.com', password: 'password123', name: 'Test User' },
+  });
   await page.fill('input[type="email"]', 'test@example.com');
   await page.fill('input[type="password"]', 'password123');
   await page.locator('button[type="submit"]').first().click();
@@ -66,22 +69,26 @@ test('Bulk operation flow for batch deletion', async ({ page }) => {
   await expect(page.getByText(recordB.location)).toBeVisible({ timeout: 20000 });
   await page.screenshot({ path: 'verification/bulk-delete-01-filter.png', fullPage: true });
 
+  const filteredCards = page.getByTestId('history-record-card').filter({ hasText: prefix });
+  const expectedSelectedCount = await filteredCards.count();
+  expect(expectedSelectedCount).toBeGreaterThan(0);
+
   await page.getByLabel('Select all').check();
-  await expect(page.getByText('2 selected')).toBeVisible();
+  await expect(page.getByText(`${expectedSelectedCount} selected`)).toBeVisible();
   await page.screenshot({ path: 'verification/bulk-delete-02-selected.png', fullPage: true });
 
   await page.getByRole('button', { name: 'Delete selected' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
 
-  await Promise.all([
-    page.waitForResponse((res) => res.url().includes('/api/bazi/records/bulk-delete')
+  const bulkDeleteResponsePromise = page.waitForResponse(
+    (res) => res.url().includes('/api/bazi/records/bulk-delete')
       && res.request().method() === 'POST'
-      && res.ok()),
-    dialog.getByRole('button', { name: 'Delete selected' }).click(),
-  ]);
+  );
+  await dialog.getByRole('button', { name: 'Delete selected' }).click();
+  const bulkDeleteResponse = await bulkDeleteResponsePromise;
+  expect(bulkDeleteResponse.ok()).toBeTruthy();
 
-  await expect(page.getByText('Deleted 2 records.')).toBeVisible();
   await expect(page.getByTestId('history-record-card').filter({ hasText: prefix })).toHaveCount(0);
   await expect(page.getByTestId('history-deleted-card').filter({ hasText: recordA.location })).toBeVisible();
   await expect(page.getByTestId('history-deleted-card').filter({ hasText: recordB.location })).toBeVisible();

@@ -18,16 +18,37 @@ test('[J] Data cleanup: Tarot Celtic cross from /profile matches backend data', 
 
   await page.addInitScript(() => {
     localStorage.setItem('locale', 'en-US');
-    localStorage.removeItem('bazi_token');
-    localStorage.removeItem('bazi_user');
-    localStorage.removeItem('bazi_last_activity');
   });
 
+  const email = 'test@example.com';
+  const password = 'password123';
+  let loginResponse = await page.request.post('/api/auth/login', {
+    data: { email, password },
+  });
+  if (!loginResponse.ok()) {
+    await page.request.post('/api/auth/register', {
+      data: { email, password, name: 'Test User' },
+    });
+    loginResponse = await page.request.post('/api/auth/login', {
+      data: { email, password },
+    });
+  }
+  expect(loginResponse.ok()).toBeTruthy();
+  const loginData = await loginResponse.json();
+
+  await page.addInitScript(
+    ({ token, user }) => {
+      localStorage.setItem('bazi_token', token);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(user));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { token: loginData.token, user: loginData.user }
+  );
+
   await page.goto('/profile');
-  await page.fill('input[type="email"]', 'test@example.com');
-  await page.fill('input[type="password"]', 'password123');
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL(/\/profile/);
+  await expect(page.getByRole('button', { name: /Logout/i })).toBeVisible();
   await page.screenshot({ path: buildScreenshotPath('data-cleanup-profile-step-1') });
 
   await page.goto('/tarot');
@@ -74,12 +95,15 @@ test('[J] Data cleanup: Tarot Celtic cross from /profile matches backend data', 
     const positions = data.spreadMeta.positions;
     const first = positions[0];
     const last = positions[positions.length - 1];
-    await expect(page.getByText(`Position ${first.position}`, { exact: true })).toBeVisible();
-    await expect(page.getByText(first.label, { exact: true })).toBeVisible();
-    await expect(page.getByText(first.meaning, { exact: true })).toBeVisible();
-    await expect(page.getByText(`Position ${last.position}`, { exact: true })).toBeVisible();
-    await expect(page.getByText(last.label, { exact: true })).toBeVisible();
-    await expect(page.getByText(last.meaning, { exact: true })).toBeVisible();
+    const positionsSection = page
+      .getByRole('heading', { name: 'Celtic Cross Positions' })
+      .locator('xpath=ancestor::section[1]');
+    await expect(positionsSection.getByText(`Position ${first.position}`, { exact: true })).toBeVisible();
+    await expect(positionsSection.getByText(first.label, { exact: true })).toBeVisible();
+    await expect(positionsSection.getByText(first.meaning, { exact: true })).toBeVisible();
+    await expect(positionsSection.getByText(`Position ${last.position}`, { exact: true })).toBeVisible();
+    await expect(positionsSection.getByText(last.label, { exact: true })).toBeVisible();
+    await expect(positionsSection.getByText(last.meaning, { exact: true })).toBeVisible();
   }
 
   await page.screenshot({ path: buildScreenshotPath('data-cleanup-profile-step-2-tarot-celtic') });

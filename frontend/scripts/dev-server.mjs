@@ -129,7 +129,7 @@ const checkBackendHealth = async () => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 1000);
   try {
-    const res = await fetch(`http://127.0.0.1:${backendPort}/health`, { signal: controller.signal });
+    const res = await fetch(`http://127.0.0.1:${backendPort}/api/health`, { signal: controller.signal });
     if (!res.ok) return false;
     const data = await res.json().catch(() => null);
     return data?.status === 'ok';
@@ -148,6 +148,55 @@ const waitForBackendHealth = async (timeoutMs = 30_000) => {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   return false;
+};
+
+const readApiErrorMessage = async (response, fallback) => {
+  try {
+    const data = await response.json();
+    if (data?.error) return String(data.error);
+    if (data?.message) return String(data.message);
+  } catch {
+    // Ignore JSON parse failures.
+  }
+  return fallback;
+};
+
+const ensureE2EDefaultUser = async () => {
+  if (!forceRestart) return;
+  if (process.env.E2E_SKIP_SEED === '1' || process.env.PW_SKIP_SEED === '1') return;
+
+  const email = process.env.E2E_DEFAULT_EMAIL || 'test@example.com';
+  const password = process.env.E2E_DEFAULT_PASSWORD || 'password123';
+  const name = process.env.E2E_DEFAULT_NAME || 'Test User';
+  const baseUrl = `http://127.0.0.1:${backendPort}`;
+
+  const tryLogin = async () => {
+    const res = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json().catch(() => null);
+    return Boolean(data?.token);
+  };
+
+  if (await tryLogin()) return;
+
+  const registerRes = await fetch(`${baseUrl}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, name }),
+  });
+
+  if (!registerRes.ok && registerRes.status !== 409) {
+    const message = await readApiErrorMessage(registerRes, 'Unable to seed E2E default user');
+    throw new Error(`[dev-server] ${message}`);
+  }
+
+  if (!(await tryLogin())) {
+    throw new Error('[dev-server] E2E default user seed succeeded but login still fails.');
+  }
 };
 
 const killPort = (port) => {
@@ -308,7 +357,7 @@ const restartBackend = async (reason) => {
 
       const backendHealthy = await waitForBackendHealth(30_000);
       if (!backendHealthy) {
-        console.error('[dev-server] Backend /health did not become ready in time.');
+        console.error('[dev-server] Backend /api/health did not become ready in time.');
         continue;
       }
 
@@ -423,7 +472,15 @@ if (!backendListening) {
 }
 const backendHealthy = await waitForBackendHealth(60_000);
 if (!backendHealthy) {
-  console.error('[dev-server] Backend /health did not become ready in time.');
+  console.error('[dev-server] Backend /api/health did not become ready in time.');
+  shutdown();
+  process.exit(1);
+}
+
+try {
+  await ensureE2EDefaultUser();
+} catch (error) {
+  console.error(error);
   shutdown();
   process.exit(1);
 }

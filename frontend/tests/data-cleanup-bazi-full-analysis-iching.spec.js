@@ -17,10 +17,6 @@ test('[J] Data cleanup: Bazi full analysis from /iching matches backend data', a
 
   await page.addInitScript(() => {
     localStorage.setItem('locale', 'en-US');
-    localStorage.removeItem('bazi_token');
-    localStorage.removeItem('bazi_user');
-    localStorage.removeItem('bazi_last_activity');
-    localStorage.removeItem('bazi_profile_name');
   });
 
   await page.goto('/iching');

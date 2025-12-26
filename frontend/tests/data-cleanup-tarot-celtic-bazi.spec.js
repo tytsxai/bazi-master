@@ -39,9 +39,6 @@ test('[J] Data cleanup: Tarot Celtic cross from /bazi matches backend data', asy
 
   await page.addInitScript(() => {
     localStorage.setItem('locale', 'en-US');
-    localStorage.removeItem('bazi_token');
-    localStorage.removeItem('bazi_user');
-    localStorage.removeItem('bazi_last_activity');
   });
 
   await page.goto('/bazi');

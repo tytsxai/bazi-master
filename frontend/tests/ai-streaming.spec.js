@@ -10,6 +10,53 @@ test('AI streaming via WebSocket flow (connect, stream, disconnect)', async ({ p
   test.setTimeout(120000);
   const uniqueLocation = `AI_STREAM_${Date.now()}`;
   const consoleErrors = [];
+  const email = 'test@example.com';
+  const password = 'password123';
+  const name = 'Test User';
+  let token = null;
+  let user = null;
+  const loginViaApi = async () => {
+    let response = await page.request.post('/api/auth/login', {
+      data: { email, password },
+    });
+
+    if (!response.ok()) {
+      await page.request.post('/api/auth/register', {
+        data: { email, password, name },
+      });
+      response = await page.request.post('/api/auth/login', {
+        data: { email, password },
+      });
+    }
+
+    expect(response.ok()).toBeTruthy();
+    const data = await response.json();
+    token = data?.token;
+    user = data?.user;
+    expect(token).toBeTruthy();
+  };
+
+  const applyAuthToLocalStorage = async () => {
+    await page.evaluate(
+      ({ tokenValue, userValue }) => {
+        localStorage.setItem('bazi_token', tokenValue);
+        localStorage.setItem('bazi_token_origin', 'backend');
+        localStorage.setItem('bazi_user', JSON.stringify(userValue));
+        localStorage.setItem('bazi_last_activity', String(Date.now()));
+        localStorage.removeItem('bazi_session_expired');
+      },
+      { tokenValue: token, userValue: user }
+    );
+  };
+
+  const ensureLoggedIn = async () => {
+    if (!page.url().includes('/login')) return;
+    await loginViaApi();
+    await applyAuthToLocalStorage();
+    const nextPath = new URL(page.url()).searchParams.get('next') || '/profile';
+    await page.goto(nextPath, { waitUntil: 'domcontentloaded' });
+    await expect(page).not.toHaveURL(/\/login/);
+  };
 
   page.on('console', (msg) => {
     if (msg.type() === 'error') {
@@ -23,30 +70,29 @@ test('AI streaming via WebSocket flow (connect, stream, disconnect)', async ({ p
   await page.addInitScript(() => {
     localStorage.setItem('locale', 'en-US');
     localStorage.setItem('bazi_ai_provider', 'mock');
-    if (!localStorage.getItem('e2e_ai_streaming_init')) {
-      localStorage.setItem('e2e_ai_streaming_init', '1');
-      localStorage.removeItem('bazi_token');
-      localStorage.removeItem('bazi_user');
-      localStorage.removeItem('bazi_last_activity');
-    }
+    localStorage.removeItem('bazi_token');
+    localStorage.removeItem('bazi_user');
+    localStorage.removeItem('bazi_last_activity');
   });
+
+  await loginViaApi();
+
+  await page.addInitScript(
+    ({ tokenValue, userValue }) => {
+      localStorage.setItem('bazi_token', tokenValue);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(userValue));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { tokenValue: token, userValue: user }
+  );
 
   await page.goto('/');
   await expect(page.getByRole('link', { name: 'BaZi Master' })).toBeVisible();
   await page.screenshot({ path: screenshotPath('ai-streaming-step-1-home') });
 
-  await page.getByRole('link', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/login/);
-  await page.screenshot({ path: screenshotPath('ai-streaming-step-2-login') });
-
-  const loginResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/auth/login') && resp.request().method() === 'POST'
-  );
-  await page.fill('input[type="email"]', 'test@example.com');
-  await page.fill('input[type="password"]', 'password123');
-  await page.click('button[type="submit"]');
-  const loginResult = await loginResponse;
-  expect(loginResult.ok()).toBeTruthy();
+  await page.goto('/profile');
   await expect(page).toHaveURL(/\/profile/);
   await expect(page.getByTestId('header-user-name')).toHaveText('Test User');
   const tokenValue = await page.evaluate(() => localStorage.getItem('bazi_token'));
@@ -152,11 +198,13 @@ test('AI streaming via WebSocket flow (connect, stream, disconnect)', async ({ p
   await page.screenshot({ path: screenshotPath('ai-streaming-step-11-favorited') });
 
   await page.goto('/history');
+  await ensureLoggedIn();
   await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   await expect(page.getByText(uniqueLocation)).toBeVisible();
   await page.screenshot({ path: screenshotPath('ai-streaming-step-12-history') });
 
   await page.goto('/favorites');
+  await ensureLoggedIn();
   await expect(page.getByRole('heading', { name: 'Favorites' })).toBeVisible();
   await expect(page.getByText(uniqueLocation)).toBeVisible();
   await page.screenshot({ path: screenshotPath('ai-streaming-step-13-favorites') });
@@ -173,6 +221,7 @@ test('AI streaming via WebSocket flow (connect, stream, disconnect)', async ({ p
   await page.screenshot({ path: screenshotPath('ai-streaming-step-14-favorites-removed') });
 
   await page.goto('/history');
+  await ensureLoggedIn();
   await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   const historyCard = page
     .getByText(uniqueLocation)

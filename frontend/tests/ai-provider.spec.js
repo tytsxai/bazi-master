@@ -9,6 +9,26 @@ const screenshotPath = (name) => {
 test('AI provider selection with availability check and BaZi flow', async ({ page }) => {
   const uniqueLocation = `AI_PROVIDER_LOCATION_${Date.now()}`;
   const consoleErrors = [];
+  const email = 'test@example.com';
+  const password = 'password123';
+  const name = 'Test User';
+  const ensureLoggedIn = async (targetPath = null) => {
+    if (page.url().includes('/login')) {
+      await page.request.post('/api/auth/register', {
+        data: { email, password, name },
+      });
+      await page.fill('input[type="email"]', 'test@example.com');
+      await page.fill('input[type="password"]', 'password123');
+      await page.click('button[type="submit"]');
+      await expect(page).not.toHaveURL(/\/login/);
+    }
+    if (targetPath) {
+      const pathname = new URL(page.url()).pathname;
+      if (pathname !== targetPath) {
+        await page.goto(targetPath);
+      }
+    }
+  };
 
   page.on('console', (msg) => {
     if (msg.type() === 'error') {
@@ -27,6 +47,10 @@ test('AI provider selection with availability check and BaZi flow', async ({ pag
   await expect(page.getByRole('heading', { name: 'BaZi Master' })).toBeVisible();
   await page.screenshot({ path: screenshotPath('ai-provider-step-1-home') });
 
+  await page.request.post('/api/auth/register', {
+    data: { email, password, name },
+  });
+
   await page.getByRole('link', { name: 'Login' }).click();
   await expect(page).toHaveURL(/\/login/);
 
@@ -37,6 +61,9 @@ test('AI provider selection with availability check and BaZi flow', async ({ pag
     localStorage.removeItem('bazi_ai_provider');
   });
 
+  await page.request.post('/api/auth/register', {
+    data: { email, password, name },
+  });
   await page.fill('input[type="email"]', 'test@example.com');
   await page.fill('input[type="password"]', 'password123');
   await page.click('button[type="submit"]');
@@ -108,11 +135,15 @@ test('AI provider selection with availability check and BaZi flow', async ({ pag
   await page.screenshot({ path: screenshotPath('ai-provider-step-10-favorited') });
 
   await page.goto('/history');
+  await ensureLoggedIn('/history');
+  await expect(page).toHaveURL(/\/history(\?|$)/);
   await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   await expect(page.getByText(uniqueLocation)).toBeVisible();
   await page.screenshot({ path: screenshotPath('ai-provider-step-11-history') });
 
   await page.goto('/favorites');
+  await ensureLoggedIn('/favorites');
+  await expect(page).toHaveURL(/\/favorites(\?|$)/);
   await expect(page.getByRole('heading', { name: 'Favorites' })).toBeVisible();
   await expect(page.getByText(uniqueLocation)).toBeVisible();
   await page.screenshot({ path: screenshotPath('ai-provider-step-12-favorites') });
@@ -129,6 +160,8 @@ test('AI provider selection with availability check and BaZi flow', async ({ pag
   await page.screenshot({ path: screenshotPath('ai-provider-step-13-favorites-removed') });
 
   await page.goto('/history');
+  await ensureLoggedIn('/history');
+  await expect(page).toHaveURL(/\/history(\?|$)/);
   await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   const historyCard = page
     .getByText(uniqueLocation)

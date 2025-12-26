@@ -14,6 +14,20 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
   const consoleErrors = [];
   const uniqueLocation = `ACCESSIBILITY_${Date.now()}`;
 
+  const ensureLoggedIn = async () => {
+    if (!page.url().includes('/login')) return;
+    const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.getByLabel('Email').focus();
+    await page.keyboard.press(`${modifier}+A`);
+    await page.keyboard.type('test@example.com');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press(`${modifier}+A`);
+    await page.keyboard.type('password123');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+    await expect(page).not.toHaveURL(/\/login/);
+  };
+
   const screenshotPath = (name) => {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     return path.join(process.cwd(), '..', 'verification', `${stamp}-accessibility-${name}.png`);
@@ -34,6 +48,10 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
     localStorage.removeItem('bazi_token');
     localStorage.removeItem('bazi_user');
     localStorage.removeItem('bazi_last_activity');
+  });
+
+  await page.request.post('/api/auth/register', {
+    data: { email: 'test@example.com', password: 'password123', name: 'Test User' },
   });
 
   const loginLink = page.getByRole('link', { name: 'Login', exact: true });
@@ -95,8 +113,47 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
   await page.screenshot({ path: screenshotPath('step-6-calculated') });
 
   const fullAnalysisButton = page.getByTestId('bazi-full-analysis');
-  await fullAnalysisButton.focus();
-  await page.keyboard.press('Enter');
+
+  const requestFullAnalysis = async () => {
+    const responsePromise = page.waitForResponse(
+      (res) => res.url().includes('/api/bazi/full-analysis') && res.request().method() === 'POST'
+    );
+    await fullAnalysisButton.focus();
+    await page.keyboard.press('Enter');
+    return await responsePromise;
+  };
+
+  let fullAnalysisResponse = await requestFullAnalysis();
+  if (fullAnalysisResponse.status() === 401) {
+    const email = 'test@example.com';
+    const password = 'password123';
+    let loginResponse = await page.request.post('/api/auth/login', {
+      data: { email, password },
+    });
+    if (!loginResponse.ok()) {
+      await page.request.post('/api/auth/register', {
+        data: { email, password, name: 'Test User' },
+      });
+      loginResponse = await page.request.post('/api/auth/login', {
+        data: { email, password },
+      });
+    }
+    expect(loginResponse.ok()).toBeTruthy();
+    const loginData = await loginResponse.json();
+    await page.evaluate(
+      ({ token, user }) => {
+        localStorage.setItem('bazi_token', token);
+        localStorage.setItem('bazi_token_origin', 'backend');
+        localStorage.setItem('bazi_user', JSON.stringify(user));
+        localStorage.setItem('bazi_last_activity', String(Date.now()));
+        localStorage.removeItem('bazi_session_expired');
+      },
+      { token: loginData.token, user: loginData.user }
+    );
+    fullAnalysisResponse = await requestFullAnalysis();
+  }
+
+  expect(fullAnalysisResponse.ok()).toBeTruthy();
 
   await expect(page.getByTestId('ten-gods-list')).toContainText(/\d+/, { timeout: 20000 });
   await expect(page.getByTestId('luck-cycles-list')).toContainText('·');
@@ -141,6 +198,7 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
   await page.screenshot({ path: screenshotPath('step-10-history') });
 
   await page.goto(`/history?recordId=${savedRecord.id}`);
+  await ensureLoggedIn();
   const sharedRecord = page.getByTestId('history-shared-record');
   await expect(sharedRecord).toContainText(savedLabel, { timeout: 30000 });
   await expect(sharedRecord).toContainText(uniqueLocation);
@@ -167,6 +225,8 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
   await page.screenshot({ path: screenshotPath('step-14-favorite-removed') });
 
   await page.goto('/history');
+  await ensureLoggedIn();
+  await expect(page).toHaveURL(/\/history/);
   await page.getByPlaceholder('Location, timezone, pillar').fill(uniqueLocation);
   await page.keyboard.press('Enter');
   const recordCard = page

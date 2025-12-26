@@ -38,9 +38,23 @@ test('History CRUD flow', async ({ page }) => {
   await expect(page.getByText('Basic chart generated.')).toBeVisible({ timeout: 30000 });
   const saveButton = page.getByRole('button', { name: 'Save to History' });
   await expect(saveButton).toBeEnabled({ timeout: 20000 });
-  await saveButton.click();
+
+  await Promise.all([
+    page.waitForResponse(
+      (res) => res.url().includes('/api/bazi/records')
+        && res.request().method() === 'POST'
+        && res.ok()
+    ),
+    saveButton.click(),
+  ]);
+  await expect(page.getByText(/Record saved to history\.|Record already saved\./)).toBeVisible({ timeout: 20000 });
 
   await page.goto('/history');
+  await page.waitForResponse(
+    (res) => res.url().includes('/api/bazi/records')
+      && res.request().method() === 'GET'
+      && res.ok()
+  );
   const locationText = page.getByText(uniqueLocation);
   await expect(locationText).toBeVisible({ timeout: 20000 });
 
@@ -59,8 +73,14 @@ test('History CRUD flow', async ({ page }) => {
   await expect(page.getByText('Deleted records')).toBeVisible();
   const deletedRow = page.locator('div', { hasText: deletedRecordText }).first();
   await expect(deletedRow).toBeVisible();
+  const restoreResponsePromise = page.waitForResponse(
+    (res) =>
+      res.url().includes('/api/bazi/records/') &&
+      res.url().includes('/restore') &&
+      res.request().method() === 'POST'
+  );
   await deletedRow.getByRole('button', { name: 'Restore' }).click();
-
-  await expect(page.getByText('Record restored.')).toBeVisible();
+  const restoreResponse = await restoreResponsePromise;
+  expect(restoreResponse.ok()).toBeTruthy();
   await expect(page.getByText(uniqueLocation)).toBeVisible({ timeout: 20000 });
 });

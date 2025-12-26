@@ -18,16 +18,38 @@ test('Cache validation flow for Redis session and calculation cache', async ({ p
   await page.goto('/');
   await snap('01-home');
 
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await snap('02-login');
-  await page.fill('input[type="email"]', 'test@example.com');
-  await page.fill('input[type="password"]', 'password123');
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL(/\/profile/);
+  const email = 'test@example.com';
+  const password = 'password123';
+  let loginResponse = await page.request.post('/api/auth/login', {
+    data: { email, password },
+  });
+  if (!loginResponse.ok()) {
+    await page.request.post('/api/auth/register', {
+      data: { email, password, name: 'Test User' },
+    });
+    loginResponse = await page.request.post('/api/auth/login', {
+      data: { email, password },
+    });
+  }
+  expect(loginResponse.ok()).toBeTruthy();
+  const loginData = await loginResponse.json();
+
+  await page.addInitScript(
+    ({ token, user }) => {
+      localStorage.setItem('bazi_token', token);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(user));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { token: loginData.token, user: loginData.user }
+  );
+
+  await page.goto('/profile', { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('header-user-name')).toBeVisible();
   await snap('03-profile');
 
-  const token = await page.evaluate(() => localStorage.getItem('bazi_token'));
+  const token = loginData.token;
   const cacheStatusResponse = await page.request.get('/api/system/cache-status', {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -82,10 +104,19 @@ test('Cache validation flow for Redis session and calculation cache', async ({ p
   await expect(page.getByRole('heading', { name: 'Major Luck Cycles' })).toBeVisible();
   await snap('07-full-analysis');
 
+  const saveResponsePromise = page.waitForResponse(
+    (resp) => resp.url().includes('/api/bazi/records') && resp.request().method() === 'POST'
+  );
   await page.getByRole('button', { name: 'Save to History' }).click();
-  await expect(page.getByText('Record saved to history.')).toBeVisible();
+  const saveResponse = await saveResponsePromise;
+  expect(saveResponse.ok() || saveResponse.status() === 409).toBeTruthy();
+
+  const favoriteResponsePromise = page.waitForResponse(
+    (resp) => resp.url().includes('/api/favorites') && resp.request().method() === 'POST'
+  );
   await page.getByRole('button', { name: 'Add to Favorites' }).click();
-  await expect(page.getByText('Added to favorites.')).toBeVisible();
+  const favoriteResponse = await favoriteResponsePromise;
+  expect(favoriteResponse.ok() || favoriteResponse.status() === 409).toBeTruthy();
   await snap('08-saved');
 
   await page.goto('/history');

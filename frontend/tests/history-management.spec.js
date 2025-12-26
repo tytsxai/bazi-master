@@ -58,15 +58,16 @@ test('History management flow: filter, sort, delete, restore', async ({ page }) 
   await createRecord(recordB);
 
   await page.goto('/history');
-  await expect(page.getByText(recordA.location)).toBeVisible({ timeout: 20000 });
-  await expect(page.getByText(recordB.location)).toBeVisible({ timeout: 20000 });
+  const recordCards = page.getByTestId('history-record-card');
+  await expect(recordCards.filter({ hasText: recordA.location }).first()).toBeVisible({ timeout: 20000 });
+  await expect(recordCards.filter({ hasText: recordB.location }).first()).toBeVisible({ timeout: 20000 });
   await page.screenshot({ path: 'verification/history-management-01-list.png', fullPage: true });
 
   const searchInput = page.getByPlaceholder('Location, timezone, pillar');
   await searchInput.fill(recordA.location);
   await expect(page).toHaveURL(new RegExp(`q=${encodeURIComponent(recordA.location)}`));
-  await expect(page.getByText(recordA.location)).toBeVisible({ timeout: 20000 });
-  await expect(page.getByText(recordB.location)).toHaveCount(0);
+  await expect(recordCards.filter({ hasText: recordA.location }).first()).toBeVisible({ timeout: 20000 });
+  await expect(recordCards.filter({ hasText: recordB.location })).toHaveCount(0, { timeout: 20000 });
   await page.screenshot({ path: 'verification/history-management-02-search.png', fullPage: true });
 
   await searchInput.fill('');
@@ -75,17 +76,22 @@ test('History management flow: filter, sort, delete, restore', async ({ page }) 
   const genderSelect = page.getByRole('combobox', { name: /^Gender/i });
   await genderSelect.selectOption('male');
   await expect(page).toHaveURL(/gender=male/);
-  await expect(page.getByText(recordB.location)).toBeVisible({ timeout: 20000 });
-  await expect(page.getByText(recordA.location)).toHaveCount(0);
+  await expect(recordCards.filter({ hasText: recordB.location }).first()).toBeVisible({ timeout: 20000 });
+  await expect(recordCards.filter({ hasText: recordA.location })).toHaveCount(0, { timeout: 20000 });
   await page.screenshot({ path: 'verification/history-management-03-gender-filter.png', fullPage: true });
 
   await page.getByRole('button', { name: 'Reset filters' }).click();
   await expect(page).not.toHaveURL(/gender=|q=/);
 
+  await expect(recordCards.filter({ hasText: recordA.location }).first()).toBeVisible({ timeout: 20000 });
+  await expect(recordCards.filter({ hasText: recordB.location }).first()).toBeVisible({ timeout: 20000 });
+
   const sortSelect = page.getByRole('combobox', { name: /^Sort/i });
   await sortSelect.selectOption('birth-asc');
   await expect(page).toHaveURL(/sort=birth-asc/);
-  const cardTexts = await page.getByTestId('history-record-card').allTextContents();
+  await expect(recordCards.filter({ hasText: recordA.location }).first()).toBeVisible({ timeout: 20000 });
+  await expect(recordCards.filter({ hasText: recordB.location }).first()).toBeVisible({ timeout: 20000 });
+  const cardTexts = await recordCards.allTextContents();
   const indexA = cardTexts.findIndex((text) => text.includes(recordA.location));
   const indexB = cardTexts.findIndex((text) => text.includes(recordB.location));
   expect(indexA).toBeGreaterThan(-1);
@@ -93,12 +99,16 @@ test('History management flow: filter, sort, delete, restore', async ({ page }) 
   expect(indexA).toBeLessThan(indexB);
   await page.screenshot({ path: 'verification/history-management-04-sort.png', fullPage: true });
 
-  const recordCard = page.getByText(recordA.location)
-    .locator('xpath=ancestor::div[contains(@data-testid,"history-record-card")][1]');
+  const recordCard = recordCards.filter({ hasText: recordA.location }).first();
   await recordCard.getByRole('button', { name: 'Delete' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
+  const deleteResponsePromise = page.waitForResponse(
+    (res) => res.url().includes('/api/bazi/records/') && res.request().method() === 'DELETE'
+  );
   await dialog.getByRole('button', { name: 'Delete' }).click();
+  const deleteResponse = await deleteResponsePromise;
+  expect(deleteResponse.ok()).toBeTruthy();
   await expect(page.getByText('Record deleted.')).toBeVisible();
   await expect(page.getByTestId('history-record-card').filter({ hasText: recordA.location })).toHaveCount(0);
   await page.screenshot({ path: 'verification/history-management-05-deleted.png', fullPage: true });
@@ -111,8 +121,17 @@ test('History management flow: filter, sort, delete, restore', async ({ page }) 
     .filter({ hasText: deletedRecordText })
     .first();
   await expect(deletedRow).toBeVisible();
+  const restoreResponsePromise = page.waitForResponse(
+    (res) =>
+      res.url().includes('/api/bazi/records/') &&
+      res.url().includes('/restore') &&
+      res.request().method() === 'POST'
+  );
   await deletedRow.getByRole('button', { name: 'Restore' }).click();
-  await expect(page.getByText('Record restored.')).toBeVisible();
-  await expect(page.getByText(recordA.location)).toBeVisible({ timeout: 20000 });
+  const restoreResponse = await restoreResponsePromise;
+  expect(restoreResponse.ok()).toBeTruthy();
+  await expect(deletedSection.getByTestId('history-deleted-card').filter({ hasText: deletedRecordText })).toHaveCount(0);
+  await page.reload();
+  await expect(recordCards.filter({ hasText: recordA.location }).first()).toBeVisible({ timeout: 20000 });
   await page.screenshot({ path: 'verification/history-management-06-restored.png', fullPage: true });
 });

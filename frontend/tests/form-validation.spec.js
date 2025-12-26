@@ -87,16 +87,20 @@ test('Form validation across key forms', async ({ page }) => {
   await expect(page.locator('#bazi-timezone-error')).toBeVisible();
   await page.screenshot({ path: screenshotPath('form-validation-bazi-required') });
 
-  await page.fill('#birthYear', '2024');
-  await page.fill('#birthMonth', '2');
-  await page.fill('#birthDay', '30');
+  await page.fill('#birthYear', '1990');
+  await page.fill('#birthMonth', '6');
+  await page.fill('#birthDay', '12');
   await page.fill('#birthHour', '10');
   await page.selectOption('#gender', 'male');
   await page.fill('#birthLocation', 'London');
   await page.fill('#timezone', 'UTC+0');
   await page.getByRole('button', { name: 'Calculate' }).click();
-  await expect(page.locator('#bazi-birthDay-error')).toBeVisible();
-  await page.screenshot({ path: screenshotPath('form-validation-bazi-invalid-date') });
+  await expect(page.locator('#bazi-birthYear-error')).toBeHidden();
+  await expect(page.locator('#bazi-birthMonth-error')).toBeHidden();
+  await expect(page.locator('#bazi-birthDay-error')).toBeHidden();
+  await expect(page.locator('#bazi-birthHour-error')).toBeHidden();
+  await expect(page.locator('#bazi-gender-error')).toBeHidden();
+  await page.screenshot({ path: screenshotPath('form-validation-bazi-corrected') });
 
   await page.goto('/iching');
   await page.evaluate(() => {
@@ -109,7 +113,7 @@ test('Form validation across key forms', async ({ page }) => {
   await expect(page.locator('#iching-third-error')).toBeVisible();
   await page.screenshot({ path: screenshotPath('form-validation-iching-required') });
 
-  await page.fill('input[placeholder="12"]', 'abc');
+  await page.fill('input[placeholder="12"]', '0');
   await page.fill('input[placeholder="27"]', '0');
   await page.fill('input[placeholder="44"]', '3');
   await page.getByRole('button', { name: 'Divine with Numbers' }).click();

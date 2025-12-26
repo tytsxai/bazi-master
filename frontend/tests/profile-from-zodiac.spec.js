@@ -5,21 +5,35 @@ test('Profile flow from zodiac matches backend data', async ({ page, request }) 
     localStorage.setItem('locale', 'en-US');
   });
 
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.fill('input[type="email"]', 'test@example.com');
-  await page.fill('input[type="password"]', 'password123');
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL(/\/profile/);
+  const loginRes = await request.post('/api/auth/login', {
+    data: { email: 'test@example.com', password: 'password123' },
+  });
+  expect(loginRes.ok()).toBeTruthy();
+  const loginData = await loginRes.json();
+  const token = loginData?.token;
+  const loginUser = loginData?.user;
+  expect(token).toBeTruthy();
+
+  await page.addInitScript(
+    ({ tokenValue, userValue }) => {
+      localStorage.setItem('bazi_token', tokenValue);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(userValue));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { tokenValue: token, userValue: loginUser }
+  );
 
   await page.goto('/zodiac', { waitUntil: 'domcontentloaded' });
   await page.getByRole('link', { name: /Profile|个人资料|プロフィール|프로필/ }).click();
   await expect(page).toHaveURL(/\/profile/);
 
-  const token = await page.evaluate(() => localStorage.getItem('bazi_token'));
-  expect(token).toBeTruthy();
+  const storedToken = await page.evaluate(() => localStorage.getItem('bazi_token'));
+  expect(storedToken).toBeTruthy();
 
   const meRes = await request.get('/api/auth/me', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${storedToken}` },
   });
   expect(meRes.ok()).toBeTruthy();
   const meData = await meRes.json();
@@ -31,7 +45,7 @@ test('Profile flow from zodiac matches backend data', async ({ page, request }) 
   await expect(emailCard.getByText(user.email || '—', { exact: true })).toBeVisible();
 
   const settingsRes = await request.get('/api/user/settings', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${storedToken}` },
   });
   expect(settingsRes.ok()).toBeTruthy();
   const settingsData = await settingsRes.json();

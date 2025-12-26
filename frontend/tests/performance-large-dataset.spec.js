@@ -129,7 +129,8 @@ test('Performance smoke flow with large dataset search', async ({ page, request 
   await expect(recordCard).toContainText('UTC');
 
   await page.goto('/favorites');
-  await expect(page.getByText(flowLocation)).toBeVisible();
+  const favoriteCard = page.getByTestId('favorite-record-card').filter({ hasText: flowLocation }).first();
+  await expect(favoriteCard).toBeVisible();
 
   const logoutButton = page.getByRole('button', { name: /logout/i });
   if (!(await logoutButton.isVisible())) {
