@@ -4,19 +4,40 @@ import { initAppConfig } from '../config/app.js';
 import { prisma, initPrismaConfig } from '../config/prisma.js';
 import { hashPassword, isHashedPassword, verifyPassword } from '../utils/passwords.js';
 
-const { IS_PRODUCTION } = initAppConfig();
-const { IS_SQLITE, IS_POSTGRES } = initPrismaConfig();
+const resolveSchemaFlags = ({
+  env = process.env,
+  appConfig = initAppConfig(),
+  prismaConfig = initPrismaConfig(),
+} = {}) => {
+  const IS_PRODUCTION = Boolean(appConfig?.IS_PRODUCTION);
+  const IS_SQLITE = Boolean(prismaConfig?.IS_SQLITE);
+  const IS_POSTGRES = Boolean(prismaConfig?.IS_POSTGRES);
 
-const ALLOW_RUNTIME_SCHEMA_SYNC =
-  !IS_PRODUCTION && IS_SQLITE && process.env.ALLOW_RUNTIME_SCHEMA_SYNC !== 'false';
-const SHOULD_SEED_DEFAULT_USER =
-  process.env.NODE_ENV !== 'production' && process.env.SEED_DEFAULT_USER !== 'false';
+  const ALLOW_RUNTIME_SCHEMA_SYNC =
+    !IS_PRODUCTION && (IS_SQLITE || IS_POSTGRES) && env.ALLOW_RUNTIME_SCHEMA_SYNC !== 'false';
+  const SHOULD_SEED_DEFAULT_USER =
+    env.NODE_ENV !== 'production' && env.SEED_DEFAULT_USER !== 'false';
 
-const ensureSoftDeleteTables = async () => {
-  if (IS_PRODUCTION || process.env.ALLOW_RUNTIME_SCHEMA_SYNC === 'false') return;
+  return {
+    IS_PRODUCTION,
+    IS_SQLITE,
+    IS_POSTGRES,
+    ALLOW_RUNTIME_SCHEMA_SYNC,
+    SHOULD_SEED_DEFAULT_USER,
+  };
+};
+
+const ensureSoftDeleteTables = async ({
+  prismaClient = prisma,
+  env = process.env,
+  appConfig,
+  prismaConfig,
+} = {}) => {
+  const { IS_PRODUCTION, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({ env, appConfig, prismaConfig });
+  if (IS_PRODUCTION || env.ALLOW_RUNTIME_SCHEMA_SYNC === 'false') return;
 
   if (IS_SQLITE) {
-    await prisma.$executeRaw(Prisma.sql`
+    await prismaClient.$executeRaw(Prisma.sql`
       CREATE TABLE IF NOT EXISTS BaziRecordTrash (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         userId INTEGER NOT NULL,
@@ -26,7 +47,7 @@ const ensureSoftDeleteTables = async () => {
       );
     `);
   } else if (IS_POSTGRES) {
-    await prisma.$executeRaw(Prisma.sql`
+    await prismaClient.$executeRaw(Prisma.sql`
       CREATE TABLE IF NOT EXISTS "BaziRecordTrash" (
         "id" SERIAL NOT NULL,
         "userId" INTEGER NOT NULL,
@@ -38,11 +59,18 @@ const ensureSoftDeleteTables = async () => {
   }
 };
 
-const ensureBaziRecordTrashTable = async () => {
+const ensureBaziRecordTrashTable = async ({
+  prismaClient = prisma,
+  env = process.env,
+  appConfig,
+  prismaConfig,
+  logger = console,
+} = {}) => {
+  const { IS_PRODUCTION, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({ env, appConfig, prismaConfig });
   if (IS_SQLITE) return;
   if (!IS_POSTGRES) return;
   try {
-    await prisma.$executeRaw(Prisma.sql`
+    await prismaClient.$executeRaw(Prisma.sql`
       CREATE TABLE IF NOT EXISTS "BaziRecordTrash" (
         "id" SERIAL NOT NULL,
         "userId" INTEGER NOT NULL,
@@ -51,39 +79,48 @@ const ensureBaziRecordTrashTable = async () => {
         CONSTRAINT "BaziRecordTrash_pkey" PRIMARY KEY ("id")
       );
     `);
-    await prisma.$executeRaw(Prisma.sql`
+    await prismaClient.$executeRaw(Prisma.sql`
       CREATE UNIQUE INDEX IF NOT EXISTS "BaziRecordTrash_userId_recordId_key"
       ON "BaziRecordTrash" ("userId", "recordId");
     `);
   } catch (error) {
-    console.error('Failed to ensure BaziRecordTrash table:', error);
+    logger.error('Failed to ensure BaziRecordTrash table:', error);
     if (IS_PRODUCTION) {
       throw error;
     }
   }
 };
 
-const ensureSoftDeleteReady = (() => {
+const createEnsureSoftDeleteReady = (deps = {}) => {
   let ready = null;
-  return async () => {
+  return () => {
     if (!ready) {
       ready = (async () => {
-        await ensureSoftDeleteTables();
-        await ensureBaziRecordTrashTable();
+        await ensureSoftDeleteTables(deps);
+        await ensureBaziRecordTrashTable(deps);
       })().catch((error) => {
-        console.error('Failed to ensure soft delete tables:', error);
+        (deps.logger || console).error('Failed to ensure soft delete tables:', error);
         throw error;
       });
     }
     return ready;
   };
-})();
+};
 
-const ensureUserSettingsTable = async () => {
+const ensureSoftDeleteReady = createEnsureSoftDeleteReady();
+
+const ensureUserSettingsTable = async ({
+  prismaClient = prisma,
+  env = process.env,
+  appConfig,
+  prismaConfig,
+  logger = console,
+} = {}) => {
+  const { ALLOW_RUNTIME_SCHEMA_SYNC, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({ env, appConfig, prismaConfig });
   if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
     if (IS_SQLITE) {
-      await prisma.$executeRaw(Prisma.sql`
+      await prismaClient.$executeRaw(Prisma.sql`
         CREATE TABLE IF NOT EXISTS UserSettings (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           userId INTEGER NOT NULL UNIQUE,
@@ -94,7 +131,7 @@ const ensureUserSettingsTable = async () => {
         )
       `);
     } else if (IS_POSTGRES) {
-      await prisma.$executeRaw(Prisma.sql`
+      await prismaClient.$executeRaw(Prisma.sql`
         CREATE TABLE IF NOT EXISTS "UserSettings" (
           "id" SERIAL NOT NULL,
           "userId" INTEGER NOT NULL UNIQUE,
@@ -106,15 +143,22 @@ const ensureUserSettingsTable = async () => {
       `);
     }
   } catch (error) {
-    console.error('Failed to ensure UserSettings table:', error);
+    logger.error('Failed to ensure UserSettings table:', error);
   }
 };
 
-const ensureZiweiHistoryTable = async () => {
+const ensureZiweiHistoryTable = async ({
+  prismaClient = prisma,
+  env = process.env,
+  appConfig,
+  prismaConfig,
+  logger = console,
+} = {}) => {
+  const { ALLOW_RUNTIME_SCHEMA_SYNC, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({ env, appConfig, prismaConfig });
   if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
     if (IS_SQLITE) {
-      await prisma.$executeRaw(Prisma.sql`
+      await prismaClient.$executeRaw(Prisma.sql`
         CREATE TABLE IF NOT EXISTS ZiweiRecord (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           userId INTEGER NOT NULL,
@@ -128,7 +172,7 @@ const ensureZiweiHistoryTable = async () => {
         )
       `);
     } else if (IS_POSTGRES) {
-      await prisma.$executeRaw(Prisma.sql`
+      await prismaClient.$executeRaw(Prisma.sql`
         CREATE TABLE IF NOT EXISTS "ZiweiRecord" (
           "id" SERIAL NOT NULL,
           "userId" INTEGER NOT NULL,
@@ -143,21 +187,28 @@ const ensureZiweiHistoryTable = async () => {
       `);
     }
   } catch (error) {
-    console.error('Failed to ensure ZiweiRecord table:', error);
+    logger.error('Failed to ensure ZiweiRecord table:', error);
   }
 };
 
-const ensureBaziRecordUpdatedAt = async () => {
+const ensureBaziRecordUpdatedAt = async ({
+  prismaClient = prisma,
+  env = process.env,
+  appConfig,
+  prismaConfig,
+  logger = console,
+} = {}) => {
+  const { ALLOW_RUNTIME_SCHEMA_SYNC, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({ env, appConfig, prismaConfig });
   if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
     let hasUpdatedAt = false;
 
     if (IS_SQLITE) {
-      const columns = await prisma.$queryRaw(Prisma.sql`PRAGMA table_info(BaziRecord);`);
+      const columns = await prismaClient.$queryRaw(Prisma.sql`PRAGMA table_info(BaziRecord);`);
       hasUpdatedAt = Array.isArray(columns)
         && columns.some((column) => column?.name === 'updatedAt');
     } else if (IS_POSTGRES) {
-      const result = await prisma.$queryRaw(Prisma.sql`
+      const result = await prismaClient.$queryRaw(Prisma.sql`
         SELECT column_name 
         FROM information_schema.columns 
         WHERE table_name = 'BaziRecord' AND column_name = 'updatedAt'
@@ -168,47 +219,58 @@ const ensureBaziRecordUpdatedAt = async () => {
     if (hasUpdatedAt) return;
 
     if (IS_SQLITE) {
-      await prisma.$executeRaw(Prisma.sql`ALTER TABLE BaziRecord ADD COLUMN updatedAt DATETIME`);
+      await prismaClient.$executeRaw(Prisma.sql`ALTER TABLE BaziRecord ADD COLUMN updatedAt DATETIME`);
     } else if (IS_POSTGRES) {
-      await prisma.$executeRaw(Prisma.sql`ALTER TABLE "BaziRecord" ADD COLUMN "updatedAt" TIMESTAMP(3)`);
+      await prismaClient.$executeRaw(Prisma.sql`ALTER TABLE "BaziRecord" ADD COLUMN "updatedAt" TIMESTAMP(3)`);
     }
-    await prisma.$executeRaw(Prisma.sql`UPDATE BaziRecord SET updatedAt = createdAt WHERE updatedAt IS NULL`);
+    await prismaClient.$executeRaw(Prisma.sql`UPDATE BaziRecord SET updatedAt = createdAt WHERE updatedAt IS NULL`);
   } catch (error) {
-    console.error('Failed to ensure BaziRecord updatedAt column:', error);
+    logger.error('Failed to ensure BaziRecord updatedAt column:', error);
   }
 };
 
-const ensureDefaultUser = async () => {
+const ensureDefaultUser = async ({
+  prismaClient = prisma,
+  env = process.env,
+  appConfig,
+  prismaConfig,
+  logger = console,
+  hashPasswordFn = hashPassword,
+  verifyPasswordFn = verifyPassword,
+  isHashedPasswordFn = isHashedPassword,
+} = {}) => {
+  const { SHOULD_SEED_DEFAULT_USER } = resolveSchemaFlags({ env, appConfig, prismaConfig });
   if (!SHOULD_SEED_DEFAULT_USER) return;
-  const email = process.env.SEED_USER_EMAIL;
-  const password = process.env.SEED_USER_PASSWORD;
-  const name = process.env.SEED_USER_NAME || 'Test User';
+  const email = env.SEED_USER_EMAIL;
+  const password = env.SEED_USER_PASSWORD;
+  const name = env.SEED_USER_NAME || 'Test User';
   if (!email || !password) {
-    console.warn('Skipping default user seed: SEED_USER_EMAIL/SEED_USER_PASSWORD not set.');
+    logger.warn('Skipping default user seed: SEED_USER_EMAIL/SEED_USER_PASSWORD not set.');
     return;
   }
   try {
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const existing = await prismaClient.user.findUnique({ where: { email } });
     if (!existing) {
-      const hashed = await hashPassword(password);
+      const hashed = await hashPasswordFn(password);
       if (!hashed) return;
-      await prisma.user.create({ data: { email, password: hashed, name } });
+      await prismaClient.user.create({ data: { email, password: hashed, name } });
       return;
     }
-    const passwordMatches = await verifyPassword(password, existing.password);
-    if (!passwordMatches || existing.name !== name || !isHashedPassword(existing.password)) {
-      const hashed = await hashPassword(password);
+    const passwordMatches = await verifyPasswordFn(password, existing.password);
+    if (!passwordMatches || existing.name !== name || !isHashedPasswordFn(existing.password)) {
+      const hashed = await hashPasswordFn(password);
       if (!hashed) return;
-      await prisma.user.update({ where: { email }, data: { password: hashed, name } });
+      await prismaClient.user.update({ where: { email }, data: { password: hashed, name } });
     }
   } catch (error) {
-    console.error('Failed to ensure default user:', error);
+    logger.error('Failed to ensure default user:', error);
   }
 };
 
 export {
   ensureSoftDeleteTables,
   ensureBaziRecordTrashTable,
+  createEnsureSoftDeleteReady,
   ensureSoftDeleteReady,
   ensureUserSettingsTable,
   ensureZiweiHistoryTable,

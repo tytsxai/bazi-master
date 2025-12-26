@@ -7,6 +7,13 @@ let redisClient = null;
 let redisInitPromise = null;
 let warnedOnFallback = false;
 
+const resetRateLimitState = () => {
+  lastRateLimitCleanup = 0;
+  redisClient = null;
+  redisInitPromise = null;
+  warnedOnFallback = false;
+};
+
 const warnOnFallback = () => {
   if (warnedOnFallback) return;
   if (process.env.NODE_ENV === 'production') return;
@@ -152,6 +159,7 @@ const createRateLimitMiddleware = (config) => {
 
 export {
   rateLimitStore,
+  resetRateLimitState,
   maybeCleanupRateLimitStore,
   getRateLimitKey,
   isLocalAddress,

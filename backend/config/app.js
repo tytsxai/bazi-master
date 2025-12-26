@@ -98,7 +98,7 @@ export const getServerConfig = () => {
     process.env.GOOGLE_REDIRECT_URI || `http://localhost:${port}/api/auth/google/callback`;
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS, nodeEnv);
-  const sessionTokenSecret = process.env.SESSION_TOKEN_SECRET || '';
+  const sessionTokenSecret = process.env.SESSION_TOKEN_SECRET || (nodeEnv === 'test' ? 'test-session-secret-for-auth-me-test' : '');
   const allowDevOauthRaw = process.env.ALLOW_DEV_OAUTH;
   const allowDevOauth = allowDevOauthRaw === undefined || allowDevOauthRaw === ''
     ? !isProduction

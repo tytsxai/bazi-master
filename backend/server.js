@@ -168,116 +168,153 @@ app.use(globalErrorHandler);
 // Create HTTP server
 const server = http.createServer(app);
 
-const initRedisMirrors = async () => {
-  const client = await initRedis({ require: IS_PRODUCTION });
+// Initialize WebSocket Server
+import { initWebsocketServer } from './services/websocket.service.js';
+initWebsocketServer(server);
+
+const initRedisMirrors = async ({
+  require = IS_PRODUCTION,
+  initRedisFn = initRedis,
+  createRedisMirrorFn = createRedisMirror,
+  sessionStoreRef = sessionStore,
+  setBaziCacheMirrorFn = setBaziCacheMirror,
+  loggerInstance = logger,
+  sessionIdleMs = SESSION_IDLE_MS,
+  baziCacheTtlMs = BAZI_CACHE_TTL_MS,
+} = {}) => {
+  const client = await initRedisFn({ require });
   if (!client) return;
-  sessionStore.setMirror(createRedisMirror(client, {
+  sessionStoreRef.setMirror(createRedisMirrorFn(client, {
     prefix: 'session:',
-    ttlMs: SESSION_IDLE_MS,
+    ttlMs: sessionIdleMs,
   }));
-  setBaziCacheMirror(createRedisMirror(client, {
+  setBaziCacheMirrorFn(createRedisMirrorFn(client, {
     prefix: 'bazi-cache:',
-    ttlMs: BAZI_CACHE_TTL_MS,
+    ttlMs: baziCacheTtlMs,
   }));
-  logger.info('[redis] session and bazi cache mirrors enabled');
+  loggerInstance.info('[redis] session and bazi cache mirrors enabled');
 };
 
 // Graceful shutdown handling
-const setupGracefulShutdown = (server) => {
+const setupGracefulShutdown = (server, {
+  loggerInstance = logger,
+  prismaClient = prisma,
+  processRef = process,
+} = {}) => {
   const closeServer = (signal) => {
-    logger.info({ signal }, `Received signal, initiating graceful shutdown...`);
+    loggerInstance.info({ signal }, 'Received signal, initiating graceful shutdown...');
 
-    const timeoutMs = parseInt(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS, 10) || 10000;
+    const timeoutMs = parseInt(processRef.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS, 10) || 10000;
     const timeout = setTimeout(() => {
-      logger.error('Graceful shutdown timeout, forcing exit...');
-      process.exit(1);
+      loggerInstance.error('Graceful shutdown timeout, forcing exit...');
+      processRef.exit(1);
     }, timeoutMs);
 
     timeout.unref();
 
     server.close(async () => {
       try {
-        await prisma.$disconnect();
-        logger.info('Prisma disconnected.');
+        await prismaClient.$disconnect();
+        loggerInstance.info('Prisma disconnected.');
       } catch (error) {
-        logger.error({ err: error }, 'Error during Prisma disconnect');
+        loggerInstance.error({ err: error }, 'Error during Prisma disconnect');
       } finally {
         clearTimeout(timeout);
-        logger.info('Graceful shutdown complete.');
-        process.exit(process.exitCode || 0);
+        loggerInstance.info('Graceful shutdown complete.');
+        processRef.exit(processRef.exitCode || 0);
       }
     });
   };
 
-  process.once('SIGTERM', () => void closeServer('SIGTERM'));
-  process.once('SIGINT', () => void closeServer('SIGINT'));
+  processRef.once('SIGTERM', () => void closeServer('SIGTERM'));
+  processRef.once('SIGINT', () => void closeServer('SIGINT'));
+};
+
+const validateProductionConfig = ({ env = process.env } = {}) => {
+  const errors = [];
+  const warnings = [];
+
+  if (!env.SESSION_TOKEN_SECRET || env.SESSION_TOKEN_SECRET.length < 32) {
+    errors.push('SESSION_TOKEN_SECRET must be at least 32 characters in production');
+  }
+  if (!env.DATABASE_URL?.includes('postgresql')) {
+    errors.push('DATABASE_URL must be PostgreSQL in production');
+  }
+  if (!env.REDIS_URL) {
+    errors.push('REDIS_URL must be configured in production to ensure consistent sessions/caching across instances.');
+  }
+  if (!env.FRONTEND_URL || env.FRONTEND_URL.includes('localhost')) {
+    warnings.push('FRONTEND_URL should not be localhost in production');
+  }
+  if (!env.BACKEND_BASE_URL || env.BACKEND_BASE_URL.includes('localhost')) {
+    warnings.push('BACKEND_BASE_URL should not be localhost in production');
+  }
+
+  return { errors, warnings };
+};
+
+const startServer = async ({
+  serverInstance = server,
+  prismaClient = prisma,
+  initRedisMirrorsFn = initRedisMirrors,
+  loggerInstance = logger,
+  appConfigValue = appConfig,
+  processRef = process,
+} = {}) => {
+  setupGracefulShutdown(serverInstance, { loggerInstance, prismaClient, processRef });
+
+  const errors = [];
+  const warnings = [];
+
+  if (appConfigValue.IS_PRODUCTION) {
+    const result = validateProductionConfig({ env: processRef.env });
+    errors.push(...result.errors);
+    warnings.push(...result.warnings);
+  }
+
+  warnings.forEach((warning) => {
+    loggerInstance.warn({ warning }, `[config] ${warning}`);
+  });
+
+  if (errors.length > 0) {
+    errors.forEach((error) => {
+      loggerInstance.error({ error }, `[config] ${error}`);
+    });
+    processRef.exit(1);
+    return;
+  }
+
+  try {
+    await prismaClient.$connect();
+    loggerInstance.info('[db] Database connection established');
+  } catch (error) {
+    loggerInstance.fatal({ err: error }, '[db] Failed to connect to database');
+    processRef.exit(1);
+    return;
+  }
+
+  try {
+    await initRedisMirrorsFn({ require: appConfigValue.IS_PRODUCTION });
+  } catch (error) {
+    loggerInstance.fatal({ err: error }, '[redis] Failed to connect to Redis');
+    processRef.exit(1);
+    return;
+  }
+
+  const bindHost = processRef.env.BIND_HOST || (appConfigValue.IS_PRODUCTION ? '0.0.0.0' : '127.0.0.1');
+  serverInstance.listen(appConfigValue.PORT, bindHost, () => {
+    loggerInstance.info(`BaZi Master API running on http://${bindHost}:${appConfigValue.PORT}`);
+    if (appConfigValue.IS_PRODUCTION && bindHost === '0.0.0.0') {
+      loggerInstance.info('[production] Accepting connections from all interfaces');
+    }
+  });
 };
 
 // Startup logic
 const isMain = pathToFileURL(process.argv[1] || '').href === import.meta.url;
 
 if (NODE_ENV !== 'test' && isMain) {
-  void (async () => {
-    setupGracefulShutdown(server);
-
-    // Validate production config
-    const errors = [];
-    const warnings = [];
-
-    if (IS_PRODUCTION) {
-      if (!process.env.SESSION_TOKEN_SECRET || process.env.SESSION_TOKEN_SECRET.length < 32) {
-        errors.push('SESSION_TOKEN_SECRET must be at least 32 characters in production');
-      }
-      if (!process.env.DATABASE_URL?.includes('postgresql')) {
-        errors.push('DATABASE_URL must be PostgreSQL in production');
-      }
-      if (!process.env.REDIS_URL) {
-        errors.push('REDIS_URL must be configured in production to ensure consistent sessions/caching across instances.');
-      }
-      if (!process.env.FRONTEND_URL || process.env.FRONTEND_URL.includes('localhost')) {
-        warnings.push('FRONTEND_URL should not be localhost in production');
-      }
-      if (!process.env.BACKEND_BASE_URL || process.env.BACKEND_BASE_URL.includes('localhost')) {
-        warnings.push('BACKEND_BASE_URL should not be localhost in production');
-      }
-    }
-
-    warnings.forEach((warning) => {
-      logger.warn({ warning }, `[config] ${warning}`);
-    });
-
-    if (errors.length > 0) {
-      errors.forEach((error) => {
-        logger.error({ error }, `[config] ${error}`);
-      });
-      process.exit(1);
-      return;
-    }
-
-    try {
-      // Test database connection
-      await prisma.$connect();
-      logger.info('[db] Database connection established');
-    } catch (error) {
-      logger.fatal({ err: error }, '[db] Failed to connect to database');
-      process.exit(1);
-    }
-
-    try {
-      await initRedisMirrors();
-    } catch (error) {
-      logger.fatal({ err: error }, '[redis] Failed to connect to Redis');
-      process.exit(1);
-    }
-
-    const bindHost = process.env.BIND_HOST || (IS_PRODUCTION ? '0.0.0.0' : '127.0.0.1');
-    server.listen(PORT, bindHost, () => {
-      logger.info(`BaZi Master API running on http://${bindHost}:${PORT}`);
-      if (IS_PRODUCTION && bindHost === '0.0.0.0') {
-        logger.info(`[production] Accepting connections from all interfaces`);
-      }
-    });
-  })();
+  void startServer();
 }
 
 // Exports for testing and external usage
@@ -285,4 +322,8 @@ export {
   app,
   server,
   prisma,
+  startServer,
+  setupGracefulShutdown,
+  initRedisMirrors,
+  validateProductionConfig,
 };

@@ -12,32 +12,39 @@ import favoritesRouter from './favorites.js';
 import zodiacRouter from './zodiac.js';
 import userRouter from './user.js';
 import locationsRouter from './locations.js';
+import mediaRouter from './media.js';
+import synastryRouter from './synastry.js';
+import calendarRouter from './calendar.js';
 
 const router = express.Router();
 const SERVICE_NAME = 'bazi-master-backend';
 
-// API health check (used by Playwright/dev-server)
+// Health Check Endpoint
 router.get('/health', async (req, res) => {
-  const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
-  const ok = db.ok && (redis.ok || redis.status === 'disabled');
-  res.status(ok ? 200 : 503).json({
-    service: SERVICE_NAME,
-    status: ok ? 'ok' : 'degraded',
-    checks: { db, redis },
-    timestamp: new Date().toISOString(),
-  });
+    const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
+    const ok = db.ok && (redis.ok || redis.status === 'disabled');
+
+    res.status(ok ? 200 : 503).json({
+        service: SERVICE_NAME,
+        status: ok ? 'ok' : 'degraded',
+        checks: { db, redis },
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+    });
 });
 
-// Readiness Check (for load balancer health checks)
+// Readiness Check
 router.get('/ready', async (req, res) => {
-  const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
-  const ok = db.ok && (redis.ok || redis.status === 'disabled');
-  res.status(ok ? 200 : 503).json({
-    service: SERVICE_NAME,
-    status: ok ? 'ready' : 'not_ready',
-    checks: { db, redis },
-    timestamp: new Date().toISOString()
-  });
+    const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
+    const ok = db.ok && (redis.ok || redis.status === 'disabled');
+
+    res.status(ok ? 200 : 503).json({
+        service: SERVICE_NAME,
+        status: ok ? 'ready' : 'not_ready',
+        checks: { db, redis },
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+    });
 });
 
 // Mount sub-routers
@@ -51,5 +58,8 @@ router.use('/favorites', favoritesRouter);
 router.use('/zodiac', zodiacRouter);
 router.use('/user', userRouter);
 router.use('/locations', locationsRouter);
+router.use('/media', mediaRouter);
+router.use('/synastry', synastryRouter);
+router.use('/calendar', calendarRouter);
 
 export default router;

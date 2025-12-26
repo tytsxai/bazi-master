@@ -1,9 +1,21 @@
-const REDIS_URL = process.env.REDIS_URL || '';
+const getRedisUrl = (env = process.env) => env.REDIS_URL || '';
 let redisClient = null;
 let redisInitPromise = null;
 
-export const initRedis = async ({ require: requireRedis = false } = {}) => {
-  if (!REDIS_URL) {
+export const resetRedisState = () => {
+  redisClient = null;
+  redisInitPromise = null;
+};
+
+export const initRedis = async ({
+  require: requireRedis = false,
+  env = process.env,
+  url,
+  importRedis = () => import('redis'),
+  logger = console,
+} = {}) => {
+  const redisUrl = typeof url === 'string' ? url : getRedisUrl(env);
+  if (!redisUrl) {
     if (requireRedis) {
       throw new Error('REDIS_URL is required for production sessions.');
     }
@@ -13,20 +25,21 @@ export const initRedis = async ({ require: requireRedis = false } = {}) => {
   if (redisInitPromise) return redisInitPromise;
   redisInitPromise = (async () => {
     try {
-      const redisModule = await import('redis');
+      const redisModule = await importRedis();
       const { createClient } = redisModule;
-      redisClient = createClient({ url: REDIS_URL });
+      redisClient = createClient({ url: redisUrl });
       redisClient.on('error', (error) => {
-        console.error('[redis] client error:', error);
+        logger.error('[redis] client error:', error);
       });
       await redisClient.connect();
-      console.log('[redis] connected');
+      logger.log('[redis] connected');
       return redisClient;
     } catch (error) {
+      redisInitPromise = null;
       if (requireRedis) {
         throw new Error(error?.message || 'redis_unavailable');
       }
-      console.warn('[redis] unavailable:', error?.message || error);
+      logger.warn('[redis] unavailable:', error?.message || error);
       redisClient = null;
       return null;
     }

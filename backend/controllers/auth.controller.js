@@ -17,20 +17,6 @@ import {
 } from '../services/oauth.service.js';
 import { ensureDefaultUser } from '../services/schema.service.js';
 
-const {
-  resetTokenTtlMs: RESET_TOKEN_TTL_MS,
-  resetRequestMinDurationMs: RESET_REQUEST_MIN_DURATION_MS,
-  googleClientId: GOOGLE_CLIENT_ID,
-  googleClientSecret: GOOGLE_CLIENT_SECRET,
-  googleRedirectUri: GOOGLE_REDIRECT_URI,
-  frontendUrl: FRONTEND_URL,
-  allowDevOauth: ALLOW_DEV_OAUTH,
-  wechatAppId: WECHAT_APP_ID,
-  wechatAppSecret: WECHAT_APP_SECRET,
-  wechatScope: WECHAT_SCOPE,
-  wechatFrontendUrl: WECHAT_FRONTEND_URL,
-  wechatRedirectUri: WECHAT_REDIRECT_URI,
-} = getServerConfig();
 const SHOULD_LOG_RESET_TOKEN =
   process.env.PASSWORD_RESET_DEBUG_LOG === '1' || process.env.PASSWORD_RESET_DEBUG_LOG === 'true';
 
@@ -61,8 +47,8 @@ const ensureMinDuration = async (startedAtMs, minDurationMs) => {
   }
 };
 
-const resetTokenStore = new Map();
-const resetTokenByUser = new Map();
+export const resetTokenStore = new Map();
+export const resetTokenByUser = new Map();
 
 const pruneResetTokens = (now = Date.now()) => {
   for (const [token, entry] of resetTokenStore.entries()) {
@@ -195,6 +181,7 @@ export const handleLogout = async (req, res) => {
 };
 
 export const handlePasswordResetRequest = async (req, res) => {
+  const { resetTokenTtlMs, resetRequestMinDurationMs } = getServerConfig();
   const startedAt = Date.now();
   const email = normalizeEmail(req.body?.email);
   let user = null;
@@ -206,8 +193,8 @@ export const handlePasswordResetRequest = async (req, res) => {
   if (user) {
     pruneResetTokens();
     const token = crypto.randomBytes(24).toString('hex');
-    const expiresAt = Date.now() + (Number.isFinite(RESET_TOKEN_TTL_MS)
-      ? RESET_TOKEN_TTL_MS
+    const expiresAt = Date.now() + (Number.isFinite(resetTokenTtlMs)
+      ? resetTokenTtlMs
       : 30 * 60 * 1000);
     const existingToken = resetTokenByUser.get(user.id);
     if (existingToken) {
@@ -220,7 +207,7 @@ export const handlePasswordResetRequest = async (req, res) => {
     }
   }
 
-  await ensureMinDuration(startedAt, RESET_REQUEST_MIN_DURATION_MS);
+  await ensureMinDuration(startedAt, resetRequestMinDurationMs);
 
   return res.json({
     message: 'If an account exists for that email, a reset code has been sent.',
@@ -270,6 +257,14 @@ export const handlePasswordResetConfirm = async (req, res) => {
 };
 
 export const handleGoogleCallback = async (req, res) => {
+  const {
+    googleClientId: GOOGLE_CLIENT_ID,
+    googleClientSecret: GOOGLE_CLIENT_SECRET,
+    googleRedirectUri: GOOGLE_REDIRECT_URI,
+    frontendUrl: FRONTEND_URL,
+    allowDevOauth: ALLOW_DEV_OAUTH,
+  } = getServerConfig();
+
   const queryError = typeof req.query?.error === 'string' ? req.query.error : '';
   const state = typeof req.query?.state === 'string' ? req.query.state : '';
 
@@ -435,6 +430,14 @@ export const handleGoogleCallback = async (req, res) => {
 };
 
 export const handleWeChatCallback = async (req, res) => {
+  const {
+    allowDevOauth: ALLOW_DEV_OAUTH,
+    wechatAppId: WECHAT_APP_ID,
+    wechatAppSecret: WECHAT_APP_SECRET,
+    wechatFrontendUrl: WECHAT_FRONTEND_URL,
+    wechatRedirectUri: WECHAT_REDIRECT_URI,
+  } = getServerConfig();
+
   const code = typeof req.query?.code === 'string' ? req.query.code : '';
   const state = typeof req.query?.state === 'string' ? req.query.state : '';
 

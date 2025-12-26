@@ -1,10 +1,7 @@
 import { getBaziCacheConfig } from '../config/app.js';
 
 const ELEMENTS = ['Wood', 'Fire', 'Earth', 'Metal', 'Water'];
-const {
-  ttlMs: BAZI_CACHE_TTL_MS,
-  maxEntries: BAZI_CACHE_MAX_ENTRIES,
-} = getBaziCacheConfig();
+const getCacheConfig = () => getBaziCacheConfig();
 const baziCalculationCache = new Map();
 let cacheMirror = null;
 
@@ -75,10 +72,11 @@ const isValidBaziCacheValue = (value) => {
 };
 
 const pruneBaziCache = () => {
-  if (!Number.isFinite(BAZI_CACHE_MAX_ENTRIES) || BAZI_CACHE_MAX_ENTRIES <= 0) {
+  const { maxEntries } = getCacheConfig();
+  if (!Number.isFinite(maxEntries) || maxEntries <= 0) {
     return;
   }
-  while (baziCalculationCache.size > BAZI_CACHE_MAX_ENTRIES) {
+  while (baziCalculationCache.size > maxEntries) {
     const oldestKey = baziCalculationCache.keys().next().value;
     if (!oldestKey) break;
     baziCalculationCache.delete(oldestKey);
@@ -90,8 +88,9 @@ const pruneBaziCache = () => {
 
 const setLocalEntry = (key, value) => {
   const normalized = normalizeBaziResult(value);
-  const expiresAt = Number.isFinite(BAZI_CACHE_TTL_MS) && BAZI_CACHE_TTL_MS > 0
-    ? Date.now() + BAZI_CACHE_TTL_MS
+  const { ttlMs } = getCacheConfig();
+  const expiresAt = Number.isFinite(ttlMs) && ttlMs > 0
+    ? Date.now() + ttlMs
     : null;
   if (baziCalculationCache.has(key)) {
     baziCalculationCache.delete(key);
@@ -135,7 +134,8 @@ export const setBaziCacheEntry = (key, value) => {
   if (!key) return;
   setLocalEntry(key, value);
   if (cacheMirror?.set) {
-    cacheMirror.set(key, normalizeBaziResult(value), BAZI_CACHE_TTL_MS);
+    const { ttlMs } = getCacheConfig();
+    cacheMirror.set(key, normalizeBaziResult(value), ttlMs);
   }
 };
 

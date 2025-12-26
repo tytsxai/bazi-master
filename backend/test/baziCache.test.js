@@ -1,29 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as cache from '../services/cache.service.js';
 
-const importCacheModule = async (envOverrides = {}) => {
+const withEnv = async (envOverrides = {}, run) => {
   const priorEnv = {};
-  Object.keys(envOverrides).forEach((key) => {
-    priorEnv[key] = process.env[key];
-    const next = envOverrides[key];
+  for (const [key, next] of Object.entries(envOverrides)) {
+    priorEnv[key] = Object.prototype.hasOwnProperty.call(process.env, key)
+      ? process.env[key]
+      : undefined;
     if (next === null || next === undefined) {
       delete process.env[key];
     } else {
       process.env[key] = String(next);
     }
-  });
+  }
 
-  const cacheModule = await import(`../services/cache.service.js?ts=${Date.now()}-${Math.random()}`);
-
-  Object.keys(envOverrides).forEach((key) => {
-    if (priorEnv[key] === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = priorEnv[key];
+  try {
+    return await run();
+  } finally {
+    for (const [key, prior] of Object.entries(priorEnv)) {
+      if (prior === undefined) delete process.env[key];
+      else process.env[key] = prior;
     }
-  });
-
-  return cacheModule;
+  }
 };
 
 const buildPayload = (overrides = {}) => ({
@@ -42,108 +41,91 @@ const buildResult = (overrides = {}) => ({
 });
 
 test('buildBaziCacheKey normalizes and rejects invalid input', async () => {
-  const { buildBaziCacheKey } = await importCacheModule();
-
   assert.equal(
-    buildBaziCacheKey(buildPayload({ birthYear: '2001.9', gender: '  Male ' })),
+    cache.buildBaziCacheKey(buildPayload({ birthYear: '2001.9', gender: '  Male ' })),
     '2001-5-20-14-male'
   );
 
-  assert.equal(buildBaziCacheKey(buildPayload({ gender: '   ' })), null);
-  assert.equal(buildBaziCacheKey(buildPayload({ birthDay: null })), null);
-  assert.equal(buildBaziCacheKey(null), null);
+  assert.equal(cache.buildBaziCacheKey(buildPayload({ gender: '   ' })), null);
+  assert.equal(cache.buildBaziCacheKey(buildPayload({ birthDay: null })), null);
+  assert.equal(cache.buildBaziCacheKey(null), null);
 });
 
 test('set/get returns normalized fiveElementsPercent', async () => {
-  const {
-    buildBaziCacheKey,
-    setBaziCacheEntry,
-    getCachedBaziCalculation,
-    clearBaziCalculationCache,
-  } = await importCacheModule({ BAZI_CACHE_TTL_MS: '1000', BAZI_CACHE_MAX_ENTRIES: '10' });
+  await withEnv({ BAZI_CACHE_TTL_MS: '1000', BAZI_CACHE_MAX_ENTRIES: '10' }, async () => {
+    cache.setBaziCacheMirror(null);
+    cache.clearBaziCalculationCache();
 
-  clearBaziCalculationCache();
-  const key = buildBaziCacheKey(buildPayload());
-  setBaziCacheEntry(key, buildResult());
+    const key = cache.buildBaziCacheKey(buildPayload());
+    cache.setBaziCacheEntry(key, buildResult());
 
-  const cached = getCachedBaziCalculation(key);
-  assert.ok(cached);
-  assert.deepEqual(cached.fiveElementsPercent, {
-    Wood: 25,
-    Fire: 25,
-    Earth: 50,
-    Metal: 0,
-    Water: 0,
+    const cached = cache.getCachedBaziCalculation(key);
+    assert.ok(cached);
+    assert.deepEqual(cached.fiveElementsPercent, {
+      Wood: 25,
+      Fire: 25,
+      Earth: 50,
+      Metal: 0,
+      Water: 0,
+    });
   });
 });
 
 test('entries expire based on TTL', async () => {
-  const {
-    buildBaziCacheKey,
-    setBaziCacheEntry,
-    getCachedBaziCalculation,
-    clearBaziCalculationCache,
-  } = await importCacheModule({ BAZI_CACHE_TTL_MS: '10', BAZI_CACHE_MAX_ENTRIES: '10' });
+  await withEnv({ BAZI_CACHE_TTL_MS: '10', BAZI_CACHE_MAX_ENTRIES: '10' }, async () => {
+    cache.setBaziCacheMirror(null);
+    cache.clearBaziCalculationCache();
+    const key = cache.buildBaziCacheKey(buildPayload());
 
-  clearBaziCalculationCache();
-  const key = buildBaziCacheKey(buildPayload());
+    const originalNow = Date.now;
+    try {
+      Date.now = () => 1000;
+      cache.setBaziCacheEntry(key, buildResult());
 
-  const originalNow = Date.now;
-  try {
-    Date.now = () => 1000;
-    setBaziCacheEntry(key, buildResult());
-
-    Date.now = () => 1011;
-    assert.equal(getCachedBaziCalculation(key), null);
-  } finally {
-    Date.now = originalNow;
-  }
+      Date.now = () => 1011;
+      assert.equal(cache.getCachedBaziCalculation(key), null);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
 });
 
 test('LRU eviction removes oldest entry', async () => {
-  const {
-    buildBaziCacheKey,
-    setBaziCacheEntry,
-    getCachedBaziCalculation,
-    clearBaziCalculationCache,
-  } = await importCacheModule({ BAZI_CACHE_TTL_MS: '1000', BAZI_CACHE_MAX_ENTRIES: '2' });
+  await withEnv({ BAZI_CACHE_TTL_MS: '1000', BAZI_CACHE_MAX_ENTRIES: '2' }, async () => {
+    cache.setBaziCacheMirror(null);
+    cache.clearBaziCalculationCache();
 
-  clearBaziCalculationCache();
+    const keyA = cache.buildBaziCacheKey(buildPayload({ birthDay: 1 }));
+    const keyB = cache.buildBaziCacheKey(buildPayload({ birthDay: 2 }));
+    const keyC = cache.buildBaziCacheKey(buildPayload({ birthDay: 3 }));
 
-  const keyA = buildBaziCacheKey(buildPayload({ birthDay: 1 }));
-  const keyB = buildBaziCacheKey(buildPayload({ birthDay: 2 }));
-  const keyC = buildBaziCacheKey(buildPayload({ birthDay: 3 }));
+    cache.setBaziCacheEntry(keyA, buildResult({ pillars: { year: 'A' } }));
+    cache.setBaziCacheEntry(keyB, buildResult({ pillars: { year: 'B' } }));
 
-  setBaziCacheEntry(keyA, buildResult({ pillars: { year: 'A' } }));
-  setBaziCacheEntry(keyB, buildResult({ pillars: { year: 'B' } }));
+    assert.ok(cache.getCachedBaziCalculation(keyA));
 
-  assert.ok(getCachedBaziCalculation(keyA));
+    cache.setBaziCacheEntry(keyC, buildResult({ pillars: { year: 'C' } }));
 
-  setBaziCacheEntry(keyC, buildResult({ pillars: { year: 'C' } }));
-
-  assert.equal(getCachedBaziCalculation(keyB), null);
-  assert.ok(getCachedBaziCalculation(keyA));
-  assert.ok(getCachedBaziCalculation(keyC));
+    assert.equal(cache.getCachedBaziCalculation(keyB), null);
+    assert.ok(cache.getCachedBaziCalculation(keyA));
+    assert.ok(cache.getCachedBaziCalculation(keyC));
+  });
 });
 
 test('invalidateBaziCalculationCache clears entries by key or payload', async () => {
-  const {
-    buildBaziCacheKey,
-    setBaziCacheEntry,
-    getCachedBaziCalculation,
-    invalidateBaziCalculationCache,
-    clearBaziCalculationCache,
-  } = await importCacheModule({ BAZI_CACHE_TTL_MS: '1000', BAZI_CACHE_MAX_ENTRIES: '10' });
+  await withEnv({ BAZI_CACHE_TTL_MS: '1000', BAZI_CACHE_MAX_ENTRIES: '10' }, async () => {
+    cache.setBaziCacheMirror(null);
+    cache.clearBaziCalculationCache();
 
-  clearBaziCalculationCache();
-  const payload = buildPayload();
-  const key = buildBaziCacheKey(payload);
-  setBaziCacheEntry(key, buildResult());
+    const payload = buildPayload();
+    const key = cache.buildBaziCacheKey(payload);
+    cache.setBaziCacheEntry(key, buildResult());
 
-  invalidateBaziCalculationCache(payload);
-  assert.equal(getCachedBaziCalculation(key), null);
+    cache.invalidateBaziCalculationCache(payload);
+    assert.equal(cache.getCachedBaziCalculation(key), null);
 
-  setBaziCacheEntry(key, buildResult());
-  invalidateBaziCalculationCache(key);
-  assert.equal(getCachedBaziCalculation(key), null);
+    cache.setBaziCacheEntry(key, buildResult());
+    cache.invalidateBaziCalculationCache(key);
+    assert.equal(cache.getCachedBaziCalculation(key), null);
+  });
 });

@@ -95,7 +95,41 @@ Four Transformations: ${transformations}
   return { system, user, fallback };
 };
 
+const getChatSystemPrompt = (mode, context) => {
+  const baseDefaults = "You are a helpful and wise BaZi Fortune Assistant. You help users understand their destiny, fortune, and BaZi charts. Be polite, mystical yet grounded, and helpful.";
+
+  let prompt = "";
+  switch (mode) {
+    case 'love':
+      prompt = "You are an expert in Chinese Metaphysics focusing on relationships and love. Use BaZi concepts (Elements, Ten Gods like Husband/Wife star) to give relationship advice. Be empathetic but honest about compatibility and timing.";
+      break;
+    case 'career':
+      prompt = "You are a career strategist using BaZi insights. Focus on the Officer and Wealth stars, element strengths, and favorable industries. Provide actionable career guidance.";
+      break;
+    case 'wealth':
+      prompt = "You are a financial luck consultant using BaZi. Focus on Wealth stars (Direct/Indirect Wealth) and element flows. Analyze wealth potential and timing for financial decisions.";
+      break;
+    case 'general':
+    default:
+      prompt = baseDefaults;
+      break;
+  }
+
+  if (context && context.pillars) {
+    const { pillars, fiveElements } = context;
+    const dm = pillars.day ? `${pillars.day.stem} (${pillars.day.elementStem})` : "Unknown";
+    const elementSummary = fiveElements
+      ? Object.entries(fiveElements).map(([k, v]) => `${k}:${v}`).join(', ')
+      : "";
+
+    prompt += `\n\n[User's BaZi Context]\nDay Master: ${dm}\nElements: ${elementSummary}\nUse this context to personalize your advice.`;
+  }
+
+  return prompt;
+};
+
 export {
   buildBaziPrompt,
   buildZiweiPrompt,
+  getChatSystemPrompt,
 };

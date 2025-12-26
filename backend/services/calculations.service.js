@@ -1,4 +1,8 @@
 import { Solar } from 'lunar-javascript';
+import { normalizeLocationKey, resolveLocationCoordinates, computeTrueSolarTime, listKnownLocations } from './solarTime.service.js';
+
+export { normalizeLocationKey, resolveLocationCoordinates, computeTrueSolarTime, listKnownLocations };
+
 import {
   buildBaziCacheKey,
   getCachedBaziCalculationAsync,
@@ -60,6 +64,7 @@ export function getElementRelation(me, other) {
   if (me === other) return 'Same';
   const meIdx = ELEMENTS.indexOf(me);
   const otherIdx = ELEMENTS.indexOf(other);
+  if (meIdx === -1 || otherIdx === -1) return 'Unknown';
   if ((meIdx + 1) % 5 === otherIdx) return 'Generates';
   if ((otherIdx + 1) % 5 === meIdx) return 'GeneratedBy';
   if ((meIdx + 2) % 5 === otherIdx) return 'Controls';
@@ -182,7 +187,7 @@ export const performCalculation = (data) => {
 
 export const hasFullBaziResult = (result) => {
   if (!result || typeof result !== 'object') return false;
-  return result.pillars && result.fiveElements && result.tenGods && result.luckCycles;
+  return !!(result.pillars && result.fiveElements && result.tenGods && result.luckCycles);
 };
 
 export const getBaziCalculation = async (data, { bypassCache = false } = {}) => {
@@ -245,5 +250,82 @@ export const buildImportRecord = async (raw, userId) => {
     luckCycles: JSON.stringify(luckCycles),
     createdAt,
     updatedAt,
+  };
+};
+
+export const calculateDailyPillars = (date = new Date()) => {
+  const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
+  const lunar = solar.getLunar();
+  const eightChar = lunar.getEightChar();
+
+  // Create simple pillar objects for the day
+  const dayPillar = buildPillar(eightChar.getDayGan(), eightChar.getDayZhi());
+
+  return {
+    date: date.toISOString().split('T')[0],
+    stem: dayPillar.stem,
+    branch: dayPillar.branch,
+    elementStem: dayPillar.elementStem,
+    elementBranch: dayPillar.elementBranch,
+    charStem: dayPillar.charStem,
+    charBranch: dayPillar.charBranch
+  };
+};
+
+export const calculateDailyScore = (userChart, dailyPillars) => {
+  if (!userChart || !dailyPillars) return { score: 50, advice: 'Stay balanced.' };
+
+  let score = 60; // Base score
+  let advice = [];
+
+  const dmElement = userChart.pillars.day.elementStem;
+  const dayElement = dailyPillars.elementStem;
+
+  // Element Relationship
+  const relation = getElementRelation(dayElement, dmElement); // Day acts on Me
+
+  if (relation === 'Generates') {
+    score += 15;
+    advice.push('Today supports you securely. Good for planning.');
+  } else if (relation === 'Same') {
+    score += 10;
+    advice.push('Social energy is high. Connect with friends.');
+  } else if (relation === 'Controls') {
+    score -= 10;
+    advice.push('Pressure might be high. Stay disciplined.');
+  } else if (relation === 'ControlledBy') {
+    score += 5; // Wealth element often
+    advice.push('Opportunity for gain, but requires effort.');
+  } else {
+    // GeneratedBy (I generate output)
+    score += 5;
+    advice.push('Good day for creative expression.');
+  }
+
+  // Simple Branch Clash check (Zi-Wu, etc.) - Simplified list
+  const clashes = {
+    'Zi': 'Wu', 'Wu': 'Zi',
+    'Chou': 'Wei', 'Wei': 'Chou',
+    'Yin': 'Shen', 'Shen': 'Yin',
+    'Mao': 'You', 'You': 'Mao',
+    'Chen': 'Xu', 'Xu': 'Chen',
+    'Si': 'Hai', 'Hai': 'Si'
+  };
+
+  const userBranch = userChart.pillars.day.branch;
+  const dayBranch = dailyPillars.branch;
+
+  if (clashes[userBranch] === dayBranch) {
+    score -= 20;
+    advice.push('Watch out for conflicts in personal life.');
+  }
+
+  // Normalize
+  score = Math.max(0, Math.min(100, score));
+
+  return {
+    score,
+    advice: advice.join(' '),
+    element: dayElement
   };
 };

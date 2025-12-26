@@ -45,28 +45,31 @@ export const notFoundHandler = (req, res, next) => {
  * Global Error Handler
  * Hides stack traces in production
  */
-export const globalErrorHandler = (err, req, res, next) => {
-    const statusCode = err.statusCode || 500;
-    const message = err.message || 'Internal Server Error';
-    const requestId = req?.id || req?.requestId;
+export const createGlobalErrorHandler = ({ loggerInstance = logger, env = process.env } = {}) =>
+    (err, req, res, next) => {
+        const statusCode = err.statusCode || 500;
+        const message = err.message || 'Internal Server Error';
+        const requestId = req?.id || req?.requestId;
 
-    // Log the error
-    logger.error({
-        err,
-        req: {
-            id: requestId,
-            method: req.method,
-            url: req.originalUrl,
-            body: redactSensitive(req.body),
-            query: redactSensitive(req.query),
-            params: redactSensitive(req.params),
-        },
-    }, message);
+        // Log the error
+        loggerInstance.error({
+            err,
+            req: {
+                id: requestId,
+                method: req.method,
+                url: req.originalUrl,
+                body: redactSensitive(req.body),
+                query: redactSensitive(req.query),
+                params: redactSensitive(req.params),
+            },
+        }, message);
 
-    res.status(statusCode).json({
-        status: 'error',
-        statusCode,
-        message,
-        ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
-    });
-};
+        res.status(statusCode).json({
+            status: 'error',
+            statusCode,
+            message,
+            ...(env.NODE_ENV !== 'production' && { stack: err.stack }),
+        });
+    };
+
+export const globalErrorHandler = createGlobalErrorHandler();

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node server.js",
     "start": "NODE_ENV=production node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma && NODE_ENV=production node server.js",
-    "test": "NODE_ENV=test node --test",
+    "test": "NODE_ENV=test SESSION_TOKEN_SECRET=test-session-secret-for-auth-me-test DATABASE_URL=file:../prisma/dev.db node --test",
+    "test:coverage": "NODE_ENV=test SESSION_TOKEN_SECRET=test-session-secret-for-auth-me-test DATABASE_URL=file:../prisma/dev.db node --experimental-test-coverage --test",
     "postinstall": "node scripts/prisma.mjs generate --schema=../prisma/schema.prisma",
     "prisma:generate": "node scripts/prisma.mjs generate --schema=../prisma/schema.prisma",
     "prisma:push": "node scripts/prisma.mjs db push --schema=../prisma/schema.prisma",
@@ -22,7 +23,8 @@
     "pino": "^10.1.0",
     "pino-http": "^11.0.0",
     "redis": "^4.6.14",
-    "swagger-ui-express": "^5.0.0"
+    "swagger-ui-express": "^5.0.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "prisma": "^5.10.2",

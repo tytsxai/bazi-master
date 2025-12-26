@@ -15,23 +15,23 @@ export const withTimeout = (promise, timeoutMs) => {
   ]);
 };
 
-export const checkDatabase = async () => {
+export const checkDatabase = async ({ prismaClient = prisma, timeoutMs = 1500 } = {}) => {
   try {
-    await withTimeout(prisma.user.findFirst({ select: { id: true } }), 1500);
+    await withTimeout(prismaClient.user.findFirst({ select: { id: true } }), timeoutMs);
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error?.message || 'db_check_failed' };
   }
 };
 
-export const checkRedis = async () => {
-  const configured = Boolean(process.env.REDIS_URL);
-  const client = await initRedis();
+export const checkRedis = async ({ initRedisFn = initRedis, env = process.env, timeoutMs = 1000 } = {}) => {
+  const configured = Boolean(env.REDIS_URL);
+  const client = await initRedisFn();
   if (!client) {
     return configured ? { ok: false, status: 'unavailable' } : { ok: true, status: 'disabled' };
   }
   try {
-    await withTimeout(client.ping(), 1000);
+    await withTimeout(client.ping(), timeoutMs);
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error?.message || 'redis_check_failed' };

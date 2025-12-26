@@ -1,19 +1,22 @@
 import { getServerConfig as getServerConfigFromEnv } from '../config/app.js';
 import { createAiGuard } from '../lib/concurrency.js';
 
-const {
-  aiProvider: AI_PROVIDER,
-  openaiApiKey: OPENAI_API_KEY,
-  anthropicApiKey: ANTHROPIC_API_KEY,
-  openaiModel: OPENAI_MODEL,
-  anthropicModel: ANTHROPIC_MODEL,
-  aiMaxTokens: AI_MAX_TOKENS,
-  aiTimeoutMs: AI_TIMEOUT_MS,
-  availableProviders: AVAILABLE_PROVIDERS,
-  resetRequestMinDurationMs: RESET_REQUEST_MIN_DURATION_MS,
-} = getServerConfigFromEnv();
+const getAiConfig = () => {
+  const config = getServerConfigFromEnv();
+  return {
+    aiProvider: config.aiProvider,
+    openaiApiKey: config.openaiApiKey,
+    anthropicApiKey: config.anthropicApiKey,
+    openaiModel: config.openaiModel,
+    anthropicModel: config.anthropicModel,
+    aiMaxTokens: config.aiMaxTokens,
+    aiTimeoutMs: config.aiTimeoutMs,
+    availableProviders: config.availableProviders,
+    resetRequestMinDurationMs: config.resetRequestMinDurationMs,
+  };
+};
 
-const fetchWithTimeout = async (url, options, timeoutMs = AI_TIMEOUT_MS) => {
+const fetchWithTimeout = async (url, options, timeoutMs) => {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return fetch(url, options);
 
   const controller = new AbortController();
@@ -41,10 +44,10 @@ const ensureMinDuration = async (startedAtMs, minDurationMs) => {
 const normalizeProviderName = (value) =>
   typeof value === 'string' ? value.trim().toLowerCase() : '';
 
-const resolveAiProvider = (requestedProvider) => {
+const resolveAiProviderWithConfig = (requestedProvider, { aiProvider, availableProviders }) => {
   const normalized = normalizeProviderName(requestedProvider);
-  const provider = normalized || AI_PROVIDER || 'mock';
-  const providerMeta = AVAILABLE_PROVIDERS?.find((item) => item.name === provider);
+  const provider = normalized || aiProvider || 'mock';
+  const providerMeta = availableProviders?.find((item) => item.name === provider);
   if (!providerMeta) {
     throw new Error('Unknown AI provider.');
   }
@@ -54,26 +57,40 @@ const resolveAiProvider = (requestedProvider) => {
   return provider;
 };
 
-const callOpenAI = async ({ system, user }) => {
-  if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
+const resolveAiProvider = (requestedProvider) =>
+  resolveAiProviderWithConfig(requestedProvider, getAiConfig());
 
-  const model = OPENAI_MODEL || 'gpt-4o-mini';
+const callOpenAIWithConfig = async (config, { system, user, messages }) => {
+  if (!config.openaiApiKey) throw new Error('OpenAI API key not configured');
+
+  const model = config.openaiModel || 'gpt-4o-mini';
+
+  let apiMessages = [];
+  if (messages && Array.isArray(messages)) {
+    apiMessages = [
+      { role: 'system', content: system },
+      ...messages
+    ];
+  } else {
+    apiMessages = [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ];
+  }
+
   const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Authorization': `Bearer ${config.openaiApiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
+      messages: apiMessages,
       temperature: 0.7,
-      max_tokens: Number.isFinite(AI_MAX_TOKENS) ? AI_MAX_TOKENS : 700,
+      max_tokens: Number.isFinite(config.aiMaxTokens) ? config.aiMaxTokens : 700,
     }),
-  });
+  }, config.aiTimeoutMs);
 
   if (!response.ok) {
     const error = await response.text();
@@ -84,27 +101,41 @@ const callOpenAI = async ({ system, user }) => {
   return data.choices[0]?.message?.content || '';
 };
 
-const callOpenAIStream = async ({ system, user, onChunk }) => {
-  if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
+const callOpenAI = async ({ system, user, messages }) =>
+  callOpenAIWithConfig(getAiConfig(), { system, user, messages });
 
-  const model = OPENAI_MODEL || 'gpt-4o-mini';
+const callOpenAIStreamWithConfig = async (config, { system, user, messages, onChunk }) => {
+  if (!config.openaiApiKey) throw new Error('OpenAI API key not configured');
+
+  const model = config.openaiModel || 'gpt-4o-mini';
+
+  let apiMessages = [];
+  if (messages && Array.isArray(messages)) {
+    apiMessages = [
+      { role: 'system', content: system },
+      ...messages
+    ];
+  } else {
+    apiMessages = [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ];
+  }
+
   const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Authorization': `Bearer ${config.openaiApiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
+      messages: apiMessages,
       temperature: 0.7,
-      max_tokens: Number.isFinite(AI_MAX_TOKENS) ? AI_MAX_TOKENS : 700,
+      max_tokens: Number.isFinite(config.aiMaxTokens) ? config.aiMaxTokens : 700,
       stream: true,
     }),
-  });
+  }, config.aiTimeoutMs);
 
   if (!response.ok) {
     const error = await response.text();
@@ -146,24 +177,36 @@ const callOpenAIStream = async ({ system, user, onChunk }) => {
   }
 };
 
-const callAnthropic = async ({ system, user }) => {
-  if (!ANTHROPIC_API_KEY) throw new Error('Anthropic API key not configured');
+const callOpenAIStream = async ({ system, user, messages, onChunk }) =>
+  callOpenAIStreamWithConfig(getAiConfig(), { system, user, messages, onChunk });
 
-  const model = ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620';
+const callAnthropicWithConfig = async (config, { system, user, messages }) => {
+  if (!config.anthropicApiKey) throw new Error('Anthropic API key not configured');
+
+  const model = config.anthropicModel || 'claude-3-5-sonnet-20240620';
+
+  let apiMessages = [];
+  if (messages && Array.isArray(messages)) {
+    // Anthropic messages API only wants user/assistant roles in messages. System is separate.
+    apiMessages = messages.filter(m => m.role !== 'system');
+  } else {
+    apiMessages = [{ role: 'user', content: user }];
+  }
+
   const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      'x-api-key': ANTHROPIC_API_KEY,
+      'x-api-key': config.anthropicApiKey,
       'anthropic-version': '2023-06-01',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model,
-      max_tokens: Number.isFinite(AI_MAX_TOKENS) ? AI_MAX_TOKENS : 700,
+      max_tokens: Number.isFinite(config.aiMaxTokens) ? config.aiMaxTokens : 700,
       system,
-      messages: [{ role: 'user', content: user }],
+      messages: apiMessages,
     }),
-  });
+  }, config.aiTimeoutMs);
 
   if (!response.ok) {
     const error = await response.text();
@@ -174,25 +217,36 @@ const callAnthropic = async ({ system, user }) => {
   return data.content[0]?.text || '';
 };
 
-const callAnthropicStream = async ({ system, user, onChunk }) => {
-  if (!ANTHROPIC_API_KEY) throw new Error('Anthropic API key not configured');
+const callAnthropic = async ({ system, user, messages }) =>
+  callAnthropicWithConfig(getAiConfig(), { system, user, messages });
 
-  const model = ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620';
+const callAnthropicStreamWithConfig = async (config, { system, user, messages, onChunk }) => {
+  if (!config.anthropicApiKey) throw new Error('Anthropic API key not configured');
+
+  const model = config.anthropicModel || 'claude-3-5-sonnet-20240620';
+
+  let apiMessages = [];
+  if (messages && Array.isArray(messages)) {
+    apiMessages = messages.filter(m => m.role !== 'system');
+  } else {
+    apiMessages = [{ role: 'user', content: user }];
+  }
+
   const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      'x-api-key': ANTHROPIC_API_KEY,
+      'x-api-key': config.anthropicApiKey,
       'anthropic-version': '2023-06-01',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model,
-      max_tokens: Number.isFinite(AI_MAX_TOKENS) ? AI_MAX_TOKENS : 700,
+      max_tokens: Number.isFinite(config.aiMaxTokens) ? config.aiMaxTokens : 700,
       system,
-      messages: [{ role: 'user', content: user }],
+      messages: apiMessages,
       stream: true,
     }),
-  });
+  }, config.aiTimeoutMs);
 
   if (!response.ok) {
     const error = await response.text();
@@ -233,14 +287,18 @@ const callAnthropicStream = async ({ system, user, onChunk }) => {
   }
 };
 
+const callAnthropicStream = async ({ system, user, messages, onChunk }) =>
+  callAnthropicStreamWithConfig(getAiConfig(), { system, user, messages, onChunk });
+
 const resolveFallback = (fallback) => {
   if (typeof fallback === 'function') return fallback();
   if (typeof fallback === 'string' && fallback.trim()) return fallback;
   return 'Mock AI response - configure AI provider for real responses';
 };
 
-const generateAIContent = async ({ system, user, fallback, provider, onChunk }) => {
-  const resolvedProvider = resolveAiProvider(provider);
+const generateAIContent = async ({ system, user, messages, fallback, provider, onChunk }) => {
+  const config = getAiConfig();
+  const resolvedProvider = resolveAiProviderWithConfig(provider, config);
   const startedAt = Date.now();
 
   try {
@@ -268,15 +326,15 @@ const generateAIContent = async ({ system, user, fallback, provider, onChunk }) 
 
       if (resolvedProvider === 'openai') {
         if (onChunk) {
-          await callOpenAIStream({ system, user, onChunk: onChunkWrapper });
+          await callOpenAIStreamWithConfig(config, { system, user, messages, onChunk: onChunkWrapper });
         } else {
-          result = await callOpenAI({ system, user });
+          result = await callOpenAIWithConfig(config, { system, user, messages });
         }
       } else if (resolvedProvider === 'anthropic') {
         if (onChunk) {
-          await callAnthropicStream({ system, user, onChunk: onChunkWrapper });
+          await callAnthropicStreamWithConfig(config, { system, user, messages, onChunk: onChunkWrapper });
         } else {
-          result = await callAnthropic({ system, user });
+          result = await callAnthropicWithConfig(config, { system, user, messages });
         }
       } else {
         throw new Error(`Unsupported AI provider: ${resolvedProvider}`);
@@ -287,7 +345,7 @@ const generateAIContent = async ({ system, user, fallback, provider, onChunk }) 
       release();
     }
   } finally {
-    await ensureMinDuration(startedAt, RESET_REQUEST_MIN_DURATION_MS);
+    await ensureMinDuration(startedAt, config.resetRequestMinDurationMs);
   }
 };
 
@@ -338,12 +396,65 @@ ${patterns}
   return { system, user, fallback };
 };
 
+const callOpenAIImage = async (config, { prompt }) => {
+  if (!config.openaiApiKey) throw new Error('OpenAI API key not configured');
+
+  const response = await fetchWithTimeout('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.openaiApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'dall-e-3',
+      prompt,
+      n: 1,
+      size: '1024x1024',
+      quality: 'standard',
+      style: 'vivid',
+    }),
+  }, config.aiTimeoutMs * 2); // Images take longer
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`OpenAI Image API error: ${response.status} ${error}`);
+  }
+
+  const data = await response.json();
+  return data.data[0]?.url || '';
+};
+
+const generateImage = async ({ prompt, provider = 'openai' }) => {
+  const config = getAiConfig();
+  // We currently only support OpenAI for images
+  if (provider !== 'openai' && provider !== 'mock') {
+    // Fallback to OpenAI if configured, or mock
+    if (!config.openaiApiKey) return 'https://via.placeholder.com/1024x1024?text=AI+Provider+Not+Configured';
+  }
+
+  const resolvedProvider = resolveAiProviderWithConfig(provider, config);
+
+  if (resolvedProvider === 'mock') {
+    return 'https://via.placeholder.com/1024x1024?text=Mock+Soul+Portrait';
+  }
+
+  const aiGuard = createAiGuard();
+  const release = await aiGuard.acquire();
+
+  try {
+    return await callOpenAIImage(config, { prompt });
+  } finally {
+    release();
+  }
+};
+
 export {
   callOpenAI,
   callOpenAIStream,
   callAnthropic,
   callAnthropicStream,
   generateAIContent,
+  generateImage,
   resolveAiProvider,
   buildBaziPrompt,
 };
