@@ -64,6 +64,7 @@ export const getServerConfig = () => {
     process.env.GOOGLE_REDIRECT_URI || `http://localhost:${port}/api/auth/google/callback`;
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS, nodeEnv);
+  const sessionTokenSecret = process.env.SESSION_TOKEN_SECRET || '';
 
   const wechatAppId = process.env.WECHAT_APP_ID || '';
   const wechatAppSecret = process.env.WECHAT_APP_SECRET || '';
@@ -104,6 +105,7 @@ export const getServerConfig = () => {
     googleRedirectUri,
     frontendUrl,
     adminEmails,
+    sessionTokenSecret,
     wechatAppId,
     wechatAppSecret,
     wechatScope,

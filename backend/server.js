@@ -39,7 +39,7 @@ import {
   setBaziCacheMirror,
 } from './baziCache.js';
 import { normalizePageNumber, normalizePageSize } from './pagination.js';
-import { createAuthorizeToken, createRequireAuth, requireAdmin } from './auth.js';
+import { buildAuthToken, createAuthorizeToken, createRequireAuth, requireAdmin } from './auth.js';
 import {
   formatTimezoneOffset,
   parseTimezoneOffsetMinutes,
@@ -99,6 +99,38 @@ ensureDatabaseUrl();
 
 const prisma = new PrismaClient();
 const app = express();
+
+const isExpressRouter = (value) =>
+  typeof value === 'function'
+  && typeof value.handle === 'function'
+  && typeof value.use === 'function';
+
+const wrapAsyncMiddleware = (fn) => {
+  if (typeof fn !== 'function') return fn;
+  if (fn.length === 4) return fn;
+  if (isExpressRouter(fn)) return fn;
+  return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+const patchExpressAsync = (target) => {
+  const methods = ['use', 'all', 'get', 'post', 'put', 'patch', 'delete', 'options', 'head'];
+  methods.forEach((method) => {
+    const original = target?.[method];
+    if (typeof original !== 'function') return;
+    target[method] = function patched(...args) {
+      const wrapped = args.map((arg) => {
+        if (Array.isArray(arg)) {
+          return arg.map((entry) => wrapAsyncMiddleware(entry));
+        }
+        return wrapAsyncMiddleware(arg);
+      });
+      return original.apply(this, wrapped);
+    };
+  });
+};
+
+patchExpressAsync(app);
+
 app.disable('x-powered-by');
 const { sessionIdleMs: SESSION_IDLE_MS } = getSessionConfigFromEnv();
 const {
@@ -117,6 +149,8 @@ const {
   availableProviders: AVAILABLE_PROVIDERS,
   resetTokenTtlMs: RESET_TOKEN_TTL_MS,
   resetRequestMinDurationMs: RESET_REQUEST_MIN_DURATION_MS,
+  googleClientId: GOOGLE_CLIENT_ID,
+  googleClientSecret: GOOGLE_CLIENT_SECRET,
   googleRedirectUri: GOOGLE_REDIRECT_URI,
   frontendUrl: FRONTEND_URL,
   adminEmails: ADMIN_EMAILS,
@@ -129,6 +163,7 @@ const {
   importBatchSize: IMPORT_BATCH_SIZE,
   shutdownTimeoutMs: SHUTDOWN_TIMEOUT_MS,
   corsAllowedOrigins: CORS_ALLOWED_ORIGINS,
+  sessionTokenSecret: SESSION_TOKEN_SECRET,
   nodeEnv: NODE_ENV,
 } = getServerConfigFromEnv();
 
@@ -291,6 +326,8 @@ const validateProductionConfig = () => {
   if (!IS_PRODUCTION) return { errors: [], warnings: [] };
   const errors = [];
   const warnings = [];
+  const allowLocalhost = process.env.ALLOW_LOCALHOST_PROD === 'true';
+  const backendBaseUrl = process.env.BACKEND_BASE_URL || '';
 
   if (!PRISMA_PROVIDER) {
     warnings.push('Unable to detect Prisma datasource provider from prisma/schema.prisma; DB safety checks may be incomplete.');
@@ -319,14 +356,26 @@ const validateProductionConfig = () => {
       errors.push('DATABASE_URL must be a PostgreSQL URL (postgres:// or postgresql://) when Prisma provider is postgresql.');
     }
   }
-  if (!FRONTEND_URL || isLocalUrl(FRONTEND_URL)) {
+  if (!FRONTEND_URL || (!allowLocalhost && isLocalUrl(FRONTEND_URL))) {
     errors.push('FRONTEND_URL must be a non-localhost URL in production.');
+  } else if (allowLocalhost && isLocalUrl(FRONTEND_URL)) {
+    warnings.push('FRONTEND_URL is localhost while ALLOW_LOCALHOST_PROD=true; disable for real production.');
   }
-  if (!process.env.BACKEND_BASE_URL || isLocalUrl(process.env.BACKEND_BASE_URL)) {
+  if (!backendBaseUrl || (!allowLocalhost && isLocalUrl(backendBaseUrl))) {
     errors.push('BACKEND_BASE_URL must be a non-localhost URL in production.');
+  } else if (allowLocalhost && isLocalUrl(backendBaseUrl)) {
+    warnings.push('BACKEND_BASE_URL is localhost while ALLOW_LOCALHOST_PROD=true; disable for real production.');
   }
   if (!process.env.REDIS_URL) {
     warnings.push('REDIS_URL is not set; sessions and caches will not be shared across instances.');
+  }
+  const sessionSecret = typeof SESSION_TOKEN_SECRET === 'string'
+    ? SESSION_TOKEN_SECRET.trim()
+    : '';
+  if (!sessionSecret) {
+    errors.push('SESSION_TOKEN_SECRET is required in production to prevent token forgery.');
+  } else if (sessionSecret.length < 32) {
+    errors.push('SESSION_TOKEN_SECRET must be at least 32 characters long in production.');
   }
   if (ADMIN_EMAILS.size === 0) {
     warnings.push('ADMIN_EMAILS is empty; admin-only endpoints will be inaccessible.');
@@ -357,11 +406,39 @@ const ensureSoftDeleteTables = async () => {
   `);
 };
 
+const ensureBaziRecordTrashTable = async () => {
+  if (IS_SQLITE) return;
+  if (PRISMA_PROVIDER !== 'postgresql') return;
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "BaziRecordTrash" (
+        "id" SERIAL NOT NULL,
+        "userId" INTEGER NOT NULL,
+        "recordId" INTEGER NOT NULL,
+        "deletedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "BaziRecordTrash_pkey" PRIMARY KEY ("id")
+      );
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "BaziRecordTrash_userId_recordId_key"
+      ON "BaziRecordTrash" ("userId", "recordId");
+    `);
+  } catch (error) {
+    console.error('Failed to ensure BaziRecordTrash table:', error);
+    if (IS_PRODUCTION) {
+      throw error;
+    }
+  }
+};
+
 const ensureSoftDeleteReady = (() => {
   let ready = null;
   return async () => {
     if (!ready) {
-      ready = ensureSoftDeleteTables().catch((error) => {
+      ready = (async () => {
+        await ensureSoftDeleteTables();
+        await ensureBaziRecordTrashTable();
+      })().catch((error) => {
         console.error('Failed to ensure soft delete tables:', error);
         throw error;
       });
@@ -1334,9 +1411,11 @@ const PASSWORD_RESET_DEBUG_LOG =
   !IS_PRODUCTION && process.env.PASSWORD_RESET_DEBUG_LOG === 'true';
 const sessionStore = createSessionStore({ ttlMs: SESSION_IDLE_MS });
 const createSessionToken = (userId) => {
-  const issuedAt = Date.now();
-  const nonce = crypto.randomBytes(16).toString('hex');
-  return `token_${userId}_${issuedAt}_${nonce}`;
+  const token = buildAuthToken({ userId, secret: SESSION_TOKEN_SECRET });
+  if (!token) {
+    throw new Error('Unable to create session token');
+  }
+  return token;
 };
 const resetTokenStore = new Map();
 const resetTokenByUser = new Map();
@@ -1429,7 +1508,12 @@ const isAdminUser = (user) => {
   return ADMIN_EMAILS.has(String(user.email).toLowerCase());
 };
 
-const authorizeToken = createAuthorizeToken({ prisma, sessionStore, isAdminUser });
+const authorizeToken = createAuthorizeToken({
+  prisma,
+  sessionStore,
+  isAdminUser,
+  tokenSecret: SESSION_TOKEN_SECRET
+});
 const requireAuth = createRequireAuth({ authorizeToken });
 const requireAuthStrict = createRequireAuth({ authorizeToken, allowSessionExpiredSilent: false });
 const getBearerToken = (req) => {
@@ -2554,6 +2638,7 @@ const calculateZiweiChart = (data) => {
 };
 
 const apiRouter = express.Router();
+patchExpressAsync(apiRouter);
 app.use('/api/v1', apiRouter);
 app.use('/api', apiRouter);
 
@@ -2575,7 +2660,7 @@ const withTimeout = (promise, timeoutMs) => {
 
 const checkDatabase = async () => {
   try {
-    await withTimeout(prisma.$queryRaw`SELECT 1`, 1500);
+    await withTimeout(prisma.user.findFirst({ select: { id: true } }), 1500);
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error?.message || 'db_check_failed' };
@@ -2599,8 +2684,14 @@ const checkRedis = async () => {
   }
 };
 
-apiRouter.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+apiRouter.get('/health', async (req, res) => {
+  const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
+  const ok = db.ok && (redis.ok || redis.status === 'disabled');
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'ok' : 'degraded',
+    checks: { db, redis },
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.get('/ready', async (req, res) => {
@@ -5424,6 +5515,7 @@ if (NODE_ENV !== 'test' && isMain) {
       await ensureUserSettingsTable();
       await ensureZiweiHistoryTable();
       await ensureBaziRecordUpdatedAt();
+      await ensureBaziRecordTrashTable();
       await ensureDefaultUser();
     } catch (error) {
       console.error('Failed to initialize server prerequisites:', error);

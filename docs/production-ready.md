@@ -2,35 +2,45 @@
 
 ## Required Environment
 - NODE_ENV=production
-- DATABASE_URL: SQLite file URL (current Prisma provider). Example: file:/var/lib/bazi-master/bazi-master.db
-- ALLOW_SQLITE_PROD=true (required when Prisma provider is sqlite)
+- DATABASE_URL: PostgreSQL URL (schema uses provider = "postgresql").
 - FRONTEND_URL: Public web origin (non-localhost).
 - BACKEND_BASE_URL: Public API base URL (non-localhost).
 - ADMIN_EMAILS: Comma-separated admin emails (leave empty to disable admin access).
+- SESSION_TOKEN_SECRET: Secret used to sign session tokens (>=32 chars).
+- ALLOW_LOCALHOST_PROD=true (optional) to allow localhost URLs for production-mode smoke tests only.
+
+## Recommended Environment
+- REDIS_URL: Required if running more than one backend instance (shared sessions/cache).
+- CORS_ALLOWED_ORIGINS: Additional allowed origins (comma-separated).
+- TRUST_PROXY: Proxy hop count (usually 1) when behind a load balancer.
 
 ## Optional Environment
-- REDIS_URL: Enable shared session/cache storage across instances.
 - OPENAI_API_KEY / ANTHROPIC_API_KEY and provider model settings.
-- CORS_ALLOWED_ORIGINS: Additional allowed origins (comma-separated).
-- SEED_DEFAULT_USER: Set to true in non-production to seed test@example.com.
-- PASSWORD_RESET_DEBUG_LOG: Set to true in non-production to print reset tokens to logs.
+- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI for Google OAuth.
+- WECHAT_APP_ID / WECHAT_APP_SECRET / WECHAT_REDIRECT_URI for WeChat OAuth.
 
 ## Migrations & Schema
-- Current Prisma provider is SQLite (see `prisma/schema.prisma`). If you need PostgreSQL for production, you must switch the Prisma provider to `postgresql` and generate/apply migrations before go-live.
-- Avoid runtime schema sync in production (already disabled by default).
+- Prisma schema is PostgreSQL (see `prisma/schema.prisma`).
+- Production start command runs `prisma migrate deploy`.
+- Avoid `prisma db push` in production.
+
+## Known Constraints
+- Rate limiting is in-memory; for multi-instance deployments, rely on an external gateway/WAF or add a shared limiter.
 
 ## Health Checks
-- Liveness: GET /health
-- Readiness: GET /ready (checks database + Redis)
+- Liveness: GET /health (app) or /api/health (API router).
+- Readiness: GET /ready (checks database + Redis).
 
 ## Backups & Recovery (Guidance)
 - PostgreSQL: schedule `pg_dump` backups and verify restores regularly.
-- SQLite: snapshot the DB file with filesystem-level backups when the process is stopped.
+- Use `scripts/backup-db.sh` and `scripts/restore-db.sh` for docker compose setups.
+- Validate restore procedures before go-live.
 
 ## Rollback
 - Keep the previous container/image release available.
-- Use forward-only migrations or provide down migrations for critical changes.
+- Take a DB backup before deployment.
+- Prefer forward-only migrations to minimize rollback risk.
 
 ## Observability (Minimum)
-- Ship stdout logs to your log system (e.g., Loki/ELK/CloudWatch).
-- Add alerting on 5xx rates and /ready failures.
+- Ship stdout JSON logs to your log system (e.g., Loki/ELK/CloudWatch).
+- Alert on 5xx rate spikes and /ready returning 503.

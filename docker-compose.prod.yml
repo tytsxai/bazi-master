@@ -43,11 +43,44 @@ services:
       PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-bazi_master}?schema=public
       REDIS_URL: redis://redis:6379
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL}
+      BACKEND_BASE_URL: ${BACKEND_BASE_URL}
+      ALLOW_LOCALHOST_PROD: ${ALLOW_LOCALHOST_PROD:-false}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      SESSION_IDLE_MS: ${SESSION_IDLE_MS:-}
+      SESSION_TOKEN_SECRET: ${SESSION_TOKEN_SECRET}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_MAX_TOKENS: ${AI_MAX_TOKENS:-}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      WECHAT_APP_ID: ${WECHAT_APP_ID:-}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+      WECHAT_SCOPE: ${WECHAT_SCOPE:-}
+      WECHAT_FRONTEND_URL: ${WECHAT_FRONTEND_URL:-}
+      WECHAT_REDIRECT_URI: ${WECHAT_REDIRECT_URI:-}
+      RESET_TOKEN_TTL_MS: ${RESET_TOKEN_TTL_MS:-}
+      RESET_REQUEST_MIN_DURATION_MS: ${RESET_REQUEST_MIN_DURATION_MS:-}
+      IMPORT_BATCH_SIZE: ${IMPORT_BATCH_SIZE:-}
+      SHUTDOWN_TIMEOUT_MS: ${SHUTDOWN_TIMEOUT_MS:-}
       # Make sure to set these in .env or CI secrets
-      ADMIN_EMAILS: ${ADMIN_EMAILS:-admin@example.com}
+      ADMIN_EMAILS: ${ADMIN_EMAILS}
     ports:
       - "4000:4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
 
   frontend:
     build:

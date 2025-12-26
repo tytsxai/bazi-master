@@ -105,7 +105,7 @@ export const ensureLocalPostgres = async ({
 
   const user = process.env.PGUSER || process.env.USER || 'postgres';
   const encodedUser = encodeURIComponent(user);
-  const url = `postgresql://${encodedUser}@${host}:${port}/${dbName}`;
+  const url = `postgresql://${encodedUser}@${host}:${port}/${dbName}?schema=public`;
   return { url, started: !alreadyRunning };
 };
 
