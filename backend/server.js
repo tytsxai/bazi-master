@@ -392,16 +392,29 @@ const validateProductionConfig = () => {
 };
 
 const ensureSoftDeleteTables = async () => {
-  if (IS_PRODUCTION || !IS_SQLITE || process.env.ALLOW_RUNTIME_SCHEMA_SYNC === 'false') return;
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS BaziRecordTrash (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER NOT NULL,
-      recordId INTEGER NOT NULL,
-      deletedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(userId, recordId)
-    );
-  `);
+  if (IS_PRODUCTION || process.env.ALLOW_RUNTIME_SCHEMA_SYNC === 'false') return;
+  
+  if (IS_SQLITE) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS BaziRecordTrash (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER NOT NULL,
+        recordId INTEGER NOT NULL,
+        deletedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(userId, recordId)
+      );
+    `);
+  } else if (IS_POSTGRES) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "BaziRecordTrash" (
+        "id" SERIAL NOT NULL,
+        "userId" INTEGER NOT NULL,
+        "recordId" INTEGER NOT NULL,
+        "deletedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "BaziRecordTrash_pkey" PRIMARY KEY ("id")
+      );
+    `);
+  }
 };
 
 const ensureBaziRecordTrashTable = async () => {
@@ -1194,16 +1207,29 @@ Four Transformations: ${transformations}
 const ensureUserSettingsTable = async () => {
   if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
-    await prisma.$executeRaw`
-      CREATE TABLE IF NOT EXISTS UserSettings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId INTEGER NOT NULL UNIQUE,
-        locale TEXT,
-        preferences TEXT,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
+    if (IS_SQLITE) {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS UserSettings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          userId INTEGER NOT NULL UNIQUE,
+          locale TEXT,
+          preferences TEXT,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    } else if (IS_POSTGRES) {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "UserSettings" (
+          "id" SERIAL NOT NULL,
+          "userId" INTEGER NOT NULL UNIQUE,
+          "locale" TEXT,
+          "preferences" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    }
   } catch (error) {
     console.error('Failed to ensure UserSettings table:', error);
   }
