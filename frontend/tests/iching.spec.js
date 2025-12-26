@@ -27,7 +27,8 @@ test('I Ching divination flow with AI interpretation and history save', async ({
   expect(loginResponse.ok()).toBeTruthy();
   const loginData = await loginResponse.json();
 
-  await page.addInitScript(
+  await page.goto('/iching', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(
     ({ token, user }) => {
       localStorage.setItem('bazi_token', token);
       localStorage.setItem('bazi_token_origin', 'backend');
@@ -37,8 +38,7 @@ test('I Ching divination flow with AI interpretation and history save', async ({
     },
     { token: loginData.token, user: loginData.user }
   );
-
-  await page.goto('/profile', { waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('button', { name: /Logout/i })).toBeVisible();
   await snap('01-profile');
 

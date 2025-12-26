@@ -197,3 +197,7 @@
 - Verified security profile flow from /history via Playwright (security-profile-history.spec.js) with screenshots.
 - Marked feature_list.json test "[A. Security & Access Control] Verify Profile behavior scenario 3" as passing. Current progress: 69/479 tests passing.
 - Next: continue remaining Security & Access Control scenarios (#47+), then move to next failing feature.
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js); fixed iching.spec.js login setup to use localStorage + reload for stable auth.
+- Added Playwright security flow for Ziwei V2 chart from /zodiac (security-ziwei-zodiac.spec.js) with backend-response verification and screenshots.
+- Verified Ziwei from Zodiac flow end-to-end via Playwright; marked feature_list.json test #48 as passing. Current progress: 70/479 tests passing.
+- Next: continue remaining Ziwei/Zodiac/Tarot failing scenarios and follow remaining security/navigation/data validation tests.
