@@ -1,11 +1,11 @@
 import path from 'path';
 import fs from 'fs';
-import { pathToFileURL } from 'url';
+import { fileURLToPath } from 'url';
 
 export const readPrismaDatasourceInfo = () => {
   try {
-    const here = path.dirname(pathToFileURL(import.meta.url).pathname);
-    const schemaPath = path.resolve(here, '..', 'prisma', 'schema.prisma');
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const schemaPath = path.resolve(here, '..', '..', 'prisma', 'schema.prisma');
     const raw = fs.readFileSync(schemaPath, 'utf8');
     const datasourceMatch = raw.match(/datasource\s+db\s*{([\s\S]*?)}/m);
     const block = datasourceMatch?.[1] ?? '';
@@ -27,8 +27,8 @@ export const ensureDatabaseUrl = () => {
 
   // Force SQLite for development
   try {
-    const here = path.dirname(pathToFileURL(import.meta.url).pathname);
-    const sqlitePath = path.resolve(here, '..', 'prisma', 'dev.db');
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const sqlitePath = path.resolve(here, '..', '..', 'prisma', 'dev.db');
     process.env.DATABASE_URL = `file:${sqlitePath}`;
   } catch {
     process.env.DATABASE_URL = 'file:./dev.db';

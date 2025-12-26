@@ -5,7 +5,7 @@ import { createSessionStore } from '../sessionStore.js';
 const prisma = new PrismaClient();
 
 const ensureTrashTable = async () => {
-  await prisma.$executeRawUnsafe(`
+  await prisma.$executeRaw(Prisma.sql`
     CREATE TABLE IF NOT EXISTS BaziRecordTrash (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId INTEGER NOT NULL,

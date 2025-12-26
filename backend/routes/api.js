@@ -1,11 +1,65 @@
 import express from 'express';
+import { PrismaClient } from '@prisma/client';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { generateAIContent } from '../services/ai.js';
 import { getBaziCalculation } from '../services/bazi.js';
 import { validateBaziInput } from '../validation.js';
 import { sanitizeQueryParam, parseIdParam } from '../utils/validation.js';
+import { initRedis } from '../redis.js';
+import { hasBaziCacheMirror } from '../baziCache.js';
+import { listKnownLocations } from '../solarTime.js';
+import { getServerConfig as getServerConfigFromEnv } from '../env.js';
 
 const router = express.Router();
+const prisma = new PrismaClient();
+
+const {
+  aiProvider: AI_PROVIDER,
+  availableProviders: AVAILABLE_PROVIDERS,
+  nodeEnv: NODE_ENV,
+} = getServerConfigFromEnv();
+
+const IS_PRODUCTION = NODE_ENV === 'production';
+
+const withTimeout = (promise, timeoutMs) => {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const timer = setTimeout(() => {
+        clearTimeout(timer);
+        reject(new Error('Timeout'));
+      }, timeoutMs);
+      timer.unref?.();
+    }),
+  ]);
+};
+
+const checkDatabase = async () => {
+  try {
+    await withTimeout(prisma.user.findFirst({ select: { id: true } }), 1500);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || 'db_check_failed' };
+  }
+};
+
+const checkRedis = async () => {
+  const configured = Boolean(process.env.REDIS_URL);
+  const client = await initRedis();
+  if (!client) {
+    return configured ? { ok: false, status: 'unavailable' } : { ok: true, status: 'disabled' };
+  }
+  if (!client.isOpen) {
+    return { ok: false, status: 'disconnected' };
+  }
+  try {
+    await withTimeout(client.ping(), 1000);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || 'redis_check_failed' };
+  }
+};
 
 // Health check endpoints
 router.get('/health', async (req, res) => {

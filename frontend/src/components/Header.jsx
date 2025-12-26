@@ -126,6 +126,7 @@ export default function Header() {
           <Link
             to="/profile"
             onClick={handleSafeNavClick}
+            data-routed="true"
             className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive('/profile') ? 'text-gold-400' : 'text-white/80'
               }`}
           >
@@ -134,6 +135,7 @@ export default function Header() {
           <Link
             to="/history"
             onClick={handleSafeNavClick}
+            data-routed="true"
             className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive('/history') ? 'text-gold-400' : 'text-white/80'
               }`}
           >
@@ -142,6 +144,7 @@ export default function Header() {
           <Link
             to="/favorites"
             onClick={handleSafeNavClick}
+            data-routed="true"
             className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive('/favorites') ? 'text-gold-400' : 'text-white/80'
               }`}
           >

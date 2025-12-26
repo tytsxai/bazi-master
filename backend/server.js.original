@@ -195,8 +195,8 @@ if (trustProxy !== null) {
 const applySqlitePragmas = async () => {
   if (!IS_SQLITE) return;
   try {
-    await prisma.$queryRawUnsafe('PRAGMA journal_mode=WAL;');
-    await prisma.$queryRawUnsafe('PRAGMA busy_timeout=5000;');
+    await prisma.$queryRaw(Prisma.sql'PRAGMA journal_mode=WAL;');
+    await prisma.$queryRaw(Prisma.sql'PRAGMA busy_timeout=5000;');
   } catch (error) {
     console.error('Failed to apply SQLite pragmas:', error);
   }
@@ -395,7 +395,7 @@ const ensureSoftDeleteTables = async () => {
   if (IS_PRODUCTION || process.env.ALLOW_RUNTIME_SCHEMA_SYNC === 'false') return;
   
   if (IS_SQLITE) {
-    await prisma.$executeRawUnsafe(`
+    await prisma.$executeRaw(Prisma.sql`
       CREATE TABLE IF NOT EXISTS BaziRecordTrash (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         userId INTEGER NOT NULL,
@@ -405,7 +405,7 @@ const ensureSoftDeleteTables = async () => {
       );
     `);
   } else if (IS_POSTGRES) {
-    await prisma.$executeRawUnsafe(`
+    await prisma.$executeRaw(Prisma.sql`
       CREATE TABLE IF NOT EXISTS "BaziRecordTrash" (
         "id" SERIAL NOT NULL,
         "userId" INTEGER NOT NULL,
@@ -421,7 +421,7 @@ const ensureBaziRecordTrashTable = async () => {
   if (IS_SQLITE) return;
   if (!IS_POSTGRES) return;
   try {
-    await prisma.$executeRawUnsafe(`
+    await prisma.$executeRaw(Prisma.sql`
       CREATE TABLE IF NOT EXISTS "BaziRecordTrash" (
         "id" SERIAL NOT NULL,
         "userId" INTEGER NOT NULL,
@@ -430,7 +430,7 @@ const ensureBaziRecordTrashTable = async () => {
         CONSTRAINT "BaziRecordTrash_pkey" PRIMARY KEY ("id")
       );
     `);
-    await prisma.$executeRawUnsafe(`
+    await prisma.$executeRaw(Prisma.sql`
       CREATE UNIQUE INDEX IF NOT EXISTS "BaziRecordTrash_userId_recordId_key"
       ON "BaziRecordTrash" ("userId", "recordId");
     `);
@@ -1208,7 +1208,7 @@ const ensureUserSettingsTable = async () => {
   if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
     if (IS_SQLITE) {
-      await prisma.$executeRawUnsafe(`
+      await prisma.$executeRaw(Prisma.sql`
         CREATE TABLE IF NOT EXISTS UserSettings (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           userId INTEGER NOT NULL UNIQUE,
@@ -1219,7 +1219,7 @@ const ensureUserSettingsTable = async () => {
         )
       `);
     } else if (IS_POSTGRES) {
-      await prisma.$executeRawUnsafe(`
+      await prisma.$executeRaw(Prisma.sql`
         CREATE TABLE IF NOT EXISTS "UserSettings" (
           "id" SERIAL NOT NULL,
           "userId" INTEGER NOT NULL UNIQUE,
@@ -1239,7 +1239,7 @@ const ensureZiweiHistoryTable = async () => {
   if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
     if (IS_SQLITE) {
-      await prisma.$executeRawUnsafe(`
+      await prisma.$executeRaw(Prisma.sql`
         CREATE TABLE IF NOT EXISTS ZiweiRecord (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           userId INTEGER NOT NULL,
@@ -1253,7 +1253,7 @@ const ensureZiweiHistoryTable = async () => {
         )
       `);
     } else if (IS_POSTGRES) {
-      await prisma.$executeRawUnsafe(`
+      await prisma.$executeRaw(Prisma.sql`
         CREATE TABLE IF NOT EXISTS "ZiweiRecord" (
           "id" SERIAL NOT NULL,
           "userId" INTEGER NOT NULL,
@@ -1278,11 +1278,11 @@ const ensureBaziRecordUpdatedAt = async () => {
     let hasUpdatedAt = false;
     
     if (IS_SQLITE) {
-      const columns = await prisma.$queryRawUnsafe('PRAGMA table_info(BaziRecord);');
+      const columns = await prisma.$queryRaw(Prisma.sql'PRAGMA table_info(BaziRecord);');
       hasUpdatedAt = Array.isArray(columns)
         && columns.some((column) => column?.name === 'updatedAt');
     } else if (IS_POSTGRES) {
-      const result = await prisma.$queryRawUnsafe(`
+      const result = await prisma.$queryRaw(Prisma.sql`
         SELECT column_name 
         FROM information_schema.columns 
         WHERE table_name = 'BaziRecord' AND column_name = 'updatedAt'
@@ -1293,15 +1293,15 @@ const ensureBaziRecordUpdatedAt = async () => {
     if (hasUpdatedAt) return;
 
     if (IS_SQLITE) {
-      await prisma.$executeRawUnsafe(
+      await prisma.$executeRaw(Prisma.sql
         'ALTER TABLE BaziRecord ADD COLUMN updatedAt DATETIME'
       );
     } else if (IS_POSTGRES) {
-      await prisma.$executeRawUnsafe(
+      await prisma.$executeRaw(Prisma.sql
         'ALTER TABLE "BaziRecord" ADD COLUMN "updatedAt" TIMESTAMP(3)'
       );
     }
-    await prisma.$executeRawUnsafe(
+    await prisma.$executeRaw(Prisma.sql
       'UPDATE BaziRecord SET updatedAt = createdAt WHERE updatedAt IS NULL'
     );
   } catch (error) {
