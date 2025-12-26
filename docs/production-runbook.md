@@ -25,6 +25,7 @@ The application provides a deep health check endpoint that probes dependencies (
 ### Verification Command
 ```bash
 curl -i http://localhost:4000/health
+curl -i http://localhost:4000/api/ready
 ```
 
 ## 2. Structured Logging
