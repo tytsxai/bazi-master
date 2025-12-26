@@ -2,8 +2,13 @@ const REDIS_URL = process.env.REDIS_URL || '';
 let redisClient = null;
 let redisInitPromise = null;
 
-export const initRedis = async () => {
-  if (!REDIS_URL) return null;
+export const initRedis = async ({ require: requireRedis = false } = {}) => {
+  if (!REDIS_URL) {
+    if (requireRedis) {
+      throw new Error('REDIS_URL is required for production sessions.');
+    }
+    return null;
+  }
   if (redisClient) return redisClient;
   if (redisInitPromise) return redisInitPromise;
   redisInitPromise = (async () => {
@@ -18,6 +23,9 @@ export const initRedis = async () => {
       console.log('[redis] connected');
       return redisClient;
     } catch (error) {
+      if (requireRedis) {
+        throw new Error(error?.message || 'redis_unavailable');
+      }
       console.warn('[redis] unavailable:', error?.message || error);
       redisClient = null;
       return null;

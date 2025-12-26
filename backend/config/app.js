@@ -83,6 +83,9 @@ export const initAppConfig = () => {
     nodeEnv: NODE_ENV,
   } = getServerConfigFromEnv();
 
+  // Rate limiting is enabled in production or when explicitly configured
+  const RATE_LIMIT_ENABLED = NODE_ENV === 'production' || RATE_LIMIT_MAX > 0;
+
   const IS_PRODUCTION = NODE_ENV === 'production';
   const DATABASE_URL = process.env.DATABASE_URL || '';
 
@@ -103,6 +106,7 @@ export const initAppConfig = () => {
     MAX_URL_LENGTH,
     RATE_LIMIT_WINDOW_MS,
     RATE_LIMIT_MAX,
+    RATE_LIMIT_ENABLED,
     SESSION_IDLE_MS,
     AI_PROVIDER,
     AVAILABLE_PROVIDERS,
@@ -111,7 +115,6 @@ export const initAppConfig = () => {
     GOOGLE_REDIRECT_URI,
     FRONTEND_URL,
     ADMIN_EMAILS,
-    SESSION_TOKEN_SECRET,
     DEV_OAUTH_ENABLED,
     WECHAT_APP_ID,
     WECHAT_APP_SECRET,

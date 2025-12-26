@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createAuthorizeToken, createRequireAuth, requireAdmin } from '../auth.js';
+import { buildAuthToken, createAuthorizeToken, createRequireAuth, requireAdmin } from '../auth.js';
 
 const makeRes = () => {
   const res = {
@@ -31,6 +31,16 @@ const makeNext = () => {
   return { fn, get called() { return called; } };
 };
 
+const TOKEN_SECRET = 'test-session-secret';
+
+const makeToken = ({ userId, issuedAt } = {}) => {
+  const token = buildAuthToken({ userId, issuedAt, secret: TOKEN_SECRET });
+  if (!token) {
+    throw new Error('Failed to build auth token');
+  }
+  return token;
+};
+
 describe('requireAuth', () => {
   test('returns 401 when Authorization header is missing', async () => {
     const sessionStore = new Map();
@@ -39,7 +49,8 @@ describe('requireAuth', () => {
       prisma,
       sessionStore,
       isAdminUser: () => false,
-      now: () => 1000
+      now: () => 1000,
+      tokenSecret: TOKEN_SECRET
     });
     const requireAuth = createRequireAuth({ authorizeToken });
     const req = { headers: {} };
@@ -60,7 +71,8 @@ describe('requireAuth', () => {
       prisma,
       sessionStore,
       isAdminUser: () => false,
-      now: () => 1000
+      now: () => 1000,
+      tokenSecret: TOKEN_SECRET
     });
     const requireAuth = createRequireAuth({ authorizeToken, allowSessionExpiredSilent: false });
     const req = { headers: { 'x-session-expired-silent': '1' } };
@@ -81,7 +93,8 @@ describe('requireAuth', () => {
       prisma,
       sessionStore,
       isAdminUser: () => false,
-      now: () => 1000
+      now: () => 1000,
+      tokenSecret: TOKEN_SECRET
     });
     const requireAuth = createRequireAuth({ authorizeToken });
     const req = { headers: { 'x-session-expired-silent': '1' } };
@@ -103,7 +116,8 @@ describe('requireAuth', () => {
       prisma,
       sessionStore,
       isAdminUser: () => false,
-      now: () => 1000
+      now: () => 1000,
+      tokenSecret: TOKEN_SECRET
     });
     const requireAuth = createRequireAuth({ authorizeToken });
     const req = { headers: { authorization: 'Bearer nope' } };
@@ -126,12 +140,14 @@ describe('requireAuth', () => {
       sessionStore,
       isAdminUser: () => false,
       tokenTtlMs: 500,
-      now: () => now
+      now: () => now,
+      tokenSecret: TOKEN_SECRET
     });
     const requireAuth = createRequireAuth({ authorizeToken });
+    const token = makeToken({ userId: 1, issuedAt: 1000 });
     const req = {
       headers: {
-        authorization: 'Bearer token_1_1000',
+        authorization: `Bearer ${token}`,
         'x-session-expired-silent': '1'
       }
     };
@@ -156,10 +172,12 @@ describe('requireAuth', () => {
       sessionStore,
       isAdminUser: () => false,
       tokenTtlMs: 500,
-      now: () => now
+      now: () => now,
+      tokenSecret: TOKEN_SECRET
     });
     const requireAuth = createRequireAuth({ authorizeToken });
-    const req = { headers: { authorization: 'Bearer token_1_1000' } };
+    const token = makeToken({ userId: 1, issuedAt: 1000 });
+    const req = { headers: { authorization: `Bearer ${token}` } };
     const res = makeRes();
     const next = makeNext();
 
@@ -174,14 +192,15 @@ describe('requireAuth', () => {
     const sessionStore = new Map();
     const prisma = { user: { findUnique: async () => ({ id: 1, email: 'a@b.com', name: 'A' }) } };
     const now = 2000;
-    const token = 'token_1_1500';
+    const token = makeToken({ userId: 1, issuedAt: 1500 });
     sessionStore.set(token, 1000);
     const authorizeToken = createAuthorizeToken({
       prisma,
       sessionStore,
       isAdminUser: () => false,
       sessionIdleMs: 500,
-      now: () => now
+      now: () => now,
+      tokenSecret: TOKEN_SECRET
     });
     const requireAuth = createRequireAuth({ authorizeToken });
     const req = { headers: { authorization: `Bearer ${token}` } };
@@ -199,13 +218,14 @@ describe('requireAuth', () => {
   test('returns 401 when user does not exist', async () => {
     const sessionStore = new Map();
     const prisma = { user: { findUnique: async () => null } };
-    const token = 'token_2_1500';
+    const token = makeToken({ userId: 2, issuedAt: 1500 });
     sessionStore.set(token, 1800);
     const authorizeToken = createAuthorizeToken({
       prisma,
       sessionStore,
       isAdminUser: () => false,
-      now: () => 2000
+      now: () => 2000,
+      tokenSecret: TOKEN_SECRET
     });
     const requireAuth = createRequireAuth({ authorizeToken });
     const req = { headers: { authorization: `Bearer ${token}` } };
@@ -223,13 +243,14 @@ describe('requireAuth', () => {
     const sessionStore = new Map();
     const prisma = { user: { findUnique: async () => ({ id: 7, email: 'user@b.com', name: 'User' }) } };
     const now = 3000;
-    const token = 'token_7_2500';
+    const token = makeToken({ userId: 7, issuedAt: 2500 });
     sessionStore.set(token, 2800);
     const authorizeToken = createAuthorizeToken({
       prisma,
       sessionStore,
       isAdminUser: (user) => user.email === 'admin@b.com',
-      now: () => now
+      now: () => now,
+      tokenSecret: TOKEN_SECRET
     });
     const requireAuth = createRequireAuth({ authorizeToken });
     const req = { headers: { authorization: `Bearer ${token}` } };
@@ -272,5 +293,12 @@ describe('requireAdmin', () => {
 
     assert.equal(res.statusCode, null);
     assert.equal(next.called, true);
+  });
+});
+
+describe('buildAuthToken', () => {
+  test('does not expose the userId in clear text', () => {
+    const token = makeToken({ userId: 42, issuedAt: 1234 });
+    assert.equal(token.startsWith('token_42_'), false);
   });
 });

@@ -1,6 +1,13 @@
 export const createSessionStore = ({ ttlMs = null } = {}) => {
   const store = new Map();
   let mirror = null;
+  let warnedOnFallback = false;
+
+  const warnOnFallback = () => {
+    if (mirror || warnedOnFallback) return;
+    warnedOnFallback = true;
+    console.warn('[session-store] Redis unavailable; using in-memory session store.');
+  };
 
   const setMirror = (nextMirror) => {
     mirror = nextMirror;
@@ -15,9 +22,11 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
 
   return {
     get(key) {
+      warnOnFallback();
       return store.get(key);
     },
     async getAsync(key) {
+      warnOnFallback();
       const local = store.get(key);
       if (local !== undefined) return local;
       if (!mirror?.get) return null;
@@ -33,6 +42,7 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
       return normalized;
     },
     set(key, value) {
+      warnOnFallback();
       const normalized = normalizeValue(value);
       if (normalized === null) return;
       store.set(key, normalized);
@@ -41,15 +51,18 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
       }
     },
     delete(key) {
+      warnOnFallback();
       store.delete(key);
       if (mirror?.delete) {
         mirror.delete(key);
       }
     },
     has(key) {
+      warnOnFallback();
       return store.has(key);
     },
     async hasAsync(key) {
+      warnOnFallback();
       const local = store.get(key);
       if (local !== undefined) return true;
       if (!mirror?.get) return false;
@@ -65,12 +78,14 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
       return true;
     },
     clear() {
+      warnOnFallback();
       store.clear();
       if (mirror?.clear) {
         mirror.clear();
       }
     },
     deleteByPrefix(prefix) {
+      warnOnFallback();
       if (!prefix) return;
       for (const key of store.keys()) {
         if (typeof key === 'string' && key.startsWith(prefix)) {
@@ -82,6 +97,7 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
       }
     },
     keys() {
+      warnOnFallback();
       return store.keys();
     },
     hasMirror() {

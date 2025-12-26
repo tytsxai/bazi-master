@@ -11,7 +11,7 @@ const rootDir = path.resolve(__dirname, '..', '..');
 const backendDir = path.join(rootDir, 'backend');
 const frontendDir = path.join(rootDir, 'frontend');
 const prismaSourceSchemaPath = path.join(rootDir, 'prisma', 'schema.prisma');
-const prismaGeneratedSchemaPath = path.join(rootDir, 'node_modules', '.prisma', 'client', 'schema.prisma');
+const prismaGeneratedSchemaPath = path.join(backendDir, 'node_modules', '.prisma', 'client', 'schema.prisma');
 const prismaSchemaCandidates = [
   prismaGeneratedSchemaPath,
   prismaSourceSchemaPath,

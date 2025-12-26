@@ -1,6 +1,17 @@
-import { createAiGuard, createInFlightDeduper } from '../lib/concurrency.js';
+import { getServerConfig as getServerConfigFromEnv } from '../env.js';
+import { createAiGuard } from '../lib/concurrency.js';
 
-const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS) || 15000;
+const {
+  aiProvider: AI_PROVIDER,
+  openaiApiKey: OPENAI_API_KEY,
+  anthropicApiKey: ANTHROPIC_API_KEY,
+  openaiModel: OPENAI_MODEL,
+  anthropicModel: ANTHROPIC_MODEL,
+  aiMaxTokens: AI_MAX_TOKENS,
+  aiTimeoutMs: AI_TIMEOUT_MS,
+  availableProviders: AVAILABLE_PROVIDERS,
+  resetRequestMinDurationMs: RESET_REQUEST_MIN_DURATION_MS,
+} = getServerConfigFromEnv();
 
 const fetchWithTimeout = async (url, options, timeoutMs = AI_TIMEOUT_MS) => {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return fetch(url, options);
@@ -23,19 +34,34 @@ const ensureMinDuration = async (startedAtMs, minDurationMs) => {
   const elapsed = Date.now() - startedAtMs;
   const remaining = minDurationMs - elapsed;
   if (remaining > 0) {
-    await new Promise(resolve => setTimeout(resolve, remaining));
+    await new Promise((resolve) => setTimeout(resolve, remaining));
   }
 };
 
-const callOpenAI = async ({ system, user }) => {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OpenAI API key not configured');
+const normalizeProviderName = (value) =>
+  typeof value === 'string' ? value.trim().toLowerCase() : '';
 
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const resolveAiProvider = (requestedProvider) => {
+  const normalized = normalizeProviderName(requestedProvider);
+  const provider = normalized || AI_PROVIDER || 'mock';
+  const providerMeta = AVAILABLE_PROVIDERS?.find((item) => item.name === provider);
+  if (!providerMeta) {
+    throw new Error('Unknown AI provider.');
+  }
+  if (!providerMeta.enabled) {
+    throw new Error('Requested AI provider is not available.');
+  }
+  return provider;
+};
+
+const callOpenAI = async ({ system, user }) => {
+  if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
+
+  const model = OPENAI_MODEL || 'gpt-4o-mini';
   const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -45,7 +71,7 @@ const callOpenAI = async ({ system, user }) => {
         { role: 'user', content: user },
       ],
       temperature: 0.7,
-      max_tokens: parseInt(process.env.AI_MAX_TOKENS) || 700,
+      max_tokens: Number.isFinite(AI_MAX_TOKENS) ? AI_MAX_TOKENS : 700,
     }),
   });
 
@@ -59,14 +85,13 @@ const callOpenAI = async ({ system, user }) => {
 };
 
 const callOpenAIStream = async ({ system, user, onChunk }) => {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OpenAI API key not configured');
+  if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
 
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const model = OPENAI_MODEL || 'gpt-4o-mini';
   const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -76,7 +101,7 @@ const callOpenAIStream = async ({ system, user, onChunk }) => {
         { role: 'user', content: user },
       ],
       temperature: 0.7,
-      max_tokens: parseInt(process.env.AI_MAX_TOKENS) || 700,
+      max_tokens: Number.isFinite(AI_MAX_TOKENS) ? AI_MAX_TOKENS : 700,
       stream: true,
     }),
   });
@@ -122,20 +147,19 @@ const callOpenAIStream = async ({ system, user, onChunk }) => {
 };
 
 const callAnthropic = async ({ system, user }) => {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('Anthropic API key not configured');
+  if (!ANTHROPIC_API_KEY) throw new Error('Anthropic API key not configured');
 
-  const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620';
+  const model = ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620';
   const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      'x-api-key': apiKey,
+      'x-api-key': ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model,
-      max_tokens: parseInt(process.env.AI_MAX_TOKENS) || 700,
+      max_tokens: Number.isFinite(AI_MAX_TOKENS) ? AI_MAX_TOKENS : 700,
       system,
       messages: [{ role: 'user', content: user }],
     }),
@@ -151,20 +175,19 @@ const callAnthropic = async ({ system, user }) => {
 };
 
 const callAnthropicStream = async ({ system, user, onChunk }) => {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('Anthropic API key not configured');
+  if (!ANTHROPIC_API_KEY) throw new Error('Anthropic API key not configured');
 
-  const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620';
+  const model = ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620';
   const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      'x-api-key': apiKey,
+      'x-api-key': ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model,
-      max_tokens: parseInt(process.env.AI_MAX_TOKENS) || 700,
+      max_tokens: Number.isFinite(AI_MAX_TOKENS) ? AI_MAX_TOKENS : 700,
       system,
       messages: [{ role: 'user', content: user }],
       stream: true,
@@ -210,15 +233,23 @@ const callAnthropicStream = async ({ system, user, onChunk }) => {
   }
 };
 
+const resolveFallback = (fallback) => {
+  if (typeof fallback === 'function') return fallback();
+  if (typeof fallback === 'string' && fallback.trim()) return fallback;
+  return 'Mock AI response - configure AI provider for real responses';
+};
+
 const generateAIContent = async ({ system, user, fallback, provider, onChunk }) => {
-  const AI_PROVIDER = provider || process.env.AI_PROVIDER || 'mock';
-  const RESET_REQUEST_MIN_DURATION_MS = parseInt(process.env.RESET_REQUEST_MIN_DURATION_MS) || 350;
+  const resolvedProvider = resolveAiProvider(provider);
   const startedAt = Date.now();
 
   try {
-    if (AI_PROVIDER === 'mock') {
-      await ensureMinDuration(startedAt, RESET_REQUEST_MIN_DURATION_MS);
-      return fallback || 'Mock AI response - configure AI provider for real responses';
+    if (resolvedProvider === 'mock') {
+      const content = resolveFallback(fallback);
+      if (onChunk) {
+        onChunk(content);
+      }
+      return content;
     }
 
     const aiGuard = createAiGuard();
@@ -226,25 +257,29 @@ const generateAIContent = async ({ system, user, fallback, provider, onChunk }) 
 
     try {
       let result = '';
-      const onChunkWrapper = onChunk ? (chunk) => {
-        result += chunk;
-        onChunk(chunk);
-      } : (chunk) => { result += chunk; };
+      const onChunkWrapper = onChunk
+        ? (chunk) => {
+          result += chunk;
+          onChunk(chunk);
+        }
+        : (chunk) => {
+          result += chunk;
+        };
 
-      if (AI_PROVIDER === 'openai') {
+      if (resolvedProvider === 'openai') {
         if (onChunk) {
           await callOpenAIStream({ system, user, onChunk: onChunkWrapper });
         } else {
           result = await callOpenAI({ system, user });
         }
-      } else if (AI_PROVIDER === 'anthropic') {
+      } else if (resolvedProvider === 'anthropic') {
         if (onChunk) {
           await callAnthropicStream({ system, user, onChunk: onChunkWrapper });
         } else {
           result = await callAnthropic({ system, user });
         }
       } else {
-        throw new Error(`Unsupported AI provider: ${AI_PROVIDER}`);
+        throw new Error(`Unsupported AI provider: ${resolvedProvider}`);
       }
 
       return result;
@@ -256,58 +291,11 @@ const generateAIContent = async ({ system, user, fallback, provider, onChunk }) 
   }
 };
 
-export const resolveAiProvider = (requested) => {
-  const available = process.env.AVAILABLE_PROVIDERS ? process.env.AVAILABLE_PROVIDERS.split(',') : ['mock', 'openai', 'anthropic'];
-  const normalized = typeof requested === 'string' ? requested.trim().toLowerCase() : '';
-  if (normalized && available.includes(normalized)) return normalized;
-  return process.env.AI_PROVIDER || 'mock';
+export {
+  callOpenAI,
+  callOpenAIStream,
+  callAnthropic,
+  callAnthropicStream,
+  generateAIContent,
+  resolveAiProvider,
 };
-
-export const buildBaziPrompt = ({ pillars, fiveElements, tenGods, luckCycles, strength }) => {
-  const elementLines = fiveElements
-    ? Object.entries(fiveElements).map(([key, value]) => `- ${key}: ${value}`).join('\n')
-    : '- Not provided';
-  const tenGodLines = Array.isArray(tenGods)
-    ? tenGods
-      .filter((tg) => tg?.strength > 0)
-      .sort((a, b) => b.strength - a.strength)
-      .slice(0, 5)
-      .map((tg) => `- ${tg.name}: ${tg.strength}`)
-      .join('\n')
-    : '- Not provided';
-  const luckLines = Array.isArray(luckCycles)
-    ? luckCycles.map((cycle) => `- ${cycle.range}: ${cycle.stem}${cycle.branch}`).join('\n')
-    : '- Not provided';
-
-  const system = 'You are a seasoned BaZi practitioner. Provide a concise, grounded interpretation in Markdown with sections: Summary, Key Patterns, Advice. Keep under 220 words.';
-  const user = `
-Day Master: ${pillars?.day?.stem || 'Unknown'} (${pillars?.day?.elementStem || 'Unknown'})
-Month Pillar: ${pillars?.month?.stem || 'Unknown'} ${pillars?.month?.branch || 'Unknown'} (${pillars?.month?.elementBranch || 'Unknown'})
-Five Elements:
-${elementLines}
-Ten Gods (top):
-${tenGodLines}
-Luck Cycles:
-${luckLines}
-Strength Notes: ${strength || 'Not provided'}
-  `.trim();
-
-  const fallback = () => {
-    const summary = `A ${pillars?.day?.elementStem || 'balanced'} Day Master chart with notable elemental distribution.`;
-    const patterns = tenGodLines;
-    const advice = 'Focus on balancing elements that are lower in count and lean into favorable cycles.';
-    return `
-## 🔮 BaZi Insight
-**Summary:** ${summary}
-
-**Key Patterns:**
-${patterns}
-
-**Advice:** ${advice}
-    `.trim();
-  };
-
-  return { system, user, fallback };
-};
-
-export { generateAIContent };

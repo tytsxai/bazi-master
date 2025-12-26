@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { deleteBaziRecordHard } from '../recordCleanup.js';
 
 const prisma = new PrismaClient();

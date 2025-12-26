@@ -34,7 +34,7 @@ The `docker-compose.prod.yml` expects production values to be supplied via envir
 | `POSTGRES_PASSWORD` | DB Password | `postgres` |
 | `POSTGRES_DB` | DB Name | `bazi_master` |
 | `DATABASE_URL` | PostgreSQL connection URL | *(required in prod)* |
-| `REDIS_URL` | Redis URL for shared sessions/cache | `redis://redis:6379` |
+| `REDIS_URL` | Redis URL (required in production; used for sessions/cache) | `redis://redis:6379` |
 | `FRONTEND_URL` | Public web origin | *(required in prod)* |
 | `BACKEND_BASE_URL` | Public API base URL | *(required in prod)* |
 | `ADMIN_EMAILS` | Admin email list | *(required for admin access)* |
@@ -73,5 +73,122 @@ Backups are saved to `./backups/` as gzipped SQL files.
 ./scripts/restore-db.sh ./backups/bazi_master_YYYYMMDD_HHMMSS.sql.gz
 ```
 
+## Security Considerations
+
+### Environment Variables Security
+- Store all secrets in environment variables, never in code
+- Use different secrets for each environment (dev/staging/prod)
+- Rotate secrets regularly (recommended: every 90 days)
+- Use a secret management service like AWS Secrets Manager or HashiCorp Vault in production
+
+### HTTPS Configuration
+- Always use HTTPS in production
+- Configure SSL/TLS certificates properly
+- Enable HSTS headers for enhanced security
+- Redirect all HTTP traffic to HTTPS
+
+### CORS Configuration
+- Restrict `CORS_ALLOWED_ORIGINS` to your domain only
+- Use environment-specific CORS settings
+- Avoid using `*` in production CORS configuration
+
+### Rate Limiting
+- Rate limiting is automatically enabled in production
+- Default: 120 requests per minute per IP
+- Consider implementing more sophisticated rate limiting for high-traffic endpoints
+
+## Monitoring & Observability
+
+### Health Checks
+- **Liveness**: `GET /health` - indicates if the app is running
+- **Readiness**: `GET /ready` - indicates if the app is ready to serve traffic
+- Configure these endpoints in your load balancer health checks
+
+### Logging
+- Production logs are output in JSON format for easy parsing
+- Include request IDs for tracing requests across services
+- Log security events (failed authentications, rate limit hits)
+- Monitor for error patterns and anomalies
+
+### Metrics to Monitor
+- Response times for key endpoints
+- Error rates by endpoint
+- Database connection pool usage
+- Redis cache hit/miss rates
+- Rate limiting events
+
+### Recommended Monitoring Tools
+- **Application**: Prometheus + Grafana
+- **Infrastructure**: Datadog, New Relic, or AWS CloudWatch
+- **Logs**: ELK Stack (Elasticsearch, Logstash, Kibana) or Loki
+
+## Database Management
+
+### Connection Pooling
+- Configure appropriate connection pool sizes based on your workload
+- Monitor connection pool usage and adjust as needed
+- Use connection pooling libraries for better performance
+
+### Backup Strategy
+- Regular automated backups (daily + before deployments)
+- Test restore procedures regularly
+- Store backups in multiple locations (3-2-1 rule)
+- Encrypt backups at rest
+
+### Migration Safety
+- Always test migrations on staging before production
+- Have a rollback plan for failed migrations
+- Use Prisma's migration system for safe schema changes
+
 ## CI/CD Pipeline
-A GitHub Actions workflow exists at `.github/workflows/ci.yml` which installs dependencies, runs lint (if present), and executes backend/frontend tests. Ensure CI passes before deploying.
+
+### GitHub Actions
+A comprehensive CI/CD pipeline is configured in `.github/workflows/`:
+- **Linting**: Code quality checks
+- **Testing**: Backend and frontend test suites
+- **Security**: Dependency vulnerability scanning
+- **Build**: Docker image building and pushing
+- **Deploy**: Automated deployment to staging/production
+
+### Deployment Best Practices
+1. **Blue-Green Deployments**: Deploy to a separate environment first
+2. **Canary Releases**: Gradually roll out changes to a subset of users
+3. **Feature Flags**: Use feature flags for risky changes
+4. **Automated Rollbacks**: Ability to quickly rollback failed deployments
+
+### Environment Promotion
+- **Development** → **Staging** → **Production**
+- Each environment should be identical except for configuration
+- Use infrastructure as code (Docker Compose, Kubernetes, etc.)
+
+## Performance Optimization
+
+### Frontend
+- Enable gzip compression (configured in Nginx)
+- Use CDN for static assets
+- Implement proper caching headers
+- Optimize bundle size (< 500KB recommended)
+
+### Backend
+- Database query optimization
+- Implement caching strategies (Redis)
+- Use connection pooling
+- Optimize API response sizes
+
+### Scaling
+- **Horizontal Scaling**: Add more container instances
+- **Vertical Scaling**: Increase container resources
+- **Database Scaling**: Read replicas, sharding if needed
+
+## Troubleshooting
+
+### Common Issues
+1. **Database Connection Failures**: Check DATABASE_URL and network connectivity
+2. **Redis Connection Issues**: Verify REDIS_URL and Redis service status
+3. **OAuth Configuration**: Ensure callback URLs are correctly configured
+4. **Rate Limiting Too Aggressive**: Adjust RATE_LIMIT_MAX and RATE_LIMIT_WINDOW_MS
+
+### Debug Mode
+- Set `NODE_ENV=development` for detailed error messages (never in production)
+- Use request IDs to trace issues across logs
+- Enable debug logging temporarily for troubleshooting

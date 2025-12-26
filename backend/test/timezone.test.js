@@ -5,7 +5,7 @@ import {
   parseTimezoneOffsetMinutes,
   getOffsetMinutesFromTimeZone,
   buildBirthTimeMeta,
-} from '../timezone.js';
+} from '../utils/timezone.js';
 
 describe('timezone helpers', () => {
   test('parseTimezoneOffsetMinutes handles common formats', () => {

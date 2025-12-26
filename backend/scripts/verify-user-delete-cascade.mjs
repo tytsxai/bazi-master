@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
+import { buildAuthToken } from '../auth.js';
 import { cleanupUserInMemory, deleteUserCascade } from '../userCleanup.js';
 import { createSessionStore } from '../sessionStore.js';
 
@@ -102,7 +103,11 @@ try {
   const resetTokenByUser = new Map();
   const deletedClientIndex = new Map();
   const clientRecordIndex = new Map();
-  const token = `token_${user.id}_${Date.now()}`;
+  const sessionTokenSecret = 'cleanup-test-secret';
+  const token = buildAuthToken({ userId: user.id, secret: sessionTokenSecret });
+  if (!token) {
+    throw new Error('Unable to create test session token');
+  }
   sessionStore.set(token, Date.now());
   resetTokenStore.set('reset_token', { userId: user.id, expiresAt: Date.now() + 10000 });
   resetTokenByUser.set(user.id, 'reset_token');
@@ -116,6 +121,7 @@ try {
       resetTokenByUser,
       deletedClientIndex,
       clientRecordIndex,
+      sessionTokenSecret,
     });
   };
 

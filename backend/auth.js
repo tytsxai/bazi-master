@@ -8,10 +8,20 @@ const TOKEN_NONCE_BYTES = 16;
 const TOKEN_SIGNATURE_BYTES = 32;
 const TOKEN_NONCE_HEX_LENGTH = TOKEN_NONCE_BYTES * 2;
 const TOKEN_SIGNATURE_HEX_LENGTH = TOKEN_SIGNATURE_BYTES * 2;
+const TOKEN_KEY_BYTES = 32;
+const TOKEN_IV_BYTES = 12;
+const TOKEN_TAG_BYTES = 16;
+const TOKEN_ENCRYPTION_SALT = 'auth-token-v1';
+const TOKEN_MIN_PAYLOAD_BYTES = TOKEN_IV_BYTES + TOKEN_TAG_BYTES + 1;
 
 const normalizeSecret = (secret) => (typeof secret === 'string' ? secret.trim() : '');
+const FALLBACK_TOKEN_SECRET = crypto.randomBytes(32).toString('hex');
+const resolveTokenSecret = (secret) => normalizeSecret(secret) || FALLBACK_TOKEN_SECRET;
 
-const buildSignatureBase = ({ userId, issuedAt, nonce }) =>
+const buildSignatureBase = ({ issuedAt, payload }) =>
+  `${issuedAt}.${payload}`;
+
+const buildLegacySignatureBase = ({ userId, issuedAt, nonce }) =>
   `${userId}.${issuedAt}.${nonce}`;
 
 const buildTokenSignature = (secret, payload) => {
@@ -19,6 +29,55 @@ const buildTokenSignature = (secret, payload) => {
   const hmac = crypto.createHmac('sha256', secret);
   hmac.update(buildSignatureBase(payload));
   return hmac.digest('hex');
+};
+
+const buildLegacyTokenSignature = (secret, payload) => {
+  if (!secret) return null;
+  const hmac = crypto.createHmac('sha256', secret);
+  hmac.update(buildLegacySignatureBase(payload));
+  return hmac.digest('hex');
+};
+const deriveTokenKey = (secret) =>
+  crypto.scryptSync(secret, TOKEN_ENCRYPTION_SALT, TOKEN_KEY_BYTES);
+
+const encodePayload = (value) => Buffer.from(value).toString('base64url');
+
+const decodePayload = (value) => Buffer.from(value, 'base64url');
+
+const encryptTokenPayload = (secret, payload) => {
+  if (!secret) return null;
+  const key = deriveTokenKey(secret);
+  const iv = crypto.randomBytes(TOKEN_IV_BYTES);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(payload), 'utf8'),
+    cipher.final()
+  ]);
+  const tag = cipher.getAuthTag();
+  return encodePayload(Buffer.concat([iv, tag, ciphertext]));
+};
+
+const decryptTokenPayload = (secret, payload) => {
+  if (!secret || typeof payload !== 'string') return null;
+  let raw;
+  try {
+    raw = decodePayload(payload);
+  } catch (error) {
+    return null;
+  }
+  if (raw.length < TOKEN_MIN_PAYLOAD_BYTES) return null;
+  const iv = raw.subarray(0, TOKEN_IV_BYTES);
+  const tag = raw.subarray(TOKEN_IV_BYTES, TOKEN_IV_BYTES + TOKEN_TAG_BYTES);
+  const ciphertext = raw.subarray(TOKEN_IV_BYTES + TOKEN_TAG_BYTES);
+  try {
+    const key = deriveTokenKey(secret);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return JSON.parse(decrypted.toString('utf8'));
+  } catch (error) {
+    return null;
+  }
 };
 
 const safeEqual = (a, b) => {
@@ -34,15 +93,15 @@ export const buildAuthToken = ({
   secret = ''
 }) => {
   if (!Number.isFinite(userId)) return null;
-  const normalizedSecret = normalizeSecret(secret);
-  const signature = normalizedSecret
-    ? buildTokenSignature(normalizedSecret, { userId, issuedAt, nonce })
-    : null;
-  const suffix = signature ? `${nonce}${signature}` : nonce;
-  return `${TOKEN_PREFIX}_${userId}_${issuedAt}_${suffix}`;
+  const resolvedSecret = resolveTokenSecret(secret);
+  const payload = encryptTokenPayload(resolvedSecret, { userId, nonce });
+  if (!payload) return null;
+  const signature = buildTokenSignature(resolvedSecret, { issuedAt, payload });
+  const suffix = signature ? `${payload}.${signature}` : payload;
+  return `${TOKEN_PREFIX}_${issuedAt}_${suffix}`;
 };
 
-export const parseAuthToken = (token) => {
+const parseLegacyAuthToken = (token) => {
   if (typeof token !== 'string') return null;
   const match = token.match(/^token_(\d+)_(\d+)(?:_([A-Za-z0-9]+))?$/);
   if (!match) return null;
@@ -63,6 +122,30 @@ export const parseAuthToken = (token) => {
   return { userId, issuedAt, nonce, signature };
 };
 
+export const parseAuthToken = (token, { secret = '' } = {}) => {
+  if (typeof token !== 'string') return null;
+  const legacy = parseLegacyAuthToken(token);
+  if (legacy) return legacy;
+  const match = token.match(/^token_(\d+)_([A-Za-z0-9_-]+)\.([a-f0-9]+)$/i);
+  if (match) {
+    const issuedAt = Number(match[1]);
+    if (!Number.isFinite(issuedAt)) return null;
+    const payload = match[2];
+    const signature = match[3] || null;
+    const resolvedSecret = resolveTokenSecret(secret);
+    const decrypted = decryptTokenPayload(resolvedSecret, payload);
+    if (!decrypted || !Number.isFinite(decrypted.userId)) return null;
+    return {
+      userId: Number(decrypted.userId),
+      issuedAt,
+      nonce: decrypted.nonce ?? null,
+      signature,
+      payload
+    };
+  }
+  return null;
+};
+
 export const createAuthorizeToken = ({
   prisma,
   sessionStore,
@@ -72,23 +155,26 @@ export const createAuthorizeToken = ({
   now = () => Date.now(),
   tokenSecret = ''
 }) => {
-  const normalizedSecret = normalizeSecret(tokenSecret);
+  const resolvedSecret = resolveTokenSecret(tokenSecret);
   return async (token) => {
     if (!token) throw new Error('Unauthorized');
-    const parsed = parseAuthToken(token);
+    const parsed = parseAuthToken(token, { secret: resolvedSecret });
     if (!parsed) throw new Error('Invalid token');
-    if (normalizedSecret) {
-      if (!parsed.signature || !parsed.nonce) {
-        throw new Error('Invalid token');
-      }
-      const expected = buildTokenSignature(normalizedSecret, {
+    if (!parsed.signature) {
+      throw new Error('Invalid token');
+    }
+    const expected = parsed.payload
+      ? buildTokenSignature(resolvedSecret, {
+        issuedAt: parsed.issuedAt,
+        payload: parsed.payload,
+      })
+      : buildLegacyTokenSignature(resolvedSecret, {
         userId: parsed.userId,
         issuedAt: parsed.issuedAt,
         nonce: parsed.nonce,
       });
-      if (!expected || !safeEqual(expected, parsed.signature)) {
-        throw new Error('Invalid token');
-      }
+    if (!expected || !safeEqual(expected, parsed.signature)) {
+      throw new Error('Invalid token');
     }
     if (now() - parsed.issuedAt > tokenTtlMs) {
       throw new Error('Token expired');

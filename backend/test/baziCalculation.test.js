@@ -4,18 +4,23 @@ import {
   BRANCHES_MAP,
   ELEMENTS,
   STEMS_MAP,
+} from '../constants/stems.js';
+import {
   buildBaziCacheKey,
+  primeBaziCalculationCache,
+  setBaziCacheEntry,
+  invalidateBaziCalculationCache,
+  getCachedBaziCalculation,
+  buildFiveElementsPercent,
+  normalizeBaziResult
+} from '../baziCache.js';
+import {
   buildPillar,
   calculateTenGod,
   getBaziCalculation,
-  getCachedBaziCalculation,
   getElementRelation,
-  invalidateBaziCalculationCache,
   performCalculation,
-  primeBaziCalculationCache,
-  setBaziCacheEntry,
-} from '../server.js';
-import { buildFiveElementsPercent, normalizeBaziResult } from '../baziCache.js';
+} from '../services/bazi.js';
 import { validateBaziInput } from '../validation.js';
 
 test('validateBaziInput trims inputs and rejects invalid dates', () => {

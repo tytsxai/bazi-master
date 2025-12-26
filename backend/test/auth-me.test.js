@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test, before, after } from 'node:test';
+import { buildAuthToken } from '../auth.js';
 import { server, prisma } from '../server.js';
+
+const TOKEN_SECRET = 'test-session-secret-for-auth-me-test';
 
 let baseUrl = '';
 
@@ -45,7 +48,7 @@ test('GET /api/auth/me returns 401 for invalid token', async () => {
 
 test('GET /api/auth/me returns 401 for expired token', async () => {
   const expiredIssuedAt = Date.now() - 25 * 60 * 60 * 1000;
-  const token = `token_1_${expiredIssuedAt}`;
+  const token = buildAuthToken({ userId: 1, issuedAt: expiredIssuedAt, secret: TOKEN_SECRET });
   const response = await fetch(`${baseUrl}/api/auth/me`, {
     headers: { Authorization: `Bearer ${token}` }
   });

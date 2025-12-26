@@ -8,7 +8,6 @@ import swaggerUi from 'swagger-ui-express';
 import { ensureDatabaseUrl } from './config/database.js';
 import { initAppConfig } from './config/app.js';
 import { prisma, initPrismaConfig } from './config/prisma.js';
-import { logger, createRequestLogger } from './config/logger.js';
 
 // Import middleware
 import { helmetMiddleware, createCorsMiddleware } from './middleware/security.js';
@@ -74,13 +73,9 @@ app.get('/health', (req, res) => {
 // Request ID middleware
 app.use(requestIdMiddleware);
 
-// Request logging
-app.use(createRequestLogger());
-
 // URL length validation
 app.use((req, res, next) => {
   if (isUrlTooLong(req)) {
-    logger.warn({ requestId: req.requestId, url: req.url }, 'Request URI too long');
     return res.status(414).json({ error: 'Request-URI Too Long' });
   }
   return next();
@@ -95,7 +90,6 @@ const rateLimitMiddleware = createRateLimitMiddleware({
 app.use(rateLimitMiddleware);
 
 // API routes
-app.use('/api/v1', apiRouter);
 app.use('/api', apiRouter);
 
 // Swagger documentation (placeholder)
@@ -167,12 +161,12 @@ if (NODE_ENV !== 'test' && isMain) {
       // Initialize database tables
       // Add database initialization logic here...
     } catch (error) {
-      logger.error({ error: error.message, stack: error.stack }, 'Failed to initialize server prerequisites');
+      console.error('Failed to initialize server prerequisites:', error);
     }
 
     const bindHost = process.env.BIND_HOST || (IS_PRODUCTION ? '0.0.0.0' : '127.0.0.1');
     server.listen(PORT, bindHost, () => {
-      logger.info({ port: PORT, host: bindHost, nodeEnv: NODE_ENV }, 'BaZi Master API server started');
+      console.log(`BaZi Master API running on http://localhost:${PORT}`);
     });
   })();
 }

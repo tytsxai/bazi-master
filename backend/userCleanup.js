@@ -1,3 +1,5 @@
+import { parseAuthToken } from './auth.js';
+
 const deleteUserResetTokens = (userId, resetTokenStore, resetTokenByUser) => {
   if (!resetTokenStore || !resetTokenByUser) return;
   const directToken = resetTokenByUser.get(userId);
@@ -12,8 +14,19 @@ const deleteUserResetTokens = (userId, resetTokenStore, resetTokenByUser) => {
   }
 };
 
-const deleteUserSessions = (userId, sessionStore) => {
+const deleteUserSessions = (userId, sessionStore, sessionTokenSecret) => {
   if (!sessionStore) return;
+  if (sessionTokenSecret) {
+    if (!sessionStore.keys) return;
+    for (const token of sessionStore.keys()) {
+      if (typeof token !== 'string') continue;
+      const parsed = parseAuthToken(token, { secret: sessionTokenSecret });
+      if (parsed?.userId === userId) {
+        sessionStore.delete(token);
+      }
+    }
+    return;
+  }
   const prefix = `token_${userId}_`;
   if (typeof sessionStore.deleteByPrefix === 'function') {
     sessionStore.deleteByPrefix(prefix);
@@ -29,11 +42,18 @@ const deleteUserSessions = (userId, sessionStore) => {
 
 export const cleanupUserInMemory = (
   userId,
-  { sessionStore, resetTokenStore, resetTokenByUser, deletedClientIndex, clientRecordIndex } = {}
+  {
+    sessionStore,
+    resetTokenStore,
+    resetTokenByUser,
+    deletedClientIndex,
+    clientRecordIndex,
+    sessionTokenSecret
+  } = {}
 ) => {
   if (!userId) return;
   deleteUserResetTokens(userId, resetTokenStore, resetTokenByUser);
-  deleteUserSessions(userId, sessionStore);
+  deleteUserSessions(userId, sessionStore, sessionTokenSecret);
   deletedClientIndex?.delete?.(userId);
   clientRecordIndex?.delete?.(userId);
 };
