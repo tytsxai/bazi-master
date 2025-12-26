@@ -4,3 +4,4 @@ export * from './health.js';
 export * from './rateLimit.middleware.js';
 export * from './security.js';
 export * from './urlLength.middleware.js';
+export * from './error.js';

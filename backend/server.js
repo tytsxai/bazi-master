@@ -5,6 +5,11 @@ import { pathToFileURL } from 'url';
 import swaggerUi from 'swagger-ui-express';
 
 // Import configurations
+// Health Check imports
+import { checkDatabase, checkRedis } from './services/health.service.js';
+
+// Import configurations
+import { logger } from './config/logger.js';
 import { ensureDatabaseUrl } from './config/database.js';
 import { initAppConfig } from './config/app.js';
 import { prisma, initPrismaConfig } from './config/prisma.js';
@@ -13,12 +18,13 @@ import { prisma, initPrismaConfig } from './config/prisma.js';
 import {
   createCorsMiddleware,
   createRateLimitMiddleware,
-  healthCheckHandler,
   helmetMiddleware,
   requestIdMiddleware,
   requireAdmin,
   requireAuth,
   urlLengthMiddleware,
+  globalErrorHandler,
+  notFoundHandler,
 } from './middleware/index.js';
 
 // Import utilities
@@ -65,8 +71,59 @@ app.use(createCorsMiddleware(allowedOrigins));
 app.use(compression());
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
-// Health Check Endpoint (Probes)
-app.get('/health', healthCheckHandler);
+// HTTP Request Logger
+import pinoHttp from 'pino-http';
+app.use(pinoHttp({
+  logger,
+  // Define a custom success message
+  customSuccessMessage: function (req, res) {
+    if (res.statusCode === 404) {
+      return 'resource not found';
+    }
+    return `${req.method} completed`;
+  },
+  // Define a custom error message
+  customErrorMessage: function (req, res, err) {
+    return 'request errored with status code: ' + res.statusCode;
+  },
+  // Override attribute keys for the log object
+  customAttributeKeys: {
+    req: 'request',
+    res: 'response',
+    err: 'error',
+    responseTime: 'timeTaken'
+  },
+  // Define which properties to include in the log
+  serializers: {
+    req: (req) => ({
+      id: req.id,
+      method: req.method,
+      url: req.url,
+      query: req.query,
+      params: req.params,
+    }),
+    res: (res) => ({
+      statusCode: res.statusCode,
+    }),
+  },
+}));
+
+// Deep Health Check Endpoint
+app.get('/health', async (req, res) => {
+  const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
+  const ok = db.ok && (redis.ok || redis.status === 'disabled');
+
+  if (!ok) {
+    logger.warn({ checks: { db, redis } }, 'Health check failed');
+  }
+
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'ok' : 'degraded',
+    checks: { db, redis },
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
 
 // Request ID middleware
 app.use(requestIdMiddleware);
@@ -95,16 +152,22 @@ app.get('/api-docs.json', ...apiDocsGuards, (req, res) => res.json(openApiSpec))
 // Swagger UI
 app.use('/api-docs', ...apiDocsGuards, swaggerUi.serve, swaggerUi.setup(openApiSpec));
 
+// 404 Handler
+app.use(notFoundHandler);
+
+// Global Error Handler
+app.use(globalErrorHandler);
+
 // Create HTTP server
 const server = http.createServer(app);
 
 // Graceful shutdown handling
 const setupGracefulShutdown = (server) => {
   const closeServer = (signal) => {
-    console.log(`Received ${signal}, initiating graceful shutdown...`);
+    logger.info({ signal }, `Received signal, initiating graceful shutdown...`);
 
     const timeout = setTimeout(() => {
-      console.error('Graceful shutdown timeout, forcing exit...');
+      logger.error('Graceful shutdown timeout, forcing exit...');
       process.exit(1);
     }, 10000);
 
@@ -113,11 +176,12 @@ const setupGracefulShutdown = (server) => {
     server.close(async () => {
       try {
         await prisma.$disconnect();
+        logger.info('Prisma disconnected.');
       } catch (error) {
-        console.error('Error during Prisma disconnect:', error);
+        logger.error({ err: error }, 'Error during Prisma disconnect');
       } finally {
         clearTimeout(timeout);
-        console.log('Graceful shutdown complete.');
+        logger.info('Graceful shutdown complete.');
         process.exit(process.exitCode || 0);
       }
     });
@@ -145,6 +209,9 @@ if (NODE_ENV !== 'test' && isMain) {
       if (!process.env.DATABASE_URL?.includes('postgresql')) {
         errors.push('DATABASE_URL must be PostgreSQL in production');
       }
+      if (!process.env.REDIS_URL) {
+        errors.push('REDIS_URL must be configured in production to ensure consistent sessions/caching across instances.');
+      }
       if (!process.env.FRONTEND_URL || process.env.FRONTEND_URL.includes('localhost')) {
         warnings.push('FRONTEND_URL should not be localhost in production');
       }
@@ -154,12 +221,12 @@ if (NODE_ENV !== 'test' && isMain) {
     }
 
     warnings.forEach((warning) => {
-      console.warn(`[config] ${warning}`);
+      logger.warn({ warning }, `[config] ${warning}`);
     });
 
     if (errors.length > 0) {
       errors.forEach((error) => {
-        console.error(`[config] ${error}`);
+        logger.error({ error }, `[config] ${error}`);
       });
       process.exit(1);
       return;
@@ -168,17 +235,17 @@ if (NODE_ENV !== 'test' && isMain) {
     try {
       // Test database connection
       await prisma.$connect();
-      console.log('[db] Database connection established');
+      logger.info('[db] Database connection established');
     } catch (error) {
-      console.error('[db] Failed to connect to database:', error);
+      logger.fatal({ err: error }, '[db] Failed to connect to database');
       process.exit(1);
     }
 
     const bindHost = process.env.BIND_HOST || (IS_PRODUCTION ? '0.0.0.0' : '127.0.0.1');
     server.listen(PORT, bindHost, () => {
-      console.log(`BaZi Master API running on http://${bindHost}:${PORT}`);
+      logger.info(`BaZi Master API running on http://${bindHost}:${PORT}`);
       if (IS_PRODUCTION && bindHost === '0.0.0.0') {
-        console.log(`[production] Accepting connections from all interfaces`);
+        logger.info(`[production] Accepting connections from all interfaces`);
       }
     });
   })();
@@ -190,3 +257,4 @@ export {
   server,
   prisma,
 };
+
