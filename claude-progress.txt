@@ -167,3 +167,7 @@
 - Verified logout clears auth/session cache via Playwright (logout.spec.js) with screenshots; added checks for token origin/profile name cleanup and protected route redirect.
 - Marked feature_list.json test #39 (Logout clears tokens/session/user cache) as passing. Current progress: 62/479 tests passing.
 - Next: continue remaining Security & Access Control tests (direct URL access block, role-based menu visibility, confirmation dialogs) then move to next functional module.
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js); both passed.
+- Added Playwright security test for direct URL access to another user's BaZi record (security-record-direct-access.spec.js) with screenshots and backend 404 validation.
+- Verified direct record access block via Playwright; marked feature_list.json test #40 as passing. Current progress: 63/479 tests passing.
+- Next: continue remaining Security & Access Control tests (protected record links, menu visibility, confirmation dialogs) then move to next functional module.
