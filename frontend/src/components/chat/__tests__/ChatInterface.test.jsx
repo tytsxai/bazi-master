@@ -52,7 +52,8 @@ describe('ChatInterface', () => {
     it('renders chat window when open', () => {
         render(<ChatInterface isOpen={true} onClose={vi.fn()} />);
         expect(screen.getByText('Fortune Assistant')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('Type a message...')).toBeInTheDocument();
+        // Use role query since placeholder text varies by locale
+        expect(screen.getByRole('textbox')).toBeInTheDocument();
     });
 
     it('connects to websocket on open if disconnected', () => {
@@ -83,10 +84,11 @@ describe('ChatInterface', () => {
 
         render(<ChatInterface isOpen={true} onClose={vi.fn()} />);
 
-        const input = screen.getByPlaceholderText('Type a message...');
+        const input = screen.getByRole('textbox');
         fireEvent.change(input, { target: { value: 'Hello' } });
 
-        const sendBtn = screen.getByText('↑');
+        // Find send button by aria-label
+        const sendBtn = screen.getByLabelText('Send message');
         fireEvent.click(sendBtn);
 
         expect(sendMessage).toHaveBeenCalledWith('Hello');

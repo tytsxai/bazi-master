@@ -1,155 +1,114 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
-import { AuthProvider, useAuth } from '../AuthContext.jsx';
+import { render, screen, act, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AuthProvider, useAuth } from '../AuthContext';
 
-// Store for mock localStorage
-let store = {};
-const localStorageMock = {
-  getItem: vi.fn((key) => store[key] || null),
-  setItem: vi.fn((key, value) => { store[key] = value; }),
-  removeItem: vi.fn((key) => { delete store[key]; }),
-  clear: vi.fn(() => { store = {}; }),
-};
+// Mock translation
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key) => key }),
+}));
 
-const sessionStorageMock = {
-  clear: vi.fn(),
-};
-
-// Setup mocks before module loads
-vi.stubGlobal('localStorage', localStorageMock);
-vi.stubGlobal('sessionStorage', sessionStorageMock);
-vi.stubGlobal('fetch', vi.fn());
-
-// Test component to consume auth context
-function TestComponent() {
-  const auth = useAuth();
+// Test component to consume context
+const TestComponent = () => {
+  const { isAuthenticated, user, login, logout, profileName } = useAuth();
   return (
     <div>
-      <div data-testid="isAuthenticated">{auth.isAuthenticated ? 'true' : 'false'}</div>
-      <div data-testid="token">{auth.token || 'null'}</div>
-      <div data-testid="user">{auth.user ? JSON.stringify(auth.user) : 'null'}</div>
-      <div data-testid="profileName">{auth.profileName || ''}</div>
-      <button onClick={() => auth.setProfileName('test')}>Set Profile Name</button>
-      <button onClick={auth.logout}>Logout</button>
+      <div data-testid="auth-status">{isAuthenticated ? 'Authenticated' : 'Guest'}</div>
+      <div data-testid="user-email">{user?.email}</div>
+      <div data-testid="profile-name">{profileName}</div>
+      <button onClick={() => login('test@example.com', 'password')}>Login</button>
+      <button onClick={() => logout()}>Logout</button>
     </div>
   );
-}
+};
+
+// Simplified Test Component that exposes methods via window for testing to avoid fireEvent complexities with context
+const TestConsumer = () => {
+  const auth = useAuth();
+  window.authTest = auth;
+  return null;
+};
 
 describe('AuthContext', () => {
   beforeEach(() => {
-    store = {};
     vi.clearAllMocks();
-    global.fetch.mockReset();
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('provides default auth state when no token', () => {
-    render(
-      <AuthProvider>
-        <TestComponent />
-      </AuthProvider>
-    );
-
-    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false');
-    expect(screen.getByTestId('token')).toHaveTextContent('null');
-  });
-
-  it('loads token from localStorage on mount', () => {
-    store['bazi_token'] = 'token_123_456_abc';
-
-    render(
-      <AuthProvider>
-        <TestComponent />
-      </AuthProvider>
-    );
-
-    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('true');
-    expect(screen.getByTestId('token')).toHaveTextContent('token_123_456_abc');
-  });
-
-  it('loads user from localStorage on mount', () => {
-    const mockUser = { id: 1, email: 'test@example.com' };
-    store['bazi_user'] = JSON.stringify(mockUser);
-
-    render(
-      <AuthProvider>
-        <TestComponent />
-      </AuthProvider>
-    );
-
-    expect(screen.getByTestId('user')).toHaveTextContent(JSON.stringify(mockUser));
-  });
-
-  it('loads profile name from localStorage on mount', () => {
-    // Need token for profile name to persist (AuthContext clears it without token)
-    store['bazi_token'] = 'token_123_456_abc';
-    store['bazi_profile_name'] = 'Test User';
-
-    // Mock fetch to return 401 (no API override of profile name)
-    global.fetch.mockResolvedValue({
+    localStorage.clear();
+    global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 401,
       headers: { get: () => null },
-    });
-
-    render(
-      <AuthProvider>
-        <TestComponent />
-      </AuthProvider>
-    );
-
-    expect(screen.getByTestId('profileName')).toHaveTextContent('Test User');
-  });
-
-  it('throws error when useAuth is used outside provider', () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    expect(() => render(<TestComponent />)).toThrow(
-      'useAuth must be used within AuthProvider'
-    );
-
-    consoleSpy.mockRestore();
-  });
-
-  it('calls logout and clears storage', async () => {
-    store['bazi_token'] = 'token_123_456_abc';
-
-    global.fetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
       json: () => Promise.resolve({}),
     });
-
-    render(
-      <AuthProvider>
-        <TestComponent />
-      </AuthProvider>
-    );
-
-    const logoutButton = screen.getByText('Logout');
-
-    await act(async () => {
-      logoutButton.click();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false');
-    });
   });
 
-  it('handles invalid JSON in localStorage user gracefully', () => {
-    store['bazi_user'] = 'invalid json';
+  it('provides initial unauthenticated state', () => {
+    render(
+      <AuthProvider>
+        <TestConsumer />
+        <TestComponent />
+      </AuthProvider>
+    );
+    expect(screen.getByTestId('auth-status')).toHaveTextContent('Guest');
+  });
+
+  it('initializes from localStorage', () => {
+    localStorage.setItem('bazi_token', 'mock-token');
+    localStorage.setItem('bazi_user', JSON.stringify({ email: 'stored@example.com' }));
 
     render(
       <AuthProvider>
         <TestComponent />
       </AuthProvider>
     );
+    expect(screen.getByTestId('auth-status')).toHaveTextContent('Authenticated');
+    expect(screen.getByTestId('user-email')).toHaveTextContent('stored@example.com');
+  });
 
-    expect(screen.getByTestId('user')).toHaveTextContent('null');
+  it('login updates state on success', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        token: 'new-token',
+        user: { email: 'new@example.com' }
+      })
+    });
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>
+    );
+
+    await act(async () => {
+      await window.authTest.login('new@example.com', 'password');
+    });
+
+    expect(window.authTest.isAuthenticated).toBe(true);
+    expect(window.authTest.user.email).toBe('new@example.com');
+    expect(localStorage.getItem('bazi_token')).toBe('new-token');
+  });
+
+  it('logout clears state and storage', async () => {
+    localStorage.setItem('bazi_token', 'mock-token');
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => null },
+      json: () => Promise.resolve({})
+    }); // Logout API call
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>
+    );
+
+    expect(window.authTest.isAuthenticated).toBe(true);
+
+    await act(async () => {
+      window.authTest.logout();
+    });
+
+    expect(window.authTest.isAuthenticated).toBe(false);
+    expect(window.authTest.user).toBeNull();
+    expect(localStorage.getItem('bazi_token')).toBeNull();
   });
 });

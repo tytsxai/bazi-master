@@ -3,7 +3,7 @@ import Spinner from './Spinner';
 
 const VARIANTS = {
     primary: 'bg-gold-400 text-mystic-900 shadow-lg hover:scale-105 hover:bg-gold-300 border-transparent',
-    secondary: 'bg-indigo-600 text-white shadow-lg hover:bg-indigo-500 border-transparent',
+    secondary: 'bg-mystic-700 text-gold-100 shadow-lg hover:bg-mystic-600 border border-gold-500/20 hover:border-gold-400/40',
     ghost: 'bg-transparent text-white/70 border border-white/20 hover:border-white/40 hover:text-white',
     danger: 'bg-rose-500/10 text-rose-100 border border-rose-400/40 hover:border-rose-300 hover:text-rose-200',
     glass: 'bg-white/5 text-white border border-white/10 hover:bg-white/10',
