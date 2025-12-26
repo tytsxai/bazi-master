@@ -52,3 +52,4 @@ const localStorageMock = (function () {
 global.localStorage = localStorageMock;
 global.window.localStorage = localStorageMock; // Ensure it's on window too
 
+
