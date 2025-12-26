@@ -434,6 +434,78 @@ GET /api/auth/wechat/callback
 }
 ```
 
+### POST /api/ziwei/history (需要认证)
+
+保存紫微斗数计算结果到历史记录。
+
+**请求:**
+```json
+{
+  "birthYear": 1990,
+  "birthMonth": 5,
+  "birthDay": 15,
+  "birthHour": 14,
+  "gender": "male"
+}
+```
+
+**响应:**
+```json
+{
+  "record": {
+    "id": 123,
+    "userId": 456,
+    "birthYear": 1990,
+    "birthMonth": 5,
+    "birthDay": 15,
+    "birthHour": 14,
+    "gender": "male",
+    "chart": { /* 计算结果 */ },
+    "createdAt": "2025-12-26T10:00:00.000Z"
+  }
+}
+```
+
+### GET /api/ziwei/history (需要认证)
+
+获取紫微斗数历史记录。
+
+**查询参数:**
+- `limit`: 返回数量 (默认: 30, 最大: 100)
+
+**响应:**
+```json
+{
+  "records": [
+    {
+      "id": 123,
+      "userId": 456,
+      "birthYear": 1990,
+      "birthMonth": 5,
+      "birthDay": 15,
+      "birthHour": 14,
+      "gender": "male",
+      "chart": { /* 计算结果 */ },
+      "createdAt": "2025-12-26T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+### DELETE /api/ziwei/history/:id (需要认证)
+
+删除指定的紫微斗数历史记录。
+
+**参数:**
+- `id`: 记录ID
+
+**响应:**
+```json
+{
+  "status": "ok"
+}
+```
+
 ## AI 功能 (需要认证)
 
 ### POST /api/ai/interpret

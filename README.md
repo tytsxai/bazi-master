@@ -4,7 +4,7 @@
 
 **一个现代化的全栈算命平台，融合东西方命理学**
 
-[![Tests](https://img.shields.io/badge/tests-96%20passing-brightgreen)](./backend/test)
+[![Tests](https://img.shields.io/badge/tests-69%20passing-brightgreen)](./backend/test)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 [![React](https://img.shields.io/badge/react-18-blue)](https://react.dev)
@@ -210,7 +210,7 @@ docker compose -f docker-compose.prod.yml logs -f
 1. Fork 本仓库
 2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
 3. 编写代码并添加测试
-4. 运行测试确保通过 (`npm run test:all`)
+4. 运行测试确保通过 (`npm test`)
 5. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 6. 推送到分支 (`git push origin feature/AmazingFeature`)
 7. 开启 Pull Request
@@ -351,7 +351,7 @@ We welcome all forms of contributions!
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
 3. Write code and add tests
-4. Run tests to ensure they pass (`npm run test:all`)
+4. Run tests to ensure they pass (`npm test`)
 5. Commit changes (`git commit -m 'Add some AmazingFeature'`)
 6. Push to branch (`git push origin feature/AmazingFeature`)
 7. Open a Pull Request
@@ -361,7 +361,7 @@ We welcome all forms of contributions!
 - ✅ Database: PostgreSQL production-ready
 - ✅ Documentation: Updated and enhanced
 - ✅ Code Logic: Cleaned and optimized
-- ✅ Tests: All 96 tests passing
+- ✅ Tests: All 69 tests passing
 
 ### 📝 License
 

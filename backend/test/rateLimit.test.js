@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { createRateLimitMiddleware } from '../middleware/rateLimit.js';
+import { createRateLimitMiddleware } from '../middleware/rateLimit.middleware.js';
 
 describe('rate limit middleware', () => {
   test('uses Redis when available', async () => {

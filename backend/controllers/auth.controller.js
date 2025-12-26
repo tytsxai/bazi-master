@@ -9,7 +9,7 @@ import {
   sessionStore,
   isAdminUser,
 } from '../middleware/auth.js';
-import { hashPassword, verifyPassword } from '../passwords.js';
+import { hashPassword, verifyPassword } from '../utils/passwords.js';
 import {
   buildOauthRedirectUrl,
   consumeOauthState,

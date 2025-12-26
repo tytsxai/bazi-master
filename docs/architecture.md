@@ -67,21 +67,21 @@ backend/
 │   ├── tarot.js       # 塔罗路由
 │   └── zodiac.js      # 星座路由
 ├── services/          # 业务逻辑服务
-│   ├── ai.js          # AI 服务 (遗留)
-│   ├── ai.service.js  # AI 服务 (新)
-│   ├── auth.service.js      # 认证服务
-│   ├── bazi.js              # 八字计算 (遗留)
-│   ├── bazi.service.js      # 八字服务 (新)
-│   ├── cache.service.js     # 缓存服务
-│   ├── health.service.js    # 健康检查服务
-│   ├── iching.service.js    # 周易服务
-│   ├── oauth.service.js     # OAuth 服务
-│   ├── prompts.service.js   # AI 提示词服务
-│   ├── schema.service.js    # 数据库模式服务
-│   ├── session.service.js   # 会话服务
+│   ├── ai.service.js         # AI 服务
+│   ├── apiSchema.service.js  # API Schema 服务
+│   ├── auth.service.js       # 认证服务
+│   ├── cache.service.js      # 缓存服务
+│   ├── calculations.service.js # 八字计算服务
+│   ├── health.service.js     # 健康检查服务
+│   ├── iching.service.js     # 周易服务
+│   ├── oauth.service.js      # OAuth 服务
+│   ├── prompts.service.js    # AI 提示词服务
+│   ├── schema.service.js     # 数据库模式服务
+│   ├── session.service.js    # 会话服务
 │   ├── softDelete.service.js # 软删除服务
 │   ├── solarTime.service.js  # 真太阳时服务
 │   ├── tarot.service.js      # 塔罗服务
+│   ├── ziwei.service.js      # 紫微斗数服务
 │   └── zodiac.service.js     # 星座服务
 ├── test/              # 测试文件
 ├── utils/             # 工具函数
@@ -476,10 +476,11 @@ Nginx (3000) → Node.js (4000)
 3. ✅ **文档同步**: API 文档已更新，包含所有端点
 4. ✅ **服务文件命名**: `ziwei.js` 重命名为 `ziwei.service.js` 保持一致性
 5. ✅ **代码清理**: 删除空的 `utils_backup` 目录
+6. ✅ **导入路径修复**: 所有模块导入路径已统一
 
 ### 当前已知问题
 
-1. **测试覆盖**: 前端 E2E 测试需要扩展 (88 个测试文件)
+1. **测试覆盖**: 前端 E2E 测试需要扩展 (87 个测试文件)
 2. **性能优化**: Bundle 大小优化 (当前 527KB，目标 < 500KB)
 
 ### 改进计划
