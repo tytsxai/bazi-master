@@ -4,100 +4,22 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import { useAuthFetch } from '../auth/useAuthFetch.js';
 import { getClientId } from '../utils/clientId.js';
 import { readApiErrorMessage } from '../utils/apiError.js';
-
-const SEARCH_DEBOUNCE_MS = 350;
-const PAGE_SIZE = 100;
-const MAX_SORT_PAGE_SIZE = 1000;
-const DEFAULT_FILTERS = {
-  query: '',
-  genderFilter: 'all',
-  rangeFilter: 'all',
-  sortOption: 'created-desc',
-};
-const PENDING_SAVE_KEY = 'bazi_pending_save_v1';
-const RECENT_SAVE_KEY = 'bazi_recent_save_v1';
-const toTimestamp = (value) => {
-  const time = new Date(value ?? 0).getTime();
-  return Number.isFinite(time) ? time : 0;
-};
-const isWhitespaceOnly = (value) =>
-  typeof value === 'string' && value.length > 0 && value.trim().length === 0;
-const isValidCalendarDate = (year, month, day) => {
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year
-    && date.getUTCMonth() === month - 1
-    && date.getUTCDate() === day
-  );
-};
-
-const getBirthTimestamp = (record) => {
-  const year = Number(record?.birthYear);
-  const month = Number(record?.birthMonth);
-  const day = Number(record?.birthDay);
-  const hour = Number(record?.birthHour);
-  if (![year, month, day].every(Number.isFinite)) return null;
-  const safeHour = Number.isFinite(hour) ? hour : 0;
-  return Date.UTC(year, month - 1, day, safeHour, 0, 0);
-};
-
-const sortRecordsForDisplay = (records, sortOption) => {
-  if (!Array.isArray(records) || records.length < 2) return records;
-  const list = [...records];
-  const createdDesc = (a, b) => {
-    const diff = toTimestamp(b?.createdAt) - toTimestamp(a?.createdAt);
-    if (diff) return diff;
-    return (Number(b?.id) || 0) - (Number(a?.id) || 0);
-  };
-  const createdAsc = (a, b) => {
-    const diff = toTimestamp(a?.createdAt) - toTimestamp(b?.createdAt);
-    if (diff) return diff;
-    return (Number(a?.id) || 0) - (Number(b?.id) || 0);
-  };
-  const compareBirth = (direction) => (a, b) => {
-    const aKey = getBirthTimestamp(a);
-    const bKey = getBirthTimestamp(b);
-    const aFinite = Number.isFinite(aKey);
-    const bFinite = Number.isFinite(bKey);
-    if (aFinite && bFinite && aKey !== bKey) return (aKey - bKey) * direction;
-    if (aFinite && !bFinite) return -1;
-    if (!aFinite && bFinite) return 1;
-    return createdDesc(a, b);
-  };
-
-  switch (sortOption) {
-    case 'created-asc':
-      list.sort(createdAsc);
-      return list;
-    case 'birth-asc':
-      list.sort(compareBirth(1));
-      return list;
-    case 'birth-desc':
-      list.sort(compareBirth(-1));
-      return list;
-    case 'created-desc':
-    default:
-      list.sort(createdDesc);
-      return list;
-  }
-};
-
-const sortDeletedRecordsForDisplay = (records, primaryId) => {
-  if (!Array.isArray(records) || records.length < 2) return records;
-  const list = [...records];
-  list.sort((a, b) => {
-    if (primaryId) {
-      if (a?.id === primaryId) return -1;
-      if (b?.id === primaryId) return 1;
-    }
-    const createdDiff = toTimestamp(b?.createdAt) - toTimestamp(a?.createdAt);
-    if (createdDiff) return createdDiff;
-    return (Number(b?.id) || 0) - (Number(a?.id) || 0);
-  });
-  return list;
-};
+import {
+  SEARCH_DEBOUNCE_MS,
+  PAGE_SIZE,
+  MAX_SORT_PAGE_SIZE,
+  DEFAULT_FILTERS,
+  PENDING_SAVE_KEY,
+  RECENT_SAVE_KEY
+} from './historyConstants.js';
+import {
+  toTimestamp,
+  isWhitespaceOnly,
+  isValidCalendarDate,
+  getBirthTimestamp,
+  sortRecordsForDisplay,
+  sortDeletedRecordsForDisplay
+} from './historyUtils.js';
 
 export default function useHistoryData({ t }) {
   const { token } = useAuth();

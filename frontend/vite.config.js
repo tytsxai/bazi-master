@@ -12,6 +12,20 @@ const backendPort =
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React and core libraries
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+
+          // i18n libraries
+          'i18n-vendor': ['i18next', 'react-i18next'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 500,
+  },
   server: {
     port: 3000,
     host: '127.0.0.1',

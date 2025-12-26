@@ -59,9 +59,21 @@ export default function Header() {
     const now = Date.now();
 
     const target = event?.currentTarget;
-    const nextHref = typeof target?.getAttribute === 'function'
-      ? (target.getAttribute('href') || '')
-      : '';
+    // Handle both React Router Link and regular elements
+    let nextHref = '';
+    if (target) {
+      if (typeof target.getAttribute === 'function') {
+        nextHref = target.getAttribute('href') || target.getAttribute('to') || '';
+      } else if (target.href) {
+        nextHref = target.href;
+      } else if (target.dataset && target.dataset.routed) {
+        // For React Router Link, get the href from the anchor element inside
+        const anchor = target.querySelector('a') || target.closest('a');
+        if (anchor) {
+          nextHref = anchor.getAttribute('href') || anchor.getAttribute('to') || '';
+        }
+      }
+    }
 
     const last = lastNavClickRef.current;
 
@@ -102,6 +114,7 @@ export default function Header() {
           key={link.path}
           to={link.path}
           onClick={handleSafeNavClick}
+          data-routed="true"
           className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive(link.path) ? 'text-gold-400' : 'text-white/80'
             }`}
         >

@@ -11,7 +11,7 @@ const rootDir = path.resolve(__dirname, '..', '..');
 const backendDir = path.join(rootDir, 'backend');
 const frontendDir = path.join(rootDir, 'frontend');
 const prismaSourceSchemaPath = path.join(rootDir, 'prisma', 'schema.prisma');
-const prismaGeneratedSchemaPath = path.join(backendDir, 'node_modules', '.prisma', 'client', 'schema.prisma');
+const prismaGeneratedSchemaPath = path.join(rootDir, 'node_modules', '.prisma', 'client', 'schema.prisma');
 const prismaSchemaCandidates = [
   prismaGeneratedSchemaPath,
   prismaSourceSchemaPath,
@@ -129,6 +129,7 @@ process.env.BACKEND_PORT = String(backendPort);
 process.env.E2E_API_PORT = process.env.E2E_API_PORT || String(backendPort);
 process.env.PORT = String(backendPort);
 process.env.VITE_BACKEND_PORT = process.env.VITE_BACKEND_PORT || String(backendPort);
+process.env.FRONTEND_URL = process.env.FRONTEND_URL || `http://127.0.0.1:${frontendPort}`;
 
 process.env.AI_PROVIDER = process.env.AI_PROVIDER || 'mock';
 
