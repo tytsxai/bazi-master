@@ -13,12 +13,25 @@ const PROFILE_NAME_KEY = 'bazi_profile_name';
 const SESSION_IDLE_MS = 30 * 60 * 1000;
 const isBackendToken = (value) =>
   typeof value === 'string' && /^token_\d+_\d+_[A-Za-z0-9]+$/.test(value);
+const safeParseUser = (raw) => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    try {
+      localStorage.removeItem(USER_KEY);
+    } catch {
+      // Ignore storage failures.
+    }
+    return null;
+  }
+};
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState(() => {
     const raw = localStorage.getItem(USER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    return safeParseUser(raw);
   });
   const [profileName, setProfileNameState] = useState(() => {
     const stored = localStorage.getItem(PROFILE_NAME_KEY);
@@ -270,7 +283,7 @@ export function AuthProvider({ children }) {
       const storedToken = localStorage.getItem(TOKEN_KEY);
       const storedOrigin = localStorage.getItem(TOKEN_ORIGIN_KEY);
       const storedUserRaw = localStorage.getItem(USER_KEY);
-      const storedUser = storedUserRaw ? JSON.parse(storedUserRaw) : null;
+      const storedUser = safeParseUser(storedUserRaw);
 
       if (!storedToken) {
         clearSessionState();
@@ -336,6 +349,22 @@ export function AuthProvider({ children }) {
       isMounted = false;
     };
   }, [refreshProfileName, token]);
+
+  useEffect(() => {
+    if (!token || user) return;
+    let active = true;
+    const loadUser = async () => {
+      try {
+        await refreshUser();
+      } finally {
+        if (!active) return;
+      }
+    };
+    void loadUser();
+    return () => {
+      active = false;
+    };
+  }, [refreshUser, token, user]);
 
   const value = useMemo(
     () => ({

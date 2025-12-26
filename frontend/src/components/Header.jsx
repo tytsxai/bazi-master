@@ -9,7 +9,7 @@ export default function Header() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const lastNavClickRef = useRef(0);
+  const lastNavClickRef = useRef({ at: 0, href: '' });
   const isGuest = !isAuthenticated || !user;
   const userName = user?.name || user?.email || '';
   const profileDisplayName = profileName?.trim() || '';
@@ -55,13 +55,20 @@ export default function Header() {
   const handleSafeNavClick = (event) => {
     const now = Date.now();
 
-    if (now - lastNavClickRef.current < NAV_CLICK_DELAY) {
+    const target = event?.currentTarget;
+    const nextHref = typeof target?.getAttribute === 'function'
+      ? (target.getAttribute('href') || '')
+      : '';
+
+    const last = lastNavClickRef.current;
+
+    if (now - (last?.at || 0) < NAV_CLICK_DELAY && nextHref && nextHref === last?.href) {
       event.preventDefault();
       event.stopPropagation();
       return;
     }
 
-    lastNavClickRef.current = now;
+    lastNavClickRef.current = { at: now, href: nextHref };
     closeMenu();
   };
 

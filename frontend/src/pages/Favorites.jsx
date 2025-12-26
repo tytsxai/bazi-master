@@ -111,6 +111,7 @@ export default function Favorites() {
     const res = await authFetch(`/api/favorites/${favorite.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
+      keepalive: true,
     });
     if (res.status === 401) {
       setFavorites((prev) => {
@@ -143,6 +144,8 @@ export default function Favorites() {
       if (shouldRestoreExpanded) {
         setExpandedId((current) => (current == null ? rollbackFavorite.id : current));
       }
+    } else {
+      await loadFavorites();
     }
     setPendingDeleteIds((prev) => {
       const next = new Set(prev);

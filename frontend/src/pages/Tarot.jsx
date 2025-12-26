@@ -161,7 +161,15 @@ export default function Tarot() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      if (token) headers.Authorization = `Bearer ${token}`;
+      let authToken = token;
+      if (!authToken) {
+        try {
+          authToken = localStorage.getItem('bazi_token');
+        } catch {
+          authToken = null;
+        }
+      }
+      if (authToken) headers.Authorization = `Bearer ${authToken}`;
       const res = await fetch('/api/tarot/draw', {
         method: 'POST',
         headers,
@@ -203,9 +211,17 @@ export default function Tarot() {
 
       ws.onopen = () => {
         const provider = getPreferredAiProvider();
+        let authToken = token;
+        if (!authToken) {
+          try {
+            authToken = localStorage.getItem('bazi_token');
+          } catch {
+            authToken = null;
+          }
+        }
         const message = {
           type: 'tarot_ai_request',
-          token,
+          token: authToken,
           provider,
           payload: {
             spreadType: spread.spreadType,

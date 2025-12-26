@@ -323,6 +323,8 @@ export default function Login() {
       isSubmittingRef.current = true;
       setIsSubmitting(true);
       await login(email, password);
+      const next = resolveRedirectPath(location.state?.from, location.search);
+      navigate(next, { replace: true });
     } catch (error) {
       setLoginError(getLoginErrorMessage(error));
     } finally {
@@ -363,6 +365,8 @@ export default function Login() {
       }
       await res.json();
       await login(payload.email.trim(), payload.password);
+      const next = resolveRedirectPath(location.state?.from, location.search);
+      navigate(next, { replace: true });
     } catch (error) {
       setRegisterStatus(error?.message || 'Unable to register.');
     } finally {

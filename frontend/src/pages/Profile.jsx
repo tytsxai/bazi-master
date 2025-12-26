@@ -64,7 +64,7 @@ export default function Profile() {
   };
 
   useEffect(() => {
-    if (isAuthenticated && user) return;
+    if (token) return;
     const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
     const params = new URLSearchParams();
     if (redirectPath) {
@@ -72,7 +72,7 @@ export default function Profile() {
     }
     const target = params.size ? `/login?${params.toString()}` : '/login';
     navigate(target, { replace: true, state: { from: redirectPath } });
-  }, [isAuthenticated, user, location, navigate]);
+  }, [token, location, navigate]);
 
   useEffect(() => {
     let isMounted = true;
