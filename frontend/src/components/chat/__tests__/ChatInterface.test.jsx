@@ -1,6 +1,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ChatInterface from '../ChatInterface';
+import { useChat } from '../../../hooks/useChat';
+import { useAuth } from '../../../auth/AuthContext';
 
 // Mock translation
 vi.mock('react-i18next', () => ({
@@ -9,27 +11,33 @@ vi.mock('react-i18next', () => ({
 
 // Mock Auth
 vi.mock('../../../auth/AuthContext', () => ({
-    useAuth: vi.fn(() => ({ isAuthenticated: true, token: 'mock-token' })),
+    useAuth: vi.fn(),
 }));
 
 // Mock useChat
-vi.mock('../../hooks/useChat', () => ({
-    useChat: vi.fn(() => ({
-        messages: [],
-        isTyping: false,
-        status: 'connected',
-        sendMessage: vi.fn(),
-        connect: vi.fn(),
-        disconnect: vi.fn(),
-    })),
+vi.mock('../../../hooks/useChat', () => ({
+    useChat: vi.fn(),
 }));
 
 describe('ChatInterface', () => {
-    beforeEach(async () => {
+    beforeEach(() => {
         vi.clearAllMocks();
+
+        // Mock scrollIntoView
+        Element.prototype.scrollIntoView = vi.fn();
+
         // Default Auth
-        const { useAuth } = await import('../../../auth/AuthContext');
         useAuth.mockReturnValue({ isAuthenticated: true, token: 'mock-token' });
+
+        // Default Chat
+        useChat.mockReturnValue({
+            messages: [],
+            isTyping: false,
+            status: 'connected',
+            sendMessage: vi.fn(),
+            connect: vi.fn(),
+            disconnect: vi.fn(),
+        });
     });
 
     afterEach(() => {
@@ -37,8 +45,8 @@ describe('ChatInterface', () => {
     });
 
     it('renders nothing when closed', () => {
-        render(<ChatInterface isOpen={false} onClose={vi.fn()} />);
-        expect(screen.queryByText('Fortune Assistant')).not.toBeInTheDocument();
+        const { queryByText } = render(<ChatInterface isOpen={false} onClose={vi.fn()} />);
+        expect(queryByText('Fortune Assistant')).not.toBeInTheDocument();
     });
 
     it('renders chat window when open', () => {
@@ -48,7 +56,6 @@ describe('ChatInterface', () => {
     });
 
     it('connects to websocket on open if disconnected', () => {
-        const { useChat } = require('../../hooks/useChat');
         const connect = vi.fn();
         useChat.mockReturnValue({
             messages: [],
@@ -64,7 +71,6 @@ describe('ChatInterface', () => {
     });
 
     it('sends message when input submitted', () => {
-        const { useChat } = require('../../hooks/useChat');
         const sendMessage = vi.fn();
         useChat.mockReturnValue({
             messages: [],
@@ -87,7 +93,6 @@ describe('ChatInterface', () => {
     });
 
     it('displays messages', () => {
-        const { useChat } = require('../../hooks/useChat');
         useChat.mockReturnValue({
             messages: [
                 { role: 'user', content: 'Hello' },
