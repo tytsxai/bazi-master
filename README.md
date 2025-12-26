@@ -60,7 +60,7 @@ npm -C frontend run dev
 
 ## 测试
 ```bash
-# 后端测试（Node.js test） - Current Pass Rate: 100% (69/69 tests)
+# 后端测试（Node.js test） - Current Pass Rate: 100% (95/95 tests)
 npm -C backend test
 
 # 前端单元测试（Vitest）
@@ -74,7 +74,7 @@ npm test
 ```
 
 ### 测试通过率
-- **后端测试**: 69/69 通过 (100%)，7个测试套件，涵盖认证、八字计算、缓存、API路由等核心功能
+- **后端测试**: 95/95 通过 (100%)，16个测试套件，涵盖认证、八字计算、缓存、API路由等核心功能
 - **前端单元测试**: 22个测试用例，涵盖核心React组件(AuthContext、ProtectedRoute、BaziForm、HistoryList)
 - **前端E2E测试**: 93个测试用例，涵盖可访问性、安全性、功能完整性、性能等多个维度
 
@@ -89,7 +89,7 @@ bazi-master/
 │   ├── middleware/     # 中间件
 │   ├── config/         # 配置与客户端初始化
 │   ├── utils/          # 工具函数
-│   ├── test/           # 后端测试 (69个单元测试 + 19个API契约测试)
+│   ├── test/           # 后端测试 (95个单元测试 + 19个API契约测试)
 ├── frontend/           # React 应用
 │   ├── src/            # 页面、组件、hooks、i18n
 │   │   ├── auth/       # 认证上下文

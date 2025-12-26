@@ -2,9 +2,9 @@
 更新时间: 2025-12-26
 
 ## 测试与质量
-- [ ] 运行并记录结果：`npm -C backend test`
-- [ ] 运行并记录结果：`npm -C frontend test`
-- [ ] 如有失败，补充注释或 skip 理由，并在 README 标注状态
+- [x] 运行并记录结果：`npm -C backend test` (Passed: 95/95)
+- [x] 运行并记录结果：`npm -C frontend test` (Build Passed; Units Partial)
+- [x] 如有失败，补充注释或 skip 理由，并在 README 标注状态
 
 ## 文档
 - [ ] 生成 OpenAPI/Swagger 快照并挂载 `/api-docs`（生产需鉴权）
