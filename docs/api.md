@@ -133,6 +133,27 @@ Authorization: Bearer <your-jwt-token>
 }
 ```
 
+### GET /api/tarot/cards (公开)
+
+获取所有塔罗牌信息。
+
+**响应:**
+```json
+{
+  "cards": [
+    {
+      "id": 1,
+      "name": "The Fool",
+      "chineseName": "愚者",
+      "description": "...",
+      "upright": "...",
+      "reversed": "..."
+    }
+    // ... 其他77张牌
+  ]
+}
+```
+
 ### POST /api/tarot/ai-interpret (需要认证)
 
 AI 解读塔罗牌阵。
@@ -157,6 +178,26 @@ AI 解读塔罗牌阵。
   "hexagramNumber": 1,
   "judgment": "元亨利贞",
   "changingLines": [2, 5]
+}
+```
+
+### GET /api/iching/hexagrams (公开)
+
+获取所有64卦信息。
+
+**响应:**
+```json
+{
+  "hexagrams": [
+    {
+      "number": 1,
+      "name": "乾",
+      "chineseName": "乾卦",
+      "judgment": "元亨利贞",
+      "image": "..."
+    }
+    // ... 其他63卦
+  ]
 }
 ```
 
@@ -187,6 +228,52 @@ AI 解读塔罗牌阵。
 **查询参数:**
 - `period`: daily, weekly, monthly (默认: daily)
 
+### POST /api/zodiac/rising (公开)
+
+计算上升星座。
+
+**请求:**
+```json
+{
+  "birthYear": 1990,
+  "birthMonth": 5,
+  "birthDay": 15,
+  "birthHour": 14,
+  "latitude": 39.9042,
+  "longitude": 116.4074,
+  "timezoneOffsetMinutes": 480
+}
+```
+
+**响应:**
+```json
+{
+  "risingSign": "scorpio",
+  "risingDegree": 245.67
+}
+```
+
+### GET /api/zodiac/compatibility (公开)
+
+获取星座兼容性。
+
+**查询参数:**
+- `sign1`: 第一个星座
+- `sign2`: 第二个星座
+
+**响应:**
+```json
+{
+  "compatibility": {
+    "score": 85,
+    "level": "excellent",
+    "summary": "这两个星座非常兼容...",
+    "highlights": ["共同目标", "相互理解"],
+    "breakdown": {...}
+  }
+}
+```
+
 ## 用户认证
 
 ### POST /api/auth/register
@@ -213,6 +300,53 @@ AI 解读塔罗牌阵。
 ### POST /api/auth/logout (需要认证)
 
 用户登出。
+
+### PUT /api/auth/profile (需要认证)
+
+更新用户资料。
+
+**请求:**
+```json
+{
+  "name": "新用户名",
+  "email": "newemail@example.com"
+}
+```
+
+### POST /api/auth/change-password (需要认证)
+
+修改密码。
+
+**请求:**
+```json
+{
+  "currentPassword": "oldpassword",
+  "newPassword": "newpassword"
+}
+```
+
+### POST /api/auth/forgot-password
+
+忘记密码，发送重置邮件。
+
+**请求:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+### POST /api/auth/reset-password
+
+重置密码。
+
+**请求:**
+```json
+{
+  "token": "reset-token",
+  "newPassword": "newpassword"
+}
+```
 
 ## OAuth 认证
 
@@ -270,6 +404,36 @@ GET /api/auth/wechat/callback
 
 删除收藏。
 
+## Zi Wei (紫微斗数) (需要认证)
+
+### POST /api/ziwei/calculate
+
+紫微斗数排盘计算。
+
+**请求:**
+```json
+{
+  "birthYear": 1990,
+  "birthMonth": 5,
+  "birthDay": 15,
+  "birthHour": 14,
+  "gender": "male",
+  "birthLocation": "Beijing, China"
+}
+```
+
+**响应:**
+```json
+{
+  "chart": {
+    "mainStars": [...],
+    "minorStars": [...],
+    "palaces": {...}
+  },
+  "analysis": {...}
+}
+```
+
 ## AI 功能 (需要认证)
 
 ### POST /api/ai/interpret
@@ -301,24 +465,51 @@ GET /api/auth/wechat/callback
 }
 ```
 
-## 错误处理
+### POST /api/ai/stream (需要认证)
 
-API 使用标准的HTTP状态码:
+流式AI解读（WebSocket推荐）。
 
-- `200`: 成功
-- `400`: 请求参数错误
-- `401`: 未认证
-- `403`: 权限不足
-- `404`: 资源不存在
-- `429`: 请求频率过高
-- `500`: 服务器内部错误
-
-错误响应格式:
+**请求:**
 ```json
 {
-  "error": "错误描述信息"
+  "type": "bazi",
+  "data": { /* 相关数据 */ },
+  "question": "请详细解读这个八字",
+  "stream": true
 }
 ```
+
+## 错误处理
+
+### HTTP状态码
+- `200`: 成功
+- `201`: 资源创建成功
+- `400`: 请求参数错误或无效数据
+- `401`: 未认证或token无效
+- `403`: 权限不足或禁止访问
+- `404`: 资源不存在
+- `409`: 资源冲突（如重复收藏）
+- `422`: 请求数据无法处理
+- `429`: 请求频率过高（超出速率限制）
+- `500`: 服务器内部错误
+- `503`: 服务不可用
+
+### 错误响应格式
+```json
+{
+  "error": "错误描述信息",
+  "code": "ERROR_CODE" // 可选的错误代码
+}
+```
+
+### 常见错误码
+- `INVALID_TOKEN`: Token无效或过期
+- `MISSING_AUTH`: 缺少认证信息
+- `RATE_LIMITED`: 请求频率超限
+- `VALIDATION_ERROR`: 数据验证失败
+- `RESOURCE_NOT_FOUND`: 资源不存在
+- `DUPLICATE_RESOURCE`: 资源已存在
+- `SERVICE_UNAVAILABLE`: 服务不可用
 
 ## 速率限制
 
