@@ -310,40 +310,33 @@ const generateAIContent = async ({ system, user, messages, fallback, provider, o
       return content;
     }
 
-    const aiGuard = createAiGuard();
-    const release = await aiGuard.acquire();
-
-    try {
-      let result = '';
-      const onChunkWrapper = onChunk
-        ? (chunk) => {
-          result += chunk;
-          onChunk(chunk);
-        }
-        : (chunk) => {
-          result += chunk;
-        };
-
-      if (resolvedProvider === 'openai') {
-        if (onChunk) {
-          await callOpenAIStreamWithConfig(config, { system, user, messages, onChunk: onChunkWrapper });
-        } else {
-          result = await callOpenAIWithConfig(config, { system, user, messages });
-        }
-      } else if (resolvedProvider === 'anthropic') {
-        if (onChunk) {
-          await callAnthropicStreamWithConfig(config, { system, user, messages, onChunk: onChunkWrapper });
-        } else {
-          result = await callAnthropicWithConfig(config, { system, user, messages });
-        }
-      } else {
-        throw new Error(`Unsupported AI provider: ${resolvedProvider}`);
+    let result = '';
+    const onChunkWrapper = onChunk
+      ? (chunk) => {
+        result += chunk;
+        onChunk(chunk);
       }
+      : (chunk) => {
+        result += chunk;
+      };
 
-      return result;
-    } finally {
-      release();
+    if (resolvedProvider === 'openai') {
+      if (onChunk) {
+        await callOpenAIStreamWithConfig(config, { system, user, messages, onChunk: onChunkWrapper });
+      } else {
+        result = await callOpenAIWithConfig(config, { system, user, messages });
+      }
+    } else if (resolvedProvider === 'anthropic') {
+      if (onChunk) {
+        await callAnthropicStreamWithConfig(config, { system, user, messages, onChunk: onChunkWrapper });
+      } else {
+        result = await callAnthropicWithConfig(config, { system, user, messages });
+      }
+    } else {
+      throw new Error(`Unsupported AI provider: ${resolvedProvider}`);
     }
+
+    return result;
   } finally {
     await ensureMinDuration(startedAt, config.resetRequestMinDurationMs);
   }
@@ -438,14 +431,9 @@ const generateImage = async ({ prompt, provider = 'openai' }) => {
     return 'https://via.placeholder.com/1024x1024?text=Mock+Soul+Portrait';
   }
 
-  const aiGuard = createAiGuard();
-  const release = await aiGuard.acquire();
 
-  try {
-    return await callOpenAIImage(config, { prompt });
-  } finally {
-    release();
-  }
+
+  return await callOpenAIImage(config, { prompt });
 };
 
 export {
