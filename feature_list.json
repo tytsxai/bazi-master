@@ -837,7 +837,7 @@
       "Step 2: Trigger Ziwei chart (V2) flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -847,7 +847,7 @@
       "Step 2: Trigger Bazi full analysis flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

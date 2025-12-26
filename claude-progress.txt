@@ -183,3 +183,11 @@
 - Added Playwright security test for password reset privacy (security-password-reset-privacy.spec.js) with screenshots; verified reset request returns identical success message for existing vs unknown emails.
 - Marked feature_list.json test "[A. Security & Access Control] Password reset flow does not leak whether email exists" as passing. Current progress: 66/479 tests passing.
 - Next: continue remaining failing tests (e.g., Ziwei V2 placeholders, search/filter/pagination, Zodiac compatibility, Tarot edge cases).
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js) with PW_NO_WEB_SERVER=1; both passed.
+- Verified Ziwei V2 quick chart from /profile via Playwright (security-ziwei-profile.spec.js) with screenshots.
+- Marked feature_list.json test #45 ([A. Security & Access Control] Verify Ziwei chart (V2) behavior scenario 1) as passing. Current progress: 67/479 tests passing.
+- Next: continue remaining Security & Access Control scenarios (#46+), then move to functional modules (search/filter/pagination, Zodiac compatibility, Tarot edge cases).
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js) against running dev servers; both passed after setting PW_PORT=3000.
+- Verified Bazi full analysis from Zodiac scenario via Playwright (security-bazi-full-analysis-zodiac.spec.js) with screenshots.
+- Marked feature_list.json test #46 ([A. Security & Access Control] Verify Bazi full analysis behavior scenario 2) as passing. Current progress: 68/479 tests passing.
+- Next: continue remaining Security & Access Control scenarios (#47+), then move to next failing feature.
