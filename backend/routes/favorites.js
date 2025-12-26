@@ -5,18 +5,30 @@ import { parseIdParam } from '../utils/validation.js';
 
 const router = express.Router();
 
-const serializeRecord = (record) => ({
-    ...record,
-    pillars: JSON.parse(record.pillars),
-    fiveElements: JSON.parse(record.fiveElements),
-    tenGods: record.tenGods ? JSON.parse(record.tenGods) : null,
-    luckCycles: record.luckCycles ? JSON.parse(record.luckCycles) : null,
-});
+const serializeRecord = (record) => {
+
+    try {
+        const result = {
+            ...record,
+            pillars: JSON.parse(record.pillars),
+            fiveElements: JSON.parse(record.fiveElements),
+            tenGods: record.tenGods ? JSON.parse(record.tenGods) : null,
+            luckCycles: record.luckCycles ? JSON.parse(record.luckCycles) : null,
+        };
+
+        return result;
+    } catch (error) {
+
+        throw error;
+    }
+};
 
 router.post('/', requireAuth, async (req, res) => {
     const { recordId } = req.body;
+
     // Ensure recordId is an integer
     const rId = parseInt(recordId, 10);
+
     if (!rId || isNaN(rId)) return res.status(400).json({ error: 'Valid Record ID required' });
 
     try {
@@ -54,27 +66,40 @@ router.get('/', requireAuth, async (req, res) => {
             include: { record: true },
             orderBy: { createdAt: 'desc' }
         });
+
+        const serializedFavorites = favorites.map(f => {
+            try {
+                return {
+                    ...f,
+                    record: serializeRecord(f.record)
+                };
+            } catch (error) {
+
+                throw error;
+            }
+        });
         res.json({
-            favorites: favorites.map(f => ({
-                ...f,
-                record: serializeRecord(f.record)
-            }))
+            favorites: serializedFavorites
         });
     } catch (error) {
+
         res.status(500).json({ error: 'Failed to fetch favorites' });
     }
 });
 
 router.delete('/:id', requireAuth, async (req, res) => {
     const id = parseIdParam(req.params.id);
+
     if (!id) return res.status(400).json({ error: 'Invalid ID' });
 
     try {
         await prisma.favorite.delete({
             where: { id, userId: req.user.id }
         });
+
         res.json({ status: 'ok' });
     } catch (error) {
+
         res.status(500).json({ error: 'Failed to delete favorite' });
     }
 });
