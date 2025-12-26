@@ -46,7 +46,7 @@ NODE_ENV=development npm -C backend run dev
 npm -C frontend run dev
 ```
 
-> 提示：项目未内置 dotenv 自动加载；请通过环境变量或复制 `.env.example` 后手动导出变量。
+> 提示：项目未内置 dotenv 自动加载；请通过环境变量或复制 `.env.example` (开发) 或 `env.production.template` (生产) 后手动导出变量。
 
 ## 环境变量（节选）
 复制 `.env.example` 为本地或生产配置并按需修改：

@@ -15,6 +15,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Fixed
 - Corrected outdated references to non-existent files and APIs (e.g., legacy service duplicates, password reset endpoints).
 
+## [0.1.1] - 2025-12-27
+### Added
+- **Production Readiness**: Added `/health` (liveness) and `/api/ready` (readiness) endpoints.
+- **Reliability**: Implemented Redis-based session storage and cache mirroring for multi-instance deployments.
+- **Testing**: Configured Playwright retries and `data-testid` selectors for robust E2E testing.
+- **Tooling**: Added `npm run analyze` for frontend bundle visualization.
+
 ## [0.1.0] - 2025-12-26
 ### Added
 - Core domain modules: BaZi calculation & records, Tarot draw & history, I Ching divination, Zodiac info/horoscope/compatibility/rising, Zi Wei charting, Favorites.

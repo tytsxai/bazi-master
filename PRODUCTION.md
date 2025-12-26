@@ -3,7 +3,7 @@
 本指南以 Docker Compose 为例，目标环境：PostgreSQL + Redis + Nginx 反向代理。
 
 ## 0. 准备配置
-1) 复制 `env.example` 为 `.env.production`，并按需修改：
+1) 复制 `env.production.template` 为 `.env.production`，并按需修改：
    - `DATABASE_URL=postgresql://user:pass@postgres:5432/bazi_master`  
    - `SESSION_TOKEN_SECRET=<32+ 随机字符>`
    - `FRONTEND_URL=https://your-domain.com`
@@ -27,8 +27,8 @@ node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma
 ```
 
 ## 3. 健康检查
-- 存活检查: `GET /health`
-- 就绪检查: `GET /api/ready`
+- 存活检查: `GET /health` - 返回 200 OK 表示应用进程运行中 (Basic liveness).
+- 就绪检查: `GET /api/ready` - 返回 200 OK 表示数据库与 Redis (如启用) 连接正常 (Readiness for traffic).
 
 示例：
 ```bash
