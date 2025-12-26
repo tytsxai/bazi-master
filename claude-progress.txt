@@ -191,3 +191,9 @@
 - Verified Bazi full analysis from Zodiac scenario via Playwright (security-bazi-full-analysis-zodiac.spec.js) with screenshots.
 - Marked feature_list.json test #46 ([A. Security & Access Control] Verify Bazi full analysis behavior scenario 2) as passing. Current progress: 68/479 tests passing.
 - Next: continue remaining Security & Access Control scenarios (#47+), then move to next failing feature.
+- Pre-work Playwright checks: bazi-calculation.spec.js passed; iching.spec.js failed on AI modal label + history question label.
+- Updated iching.spec.js to click AI confirm button via /Open AI|Request AI/ and assert the unique question text directly.
+- Re-ran bazi-calculation.spec.js + iching.spec.js; both passed.
+- Verified security profile flow from /history via Playwright (security-profile-history.spec.js) with screenshots.
+- Marked feature_list.json test "[A. Security & Access Control] Verify Profile behavior scenario 3" as passing. Current progress: 69/479 tests passing.
+- Next: continue remaining Security & Access Control scenarios (#47+), then move to next failing feature.

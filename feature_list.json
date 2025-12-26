@@ -857,7 +857,7 @@
       "Step 2: Trigger Profile flow",
       "Step 3: Verify result matches backend data"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

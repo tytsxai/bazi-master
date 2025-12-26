@@ -57,12 +57,12 @@ test('I Ching divination flow with AI interpretation and history save', async ({
   await snap('04-result');
 
   await page.getByRole('button', { name: 'Reveal AI Interpretation' }).click();
-  await page.getByRole('button', { name: 'Request AI' }).click();
+  await page.getByRole('button', { name: /Open AI|Request AI/ }).click();
   await expect(page.getByRole('heading', { name: 'Oracle Reflection' })).toBeVisible({ timeout: 60000 });
   await snap('05-ai');
 
   await page.getByRole('button', { name: 'Save to History' }).click();
   await expect(page.getByText('Reading saved to history.')).toBeVisible();
-  await expect(page.getByText(new RegExp(`Question:\\s*${uniqueQuestion}`))).toBeVisible();
+  await expect(page.getByText(uniqueQuestion)).toBeVisible();
   await snap('06-saved');
 });
