@@ -1,8 +1,8 @@
 # BaZi Master
 
-一个融合八字、塔罗、周易、星座、紫微的全栈示例项目，前后端均为开源示例代码，默认开发环境使用 SQLite，生产推荐 PostgreSQL + Redis。
+一个融合八字、塔罗、周易、星座、紫微的全栈示例项目，前后端均为开源示例代码，默认使用 SQLite 数据库，生产推荐 PostgreSQL + Redis。
 
-English summary: BaZi Master is a sample full‑stack divination app (React + Express + Prisma). Default dev DB is SQLite; production targets PostgreSQL + Redis.
+English summary: BaZi Master is a sample full‑stack divination app (React + Express + Prisma). Default DB is SQLite; production targets PostgreSQL + Redis.
 
 ## 功能特性
 - 八字排盘与缓存（公开计算，登录后可保存记录/AI 解读）
@@ -51,7 +51,7 @@ npm -C frontend run dev
 ## 环境变量（节选）
 复制 `.env.example` 为本地或生产配置并按需修改：
 
-- `DATABASE_URL`：开发缺省为 `file:./dev.db`（SQLite）；生产请设置 PostgreSQL 连接串。
+- `DATABASE_URL`：缺省为 `file:./prisma/dev.db`（SQLite）；生产请设置 PostgreSQL 连接串。
 - `SESSION_TOKEN_SECRET`：生产必须设置为 32+ 字符随机串。
 - `FRONTEND_URL` / `BACKEND_BASE_URL`：用于 CORS 与回调。
 - `REDIS_URL`：可选；配置后会话与缓存使用 Redis。

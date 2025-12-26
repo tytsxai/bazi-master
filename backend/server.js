@@ -11,8 +11,9 @@ import { checkDatabase, checkRedis } from './services/health.service.js';
 // Import configurations
 import { logger } from './config/logger.js';
 import { ensureDatabaseUrl } from './config/database.js';
-import { initAppConfig } from './config/app.js';
+import { getBaziCacheConfig, initAppConfig } from './config/app.js';
 import { prisma, initPrismaConfig } from './config/prisma.js';
+import { createRedisMirror, initRedis } from './config/redis.js';
 
 // Import middleware
 import {
@@ -26,11 +27,13 @@ import {
   globalErrorHandler,
   notFoundHandler,
 } from './middleware/index.js';
+import { sessionStore } from './middleware/auth.js';
 
 // Import utilities
 import { patchExpressAsync } from './utils/express.js';
 // Import services
 import { buildOpenApiSpec } from './services/apiSchema.service.js';
+import { setBaziCacheMirror } from './services/cache.service.js';
 
 // Import routes
 import apiRouter from './routes/api.js';
@@ -39,6 +42,8 @@ import apiRouter from './routes/api.js';
 ensureDatabaseUrl();
 const appConfig = initAppConfig();
 const prismaConfig = initPrismaConfig();
+const { ttlMs: BAZI_CACHE_TTL_MS } = getBaziCacheConfig();
+const SERVICE_NAME = 'bazi-master-backend';
 
 // Extract commonly used config values
 const {
@@ -48,6 +53,7 @@ const {
   RATE_LIMIT_ENABLED,
   RATE_LIMIT_MAX,
   RATE_LIMIT_WINDOW_MS,
+  SESSION_IDLE_MS,
   allowedOrigins,
   trustProxy,
   IS_PRODUCTION,
@@ -70,6 +76,9 @@ app.use(helmetMiddleware);
 app.use(createCorsMiddleware(allowedOrigins));
 app.use(compression());
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
+
+// Request ID middleware
+app.use(requestIdMiddleware);
 
 // HTTP Request Logger
 import pinoHttp from 'pino-http';
@@ -118,15 +127,13 @@ app.get('/health', async (req, res) => {
   }
 
   res.status(ok ? 200 : 503).json({
+    service: SERVICE_NAME,
     status: ok ? 'ok' : 'degraded',
     checks: { db, redis },
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
 });
-
-// Request ID middleware
-app.use(requestIdMiddleware);
 
 // URL length validation
 app.use(urlLengthMiddleware);
@@ -160,6 +167,20 @@ app.use(globalErrorHandler);
 
 // Create HTTP server
 const server = http.createServer(app);
+
+const initRedisMirrors = async () => {
+  const client = await initRedis({ require: IS_PRODUCTION });
+  if (!client) return;
+  sessionStore.setMirror(createRedisMirror(client, {
+    prefix: 'session:',
+    ttlMs: SESSION_IDLE_MS,
+  }));
+  setBaziCacheMirror(createRedisMirror(client, {
+    prefix: 'bazi-cache:',
+    ttlMs: BAZI_CACHE_TTL_MS,
+  }));
+  logger.info('[redis] session and bazi cache mirrors enabled');
+};
 
 // Graceful shutdown handling
 const setupGracefulShutdown = (server) => {
@@ -241,6 +262,13 @@ if (NODE_ENV !== 'test' && isMain) {
       process.exit(1);
     }
 
+    try {
+      await initRedisMirrors();
+    } catch (error) {
+      logger.fatal({ err: error }, '[redis] Failed to connect to Redis');
+      process.exit(1);
+    }
+
     const bindHost = process.env.BIND_HOST || (IS_PRODUCTION ? '0.0.0.0' : '127.0.0.1');
     server.listen(PORT, bindHost, () => {
       logger.info(`BaZi Master API running on http://${bindHost}:${PORT}`);
@@ -257,4 +285,3 @@ export {
   server,
   prisma,
 };
-

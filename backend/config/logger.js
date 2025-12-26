@@ -1,9 +1,11 @@
 import pino from 'pino';
 
 const isProduction = process.env.NODE_ENV === 'production';
+const envLevel = (process.env.LOG_LEVEL || '').trim();
+const logLevel = envLevel || (isProduction ? 'info' : 'debug');
 
 export const logger = pino({
-  level: isProduction ? 'info' : 'debug',
+  level: logLevel,
   formatters: {
     level: (label) => ({ level: label }),
   },
@@ -14,4 +16,3 @@ export const logger = pino({
     err: pino.stdSerializers.err,
   },
 });
-

@@ -31,6 +31,8 @@ const {
   wechatFrontendUrl: WECHAT_FRONTEND_URL,
   wechatRedirectUri: WECHAT_REDIRECT_URI,
 } = getServerConfig();
+const SHOULD_LOG_RESET_TOKEN =
+  process.env.PASSWORD_RESET_DEBUG_LOG === '1' || process.env.PASSWORD_RESET_DEBUG_LOG === 'true';
 
 const ensureDefaultUserReady = (() => {
   let promise = null;
@@ -213,7 +215,9 @@ export const handlePasswordResetRequest = async (req, res) => {
     }
     resetTokenStore.set(token, { userId: user.id, expiresAt });
     resetTokenByUser.set(user.id, token);
-    console.log(`[auth] Password reset token for ${email}: ${token}`);
+    if (SHOULD_LOG_RESET_TOKEN) {
+      console.log(`[auth] Password reset token for ${email}: ${token}`);
+    }
   }
 
   await ensureMinDuration(startedAt, RESET_REQUEST_MIN_DURATION_MS);

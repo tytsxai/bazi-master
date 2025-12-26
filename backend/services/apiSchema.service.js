@@ -41,9 +41,13 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
       HealthCheck: {
         type: 'object',
         properties: {
+          service: {
+            type: 'string',
+            description: '服务名称',
+          },
           status: {
             type: 'string',
-            enum: ['ok', 'degraded'],
+            enum: ['ok', 'degraded', 'ready', 'not_ready'],
           },
           checks: {
             type: 'object',
@@ -55,6 +59,10 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
           timestamp: {
             type: 'string',
             format: 'date-time',
+          },
+          uptime: {
+            type: 'number',
+            description: '运行时间（秒）',
           },
         },
       },
