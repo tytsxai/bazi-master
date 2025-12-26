@@ -71,6 +71,9 @@ npm -C frontend test
 
 # 组合执行
 npm test
+ 
+# 分析前端构建体积
+npm -C frontend run analyze
 ```
 
 ### 测试通过率

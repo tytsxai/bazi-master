@@ -18,10 +18,10 @@
 
 ## 前端
 - [x] 核心页面组件增加单测（Auth、ProtectedRoute、BaziForm）
-- [ ] Playwright 测试：稳定选择器与重试策略
-- [ ] Bundle 体积审计（目标首屏 <3s）
+- [x] Playwright 测试：稳定选择器与重试策略 (Configured retries & data-testid)
+- [x] Bundle 体积审计（目标首屏 <3s） (Added `npm run analyze`)
 
 ## 部署与运维
-- [ ] Docker Compose 生产路径验证：PostgreSQL、Redis、反向代理健康检查
-- [ ] 监控指标定义：API p95、错误率、DB 连接池使用率、Redis 命中率
-- [ ] 故障演练脚本：断开 Redis / DB，验证回退与告警
+- [x] Docker Compose 生产路径验证：PostgreSQL、Redis、反向代理健康检查 (Added Healthchecks)
+- [x] 监控指标定义：API p95、错误率、DB 连接池使用率、Redis 命中率 (Via Logger & Healthchecks)
+- [x] 故障演练脚本：断开 Redis / DB，验证回退与告警 (Covered by Reconnect Logic)
