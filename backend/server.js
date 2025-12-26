@@ -143,8 +143,20 @@ const rateLimitMiddleware = createRateLimitMiddleware({
   RATE_LIMIT_ENABLED,
   RATE_LIMIT_MAX,
   RATE_LIMIT_WINDOW_MS,
+  redisKeyPrefix: 'rate-limit:global:',
 });
 app.use(rateLimitMiddleware);
+
+// Stricter rate limiting for AI/Calculation endpoints
+const strictRateLimitMiddleware = createRateLimitMiddleware({
+  RATE_LIMIT_ENABLED,
+  RATE_LIMIT_MAX: Math.max(5, Math.floor(RATE_LIMIT_MAX / 5)), // 20% of global, min 5
+  RATE_LIMIT_WINDOW_MS, // Same window
+  redisKeyPrefix: 'rate-limit:strict:',
+});
+
+// Apply strict limits to expensive routes
+app.use(['/api/bazi/calculate', '/api/bazi/ai-interpret', '/api/bazi/full-analysis', '/api/tarot/ai-interpret'], strictRateLimitMiddleware);
 
 // API routes
 app.use('/api', apiRouter);

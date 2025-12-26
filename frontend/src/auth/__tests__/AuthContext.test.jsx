@@ -119,6 +119,8 @@ describe('AuthContext', () => {
 
     global.fetch.mockResolvedValue({
       ok: true,
+      status: 200,
+      headers: { get: () => null },
       json: () => Promise.resolve({}),
     });
 

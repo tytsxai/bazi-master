@@ -107,7 +107,12 @@ describe('AuthContext', () => {
         localStorage.setItem('bazi_token', 'token');
         localStorage.setItem('bazi_user', JSON.stringify({ email: 'test@example.com' }));
 
-        global.fetch.mockResolvedValue({ ok: true }); // Logout API call
+        global.fetch.mockResolvedValue({
+            ok: true,
+            status: 200,
+            headers: { get: () => null },
+            json: () => Promise.resolve({}),
+        }); // Logout API call
 
         render(
             <AuthProvider>
