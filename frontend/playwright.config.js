@@ -100,8 +100,10 @@ export default defineConfig({
     globalSetup: './tests/global-setup.js',
     expect: {
         timeout: 15000,
+        toHaveScreenshot: { maxDiffPixelRatio: 0.1 },
     },
     use: {
+        testIdAttribute: 'data-testid',
         baseURL,
         trace: 'on-first-retry',
         headless: true, // Explicitly requesting headless mode

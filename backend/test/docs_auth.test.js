@@ -1,0 +1,99 @@
+import { describe, it, before, after } from 'node:test';
+import assert from 'node:assert';
+import httpMocks from 'node-mocks-http';
+import { docsBasicAuth } from '../middleware/auth.js';
+
+describe('Docs Basic Auth Middleware', () => {
+    const originalEnv = { ...process.env };
+
+    before(() => {
+        process.env.DOCS_USER = 'admin';
+        process.env.DOCS_PASSWORD = 'secret_password';
+        process.env.NODE_ENV = 'production';
+    });
+
+    after(() => {
+        process.env = originalEnv;
+    });
+
+    it('should return 401 if no Authorization header', () => {
+        const req = httpMocks.createRequest();
+        const res = httpMocks.createResponse();
+        const next = () => { };
+
+        docsBasicAuth(req, res, next);
+
+        assert.strictEqual(res.statusCode, 401);
+        assert.strictEqual(res.getHeader('WWW-Authenticate'), 'Basic realm="API Docs"');
+    });
+
+    it('should return 401 if invalid credentials', () => {
+        const req = httpMocks.createRequest({
+            headers: {
+                authorization: 'Basic ' + Buffer.from('admin:wrong_password').toString('base64'),
+            },
+        });
+        const res = httpMocks.createResponse();
+        const next = () => { };
+
+        docsBasicAuth(req, res, next);
+
+        assert.strictEqual(res.statusCode, 401);
+    });
+
+    it('should call next() if valid credentials', () => {
+        const req = httpMocks.createRequest({
+            headers: {
+                authorization: 'Basic ' + Buffer.from('admin:secret_password').toString('base64'),
+            },
+        });
+        const res = httpMocks.createResponse();
+
+        let nextCalled = false;
+        docsBasicAuth(req, res, () => {
+            nextCalled = true;
+        });
+        assert.ok(nextCalled);
+    });
+
+    it('should allow access if password not configured in non-production', () => {
+        process.env.NODE_ENV = 'development';
+        delete process.env.DOCS_PASSWORD;
+
+        const req = httpMocks.createRequest();
+        const res = httpMocks.createResponse();
+
+        let nextCalled = false;
+        docsBasicAuth(req, res, () => {
+            nextCalled = true;
+        });
+
+        // Cleanup
+        process.env.NODE_ENV = 'production';
+        process.env.DOCS_PASSWORD = 'secret_password';
+
+        assert.ok(nextCalled);
+    });
+
+    it('should deny access if password not configured in production', () => {
+        process.env.NODE_ENV = 'production';
+        delete process.env.DOCS_PASSWORD;
+
+        const req = httpMocks.createRequest({
+            headers: {
+                authorization: 'Basic ' + Buffer.from('admin:any').toString('base64'),
+            }
+        });
+        const res = httpMocks.createResponse();
+        const next = () => { };
+
+        docsBasicAuth(req, res, next);
+
+        // Should return 500 error configuration error or 401?
+        // Implementation says: return res.status(500).send('Docs authentication not configured.');
+        assert.strictEqual(res.statusCode, 500);
+
+        // Restore
+        process.env.DOCS_PASSWORD = 'secret_password';
+    });
+});

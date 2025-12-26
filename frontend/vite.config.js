@@ -13,11 +13,22 @@ const resolvePort = (value) => {
 const backendPort =
   resolvePort(process.env.BACKEND_PORT) ?? resolvePort(process.env.E2E_API_PORT) ?? 4000;
 
+import { visualizer } from 'rollup-plugin-visualizer';
+
 export default defineConfig(({ mode }) => {
   const isTest = mode === 'test' || process.env.VITEST;
+  const isAnalyze = mode === 'analyze';
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      isAnalyze && visualizer({
+        open: true,
+        filename: 'dist/stats.html',
+        gzipSize: true,
+        brotliSize: true,
+      }),
+    ],
     test: {
       globals: true,
       environment: 'jsdom',

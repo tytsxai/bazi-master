@@ -27,7 +27,7 @@ import {
   globalErrorHandler,
   notFoundHandler,
 } from './middleware/index.js';
-import { sessionStore } from './middleware/auth.js';
+import { sessionStore, docsBasicAuth } from './middleware/auth.js';
 
 // Import utilities
 import { patchExpressAsync } from './utils/express.js';
@@ -165,7 +165,7 @@ app.use('/api', apiRouter);
 const openApiSpec = buildOpenApiSpec({
   baseUrl: process.env.BACKEND_BASE_URL || 'http://localhost:4000',
 });
-const apiDocsGuards = IS_PRODUCTION ? [requireAuth, requireAdmin] : [];
+const apiDocsGuards = IS_PRODUCTION ? [docsBasicAuth] : [];
 app.get('/api-docs.json', ...apiDocsGuards, (req, res) => res.json(openApiSpec));
 
 // Swagger UI
