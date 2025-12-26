@@ -7,17 +7,17 @@
 - [x] 如有失败，补充注释或 skip 理由，并在 README 标注状态
 
 ## 文档
-- [ ] 生成 OpenAPI/Swagger 快照并挂载 `/api-docs`（生产需鉴权）
-- [ ] 添加 `.env.production` 示例或模板说明
-- [ ] 补充 LICENSE 文件及 README 链接
+- [x] 生成 OpenAPI/Swagger 快照并挂载 `/api-docs`（生产需鉴权）
+- [x] 添加 `.env.production` 示例或模板说明
+- [x] 补充 LICENSE 文件及 README 链接
 
 ## 后端
-- [ ] 检查 Redis 可选回退的生产风险，必要时强制要求 `REDIS_URL` in prod
-- [ ] 校验 AI 并发守卫 `createAiGuard` 的速率和超时策略
-- [ ] 评审 `favorites` / `records` 相关权限与所有权校验
+- [x] 检查 Redis 可选回退的生产风险，必要时强制要求 `REDIS_URL` in prod
+- [x] 校验 AI 并发守卫 `createAiGuard` 的速率和超时策略
+- [x] 评审 `favorites` / `records` 相关权限与所有权校验
 
 ## 前端
-- [ ] 核心页面组件增加单测（Auth、ProtectedRoute、BaziForm）
+- [x] 核心页面组件增加单测（Auth、ProtectedRoute、BaziForm）
 - [ ] Playwright 测试：稳定选择器与重试策略
 - [ ] Bundle 体积审计（目标首屏 <3s）
 

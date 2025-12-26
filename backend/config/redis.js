@@ -16,7 +16,7 @@ export const initRedis = async ({
 } = {}) => {
   const redisUrl = typeof url === 'string' ? url : getRedisUrl(env);
   if (!redisUrl) {
-    if (requireRedis) {
+    if (requireRedis || (env.NODE_ENV === 'production' && !env.CI)) {
       throw new Error('REDIS_URL is required for production sessions.');
     }
     return null;
