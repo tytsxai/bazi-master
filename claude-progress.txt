@@ -151,3 +151,6 @@
 - Added Playwright security test for unauthenticated /api/bazi/full-analysis returning 401 with screenshots.
 - Verified security unauthenticated full-analysis flow via Playwright; marked feature_list.json test #34 as passing. Current progress: 57/479 tests passing.
 - Next: continue remaining Security & Access Control API tests (401/403 for unauthenticated endpoints).
+- Added Playwright security test ensuring unauthenticated /api/tarot/ai-interpret returns 401 with verification screenshots.
+- Verified tarot AI unauthenticated security flow via Playwright; marked feature_list.json test #35 as passing. Current progress: 58/479 tests passing.
+- Next: continue remaining Security & Access Control API tests (unauthenticated tarot/iching endpoints, etc.) and proceed to next failing feature.
