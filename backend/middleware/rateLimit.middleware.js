@@ -1,5 +1,66 @@
+import { initRedis } from '../config/redis.js';
+
 const rateLimitStore = new Map();
+const DEFAULT_REDIS_PREFIX = 'rate-limit:';
 let lastRateLimitCleanup = 0;
+let redisClient = null;
+let redisInitPromise = null;
+let warnedOnFallback = false;
+
+const warnOnFallback = () => {
+  if (warnedOnFallback) return;
+  if (process.env.NODE_ENV === 'production') return;
+  warnedOnFallback = true;
+  console.warn('[rate-limit] Redis unavailable; using in-memory rate limit store.');
+};
+
+const ensureRedisClient = async (initRedisClient) => {
+  if (redisClient) return redisClient;
+  if (redisInitPromise) return redisInitPromise;
+  redisInitPromise = (async () => {
+    try {
+      const client = await initRedisClient();
+      if (!client) return null;
+      redisClient = client;
+      return client;
+    } catch (error) {
+      console.warn('[rate-limit] Redis init failed:', error?.message || error);
+      return null;
+    }
+  })();
+  return redisInitPromise;
+};
+
+const getRedisRateLimitEntry = async (client, { key, windowMs, now, prefix }) => {
+  const redisKey = `${prefix}${key}`;
+  let count = 0;
+  let ttlMs = null;
+  try {
+    const results = await client.multi().incr(redisKey).pttl(redisKey).exec();
+    if (Array.isArray(results)) {
+      count = Number(results[0]);
+      ttlMs = Number(results[1]);
+    }
+  } catch (error) {
+    console.warn('[rate-limit] Redis error:', error?.message || error);
+    return null;
+  }
+
+  if (!Number.isFinite(count)) count = 0;
+  if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+    try {
+      await client.pexpire(redisKey, windowMs);
+    } catch (error) {
+      console.warn('[rate-limit] Redis expire failed:', error?.message || error);
+    }
+    ttlMs = windowMs;
+  }
+
+  return {
+    count,
+    resetAt: now + ttlMs,
+  };
+};
 
 const maybeCleanupRateLimitStore = (now) => {
   const RATE_LIMIT_ENABLED = process.env.NODE_ENV === 'production' || process.env.RATE_LIMIT_MAX > 0;
@@ -29,25 +90,49 @@ const isLocalAddress = (value) => {
 };
 
 const createRateLimitMiddleware = (config) => {
-  const { RATE_LIMIT_ENABLED, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } = config;
+  const {
+    RATE_LIMIT_ENABLED,
+    RATE_LIMIT_MAX,
+    RATE_LIMIT_WINDOW_MS,
+    initRedisClient = initRedis,
+    redisKeyPrefix = DEFAULT_REDIS_PREFIX,
+  } = config;
 
-  return (req, res, next) => {
+  return async (req, res, next) => {
     if (!RATE_LIMIT_ENABLED) return next();
 
     const now = Date.now();
-    maybeCleanupRateLimitStore(now);
 
     const key = getRateLimitKey(req);
     if (isLocalAddress(key)) return next();
 
-    const entry = rateLimitStore.get(key) || { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
-    if (now >= entry.resetAt) {
-      entry.count = 0;
-      entry.resetAt = now + RATE_LIMIT_WINDOW_MS;
+    let entry = null;
+    const redis = await ensureRedisClient(initRedisClient);
+    if (redis) {
+      entry = await getRedisRateLimitEntry(redis, {
+        key,
+        windowMs: RATE_LIMIT_WINDOW_MS,
+        now,
+        prefix: redisKeyPrefix,
+      });
     }
 
-    entry.count++;
-    rateLimitStore.set(key, entry);
+    if (!entry) {
+      warnOnFallback();
+      maybeCleanupRateLimitStore(now);
+      entry = rateLimitStore.get(key) || { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+      if (now >= entry.resetAt) {
+        entry.count = 0;
+        entry.resetAt = now + RATE_LIMIT_WINDOW_MS;
+      }
+
+      entry.count++;
+      rateLimitStore.set(key, entry);
+    }
+
+    if (entry.count === 0) {
+      entry.count = 1;
+    }
 
     res.setHeader('X-RateLimit-Limit', RATE_LIMIT_MAX);
     res.setHeader('X-RateLimit-Remaining', Math.max(0, RATE_LIMIT_MAX - entry.count));
