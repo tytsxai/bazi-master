@@ -1,0 +1,785 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "BaZi Master API",
+    "version": "1.0.0",
+    "description": "全球化算命平台API - 支持八字、塔罗、周易、星座等算命功能",
+    "contact": {
+      "name": "API Support",
+      "email": "support@bazi-master.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "API服务器"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "错误信息"
+          }
+        }
+      },
+      "HealthCheck": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "description": "服务名称"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "ready",
+              "not_ready"
+            ]
+          },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "db": {
+                "type": "object"
+              },
+              "redis": {
+                "type": "object"
+              }
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uptime": {
+            "type": "number",
+            "description": "运行时间（秒）"
+          }
+        }
+      },
+      "BaziRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "记录ID"
+          },
+          "userId": {
+            "type": "integer",
+            "description": "用户ID"
+          },
+          "birthYear": {
+            "type": "integer",
+            "description": "出生年份"
+          },
+          "birthMonth": {
+            "type": "integer",
+            "description": "出生月份"
+          },
+          "birthDay": {
+            "type": "integer",
+            "description": "出生日期"
+          },
+          "birthHour": {
+            "type": "integer",
+            "description": "出生小时"
+          },
+          "birthLocation": {
+            "type": "string",
+            "description": "出生地点"
+          },
+          "pillars": {
+            "type": "object",
+            "description": "八字柱信息",
+            "properties": {
+              "year": {
+                "type": "object"
+              },
+              "month": {
+                "type": "object"
+              },
+              "day": {
+                "type": "object"
+              },
+              "hour": {
+                "type": "object"
+              }
+            }
+          },
+          "fiveElements": {
+            "type": "object",
+            "description": "五行信息",
+            "properties": {
+              "metal": {
+                "type": "number"
+              },
+              "wood": {
+                "type": "number"
+              },
+              "water": {
+                "type": "number"
+              },
+              "fire": {
+                "type": "number"
+              },
+              "earth": {
+                "type": "number"
+              }
+            }
+          },
+          "tenGods": {
+            "type": "object",
+            "description": "十神信息"
+          },
+          "luckCycles": {
+            "type": "object",
+            "description": "运势周期"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Favorite": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "收藏ID"
+          },
+          "userId": {
+            "type": "integer",
+            "description": "用户ID"
+          },
+          "recordId": {
+            "type": "integer",
+            "description": "记录ID"
+          },
+          "record": {
+            "$ref": "#/components/schemas/BaziRecord"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BaziCalculationRequest": {
+        "type": "object",
+        "required": [
+          "birthYear",
+          "birthMonth",
+          "birthDay"
+        ],
+        "properties": {
+          "birthYear": {
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2030
+          },
+          "birthMonth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "birthDay": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 31
+          },
+          "birthHour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23,
+            "default": 12
+          },
+          "locationKey": {
+            "type": "string",
+            "default": "beijing"
+          },
+          "timezone": {
+            "type": "string",
+            "default": "Asia/Shanghai"
+          }
+        }
+      },
+      "CreateFavoriteRequest": {
+        "type": "object",
+        "required": [
+          "recordId"
+        ],
+        "properties": {
+          "recordId": {
+            "type": "integer",
+            "description": "要收藏的记录ID"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "健康检查",
+        "responses": {
+          "200": {
+            "description": "服务正常",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheck"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheck"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ready": {
+      "get": {
+        "summary": "就绪检查",
+        "responses": {
+          "200": {
+            "description": "服务就绪",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheck"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务未就绪",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheck"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "获取当前用户信息",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "用户信息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bazi/calculate": {
+      "post": {
+        "summary": "计算八字",
+        "description": "基于出生信息计算八字排盘",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaziCalculationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "计算结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaziRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "输入无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "计算错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bazi/records": {
+      "get": {
+        "summary": "获取八字记录列表",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            },
+            "description": "每页记录数"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "偏移量"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "记录列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BaziRecord"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "创建八字记录",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaziCalculationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "record": {
+                      "$ref": "#/components/schemas/BaziRecord"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "输入无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bazi/records/{id}": {
+      "get": {
+        "summary": "获取单个八字记录",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "记录ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "记录详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "record": {
+                      "$ref": "#/components/schemas/BaziRecord"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "记录不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "删除八字记录",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "记录ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "记录不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/favorites": {
+      "get": {
+        "summary": "获取收藏列表",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "收藏列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "favorites": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Favorite"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "添加收藏",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFavoriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "添加成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "favorite": {
+                      "$ref": "#/components/schemas/Favorite"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "输入无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "已收藏",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/favorites/{id}": {
+      "delete": {
+        "summary": "删除收藏",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "收藏ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "收藏不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
