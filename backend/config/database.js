@@ -41,12 +41,18 @@ export const ensureDatabaseUrl = () => {
   const nodeEnv = process.env.NODE_ENV || '';
   if (nodeEnv === 'production') return;
 
-  // Force SQLite for development
-  try {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const sqlitePath = path.resolve(here, '..', '..', 'prisma', 'dev.db');
-    process.env.DATABASE_URL = `file:${sqlitePath}`;
-  } catch {
-    process.env.DATABASE_URL = 'file:./dev.db';
+  const { provider } = readPrismaDatasourceInfo();
+  if (provider === 'sqlite') {
+    try {
+      const here = path.dirname(fileURLToPath(import.meta.url));
+      const sqlitePath = path.resolve(here, '..', '..', 'prisma', 'dev.db');
+      process.env.DATABASE_URL = `file:${sqlitePath}`;
+    } catch {
+      process.env.DATABASE_URL = 'file:./dev.db';
+    }
+    return;
   }
+
+  // Default local Postgres for development/test when schema provider is postgresql.
+  process.env.DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/bazi_master?schema=public';
 };

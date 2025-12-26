@@ -10,16 +10,21 @@ import { initAppConfig } from './config/app.js';
 import { prisma, initPrismaConfig } from './config/prisma.js';
 
 // Import middleware
-import { helmetMiddleware, createCorsMiddleware } from './middleware/security.js';
-import { requestIdMiddleware, requireAuth, requireAdmin } from './middleware/auth.js';
-import { createRateLimitMiddleware } from './middleware/rateLimit.js';
+import {
+  createCorsMiddleware,
+  createRateLimitMiddleware,
+  healthCheckHandler,
+  helmetMiddleware,
+  requestIdMiddleware,
+  requireAdmin,
+  requireAuth,
+  urlLengthMiddleware,
+} from './middleware/index.js';
 
 // Import utilities
 import { patchExpressAsync } from './utils/express.js';
-import { isUrlTooLong } from './utils/validation.js';
-
 // Import services
-import { generateAIContent } from './services/ai.js';
+import { buildOpenApiSpec } from './services/apiSchema.service.js';
 
 // Import routes
 import apiRouter from './routes/api.js';
@@ -61,25 +66,13 @@ app.use(compression());
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 // Health Check Endpoint (Probes)
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    service: 'bazi-master-backend',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
-});
+app.get('/health', healthCheckHandler);
 
 // Request ID middleware
 app.use(requestIdMiddleware);
 
 // URL length validation
-app.use((req, res, next) => {
-  if (isUrlTooLong(req)) {
-    return res.status(414).json({ error: 'Request-URI Too Long' });
-  }
-  return next();
-});
+app.use(urlLengthMiddleware);
 
 // Rate limiting
 const rateLimitMiddleware = createRateLimitMiddleware({
@@ -93,146 +86,9 @@ app.use(rateLimitMiddleware);
 app.use('/api', apiRouter);
 
 // OpenAPI/Swagger documentation
-const openApiSpec = {
-  openapi: '3.0.3',
-  info: {
-    title: 'BaZi Master API',
-    version: '1.0.0',
-    description: '全球化算命平台API - 支持八字、塔罗、周易、星座等算命功能',
-    contact: {
-      name: 'API Support',
-      email: 'support@bazi-master.com'
-    }
-  },
-  servers: [
-    {
-      url: process.env.BACKEND_BASE_URL || 'http://localhost:4000',
-      description: 'API服务器'
-    }
-  ],
-  security: [
-    {
-      bearerAuth: []
-    }
-  ],
-  components: {
-    securitySchemes: {
-      bearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT'
-      }
-    },
-    schemas: {
-      Error: {
-        type: 'object',
-        properties: {
-          error: {
-            type: 'string',
-            description: '错误信息'
-          }
-        }
-      },
-      HealthCheck: {
-        type: 'object',
-        properties: {
-          status: {
-            type: 'string',
-            enum: ['ok', 'degraded']
-          },
-          checks: {
-            type: 'object',
-            properties: {
-              db: { type: 'object' },
-              redis: { type: 'object' }
-            }
-          },
-          timestamp: {
-            type: 'string',
-            format: 'date-time'
-          }
-        }
-      }
-    }
-  },
-  paths: {
-    '/health': {
-      get: {
-        summary: '健康检查',
-        responses: {
-          200: {
-            description: '服务正常',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/HealthCheck' }
-              }
-            }
-          },
-          503: {
-            description: '服务不可用',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/HealthCheck' }
-              }
-            }
-          }
-        }
-      }
-    },
-    '/api/ready': {
-      get: {
-        summary: '就绪检查',
-        responses: {
-          200: {
-            description: '服务就绪',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/HealthCheck' }
-              }
-            }
-          },
-          503: {
-            description: '服务未就绪',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/HealthCheck' }
-              }
-            }
-          }
-        }
-      }
-    },
-    '/api/auth/me': {
-      get: {
-        summary: '获取当前用户信息',
-        security: [{ bearerAuth: [] }],
-        responses: {
-          200: {
-            description: '用户信息',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    user: { type: 'object' }
-                  }
-                }
-              }
-            }
-          },
-          401: {
-            description: '未认证',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/Error' }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-};
+const openApiSpec = buildOpenApiSpec({
+  baseUrl: process.env.BACKEND_BASE_URL || 'http://localhost:4000',
+});
 const apiDocsGuards = IS_PRODUCTION ? [requireAuth, requireAdmin] : [];
 app.get('/api-docs.json', ...apiDocsGuards, (req, res) => res.json(openApiSpec));
 
@@ -282,7 +138,20 @@ if (NODE_ENV !== 'test' && isMain) {
     const errors = [];
     const warnings = [];
 
-    // Add config validation logic here...
+    if (IS_PRODUCTION) {
+      if (!process.env.SESSION_TOKEN_SECRET || process.env.SESSION_TOKEN_SECRET.length < 32) {
+        errors.push('SESSION_TOKEN_SECRET must be at least 32 characters in production');
+      }
+      if (!process.env.DATABASE_URL?.includes('postgresql')) {
+        errors.push('DATABASE_URL must be PostgreSQL in production');
+      }
+      if (!process.env.FRONTEND_URL || process.env.FRONTEND_URL.includes('localhost')) {
+        warnings.push('FRONTEND_URL should not be localhost in production');
+      }
+      if (!process.env.BACKEND_BASE_URL || process.env.BACKEND_BASE_URL.includes('localhost')) {
+        warnings.push('BACKEND_BASE_URL should not be localhost in production');
+      }
+    }
 
     warnings.forEach((warning) => {
       console.warn(`[config] ${warning}`);
@@ -297,15 +166,20 @@ if (NODE_ENV !== 'test' && isMain) {
     }
 
     try {
-      // Initialize database tables
-      // Add database initialization logic here...
+      // Test database connection
+      await prisma.$connect();
+      console.log('[db] Database connection established');
     } catch (error) {
-      console.error('Failed to initialize server prerequisites:', error);
+      console.error('[db] Failed to connect to database:', error);
+      process.exit(1);
     }
 
     const bindHost = process.env.BIND_HOST || (IS_PRODUCTION ? '0.0.0.0' : '127.0.0.1');
     server.listen(PORT, bindHost, () => {
-      console.log(`BaZi Master API running on http://localhost:${PORT}`);
+      console.log(`BaZi Master API running on http://${bindHost}:${PORT}`);
+      if (IS_PRODUCTION && bindHost === '0.0.0.0') {
+        console.log(`[production] Accepting connections from all interfaces`);
+      }
     });
   })();
 }

@@ -13,7 +13,7 @@ const importCacheModule = async (envOverrides = {}) => {
     }
   });
 
-  const cacheModule = await import(`../baziCache.js?ts=${Date.now()}-${Math.random()}`);
+  const cacheModule = await import(`../services/cache.service.js?ts=${Date.now()}-${Math.random()}`);
 
   Object.keys(envOverrides).forEach((key) => {
     if (priorEnv[key] === undefined) {

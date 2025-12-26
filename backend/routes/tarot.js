@@ -1,9 +1,9 @@
 import express from 'express';
 import { prisma } from '../config/prisma.js';
 import { requireAuth, requireAuthStrict } from '../middleware/auth.js';
-import { drawTarot, getTarotSpreadConfig } from '../tarot.js';
+import { drawTarot, getTarotSpreadConfig } from '../services/tarot.service.js';
 import tarotDeck from '../data/tarotData.js';
-import { generateAIContent } from '../services/ai.js';
+import { generateAIContent } from '../services/ai.service.js';
 import { resolveAiProvider } from '../services/ai.service.js';
 import { parseIdParam } from '../utils/validation.js';
 import { createAiGuard } from '../lib/concurrency.js';

@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAuthToken, createAuthorizeToken, createRequireAuth, requireAdmin } from '../auth.js';
+import { buildAuthToken, createAuthorizeToken, createRequireAuth, requireAdmin } from '../services/auth.service.js';
 
 const makeRes = () => {
   const res = {

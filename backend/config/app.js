@@ -1,27 +1,21 @@
-import { getServerConfig as getServerConfigFromEnv, getSessionConfig as getSessionConfigFromEnv } from '../env.js';
-
-export const parseTrustProxy = (raw) => {
-  if (raw === '1' || raw === 'true') return true;
-  if (raw === '0' || raw === 'false') return false;
-  return raw || false;
-};
-
-export const stripInsensitiveMode = (value) => {
-  if (typeof value !== 'string') return value;
-  return value.replace(/\b(password|token|secret|key)\b/gi, '[REDACTED]');
-};
-
-export const normalizePrismaWhere = (where) => {
-  if (!where || typeof where !== 'object') return where;
-  const result = {};
-  for (const [key, value] of Object.entries(where)) {
-    if (key === 'password') continue; // Never log passwords
-    result[key] = stripInsensitiveMode(value);
+const readNumber = (value, fallback) => {
+  if (value === undefined || value === null || value === '') {
+    return Number(fallback);
   }
-  return result;
+  return Number(value);
 };
 
-export const normalizeOrigin = (value) => {
+const parseAdminEmails = (raw, nodeEnv = '') => {
+  const fallback = nodeEnv === 'production' ? '' : 'admin@example.com';
+  return new Set(
+    (raw || fallback)
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean)
+  );
+};
+
+const normalizeOrigin = (value) => {
   if (!value || typeof value !== 'string') return '';
   try {
     const url = new URL(value);
@@ -31,7 +25,7 @@ export const normalizeOrigin = (value) => {
   }
 };
 
-export const expandLoopbackOrigins = (origin) => {
+const expandLoopbackOrigins = (origin) => {
   if (!origin || typeof origin !== 'string') return [];
   const origins = new Set([origin]);
 
@@ -49,7 +43,7 @@ export const expandLoopbackOrigins = (origin) => {
   return Array.from(origins);
 };
 
-export const parseOriginList = (value) => {
+const parseOriginList = (value) => {
   if (!value || typeof value !== 'string') return [];
   return value
     .split(',')
@@ -58,8 +52,125 @@ export const parseOriginList = (value) => {
     .flatMap(expandLoopbackOrigins);
 };
 
+const parseTrustProxy = (raw) => {
+  if (raw === '1' || raw === 'true') return true;
+  if (raw === '0' || raw === 'false') return false;
+  return raw || false;
+};
+
+export const getServerConfig = () => {
+  const port = process.env.PORT || 4000;
+  const jsonBodyLimit = process.env.JSON_BODY_LIMIT || '50mb';
+  const maxUrlLength = readNumber(process.env.MAX_URL_LENGTH, 16384);
+  const nodeEnv = process.env.NODE_ENV || '';
+  const isProduction = nodeEnv === 'production';
+  const rateLimitWindowMs = readNumber(
+    process.env.RATE_LIMIT_WINDOW_MS,
+    isProduction ? 60_000 : 0
+  );
+  const rateLimitMax = readNumber(
+    process.env.RATE_LIMIT_MAX,
+    isProduction ? 120 : 0
+  );
+
+  const openaiApiKey = process.env.OPENAI_API_KEY || '';
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
+  const aiProvider = (
+    process.env.AI_PROVIDER
+    || (openaiApiKey ? 'openai' : null)
+    || (anthropicApiKey ? 'anthropic' : null)
+    || 'mock'
+  ).toLowerCase();
+
+  const openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620';
+  const aiMaxTokens = readNumber(process.env.AI_MAX_TOKENS, 700);
+  const aiTimeoutMs = readNumber(process.env.AI_TIMEOUT_MS, 15000);
+
+  const resetTokenTtlMs = readNumber(process.env.RESET_TOKEN_TTL_MS, 30 * 60 * 1000);
+  const resetRequestMinDurationMs = readNumber(
+    process.env.RESET_REQUEST_MIN_DURATION_MS,
+    350
+  );
+  const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
+  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+  const googleRedirectUri =
+    process.env.GOOGLE_REDIRECT_URI || `http://localhost:${port}/api/auth/google/callback`;
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS, nodeEnv);
+  const sessionTokenSecret = process.env.SESSION_TOKEN_SECRET || '';
+  const allowDevOauthRaw = process.env.ALLOW_DEV_OAUTH;
+  const allowDevOauth = allowDevOauthRaw === undefined || allowDevOauthRaw === ''
+    ? !isProduction
+    : allowDevOauthRaw === '1' || allowDevOauthRaw === 'true';
+
+  const wechatAppId = process.env.WECHAT_APP_ID || '';
+  const wechatAppSecret = process.env.WECHAT_APP_SECRET || '';
+  const wechatScope = process.env.WECHAT_SCOPE || 'snsapi_login';
+  const wechatFrontendUrl = process.env.WECHAT_FRONTEND_URL || frontendUrl || 'http://localhost:3000';
+  const backendBaseUrl = process.env.BACKEND_BASE_URL || 'http://localhost:4000';
+  const wechatRedirectUri = process.env.WECHAT_REDIRECT_URI
+    || `${backendBaseUrl}/api/auth/wechat/callback`;
+  const openApiBaseUrl = process.env.BACKEND_BASE_URL || `http://localhost:${port}`;
+
+  const importBatchSize = readNumber(process.env.IMPORT_BATCH_SIZE, 500);
+  const shutdownTimeoutMs = readNumber(process.env.SHUTDOWN_TIMEOUT_MS, 10000);
+  const corsAllowedOrigins = process.env.CORS_ALLOWED_ORIGINS || '';
+  const availableProviders = [
+    { name: 'openai', enabled: Boolean(openaiApiKey) },
+    { name: 'anthropic', enabled: Boolean(anthropicApiKey) },
+    { name: 'mock', enabled: true }
+  ];
+
+  return {
+    port,
+    jsonBodyLimit,
+    maxUrlLength,
+    rateLimitWindowMs,
+    rateLimitMax,
+    aiProvider,
+    openaiApiKey,
+    anthropicApiKey,
+    openaiModel,
+    anthropicModel,
+    aiMaxTokens,
+    aiTimeoutMs,
+    availableProviders,
+    resetTokenTtlMs,
+    resetRequestMinDurationMs,
+    googleClientId,
+    googleClientSecret,
+    googleRedirectUri,
+    frontendUrl,
+    adminEmails,
+    sessionTokenSecret,
+    allowDevOauth,
+    wechatAppId,
+    wechatAppSecret,
+    wechatScope,
+    wechatFrontendUrl,
+    wechatRedirectUri,
+    openApiBaseUrl,
+    importBatchSize,
+    shutdownTimeoutMs,
+    corsAllowedOrigins,
+    nodeEnv,
+  };
+};
+
+export const getSessionConfig = () => ({
+  sessionIdleMs: readNumber(process.env.SESSION_IDLE_MS, 30 * 60 * 1000),
+});
+
+export const getBaziCacheConfig = () => ({
+  ttlMs: readNumber(process.env.BAZI_CACHE_TTL_MS, 6 * 60 * 60 * 1000),
+  maxEntries: readNumber(process.env.BAZI_CACHE_MAX_ENTRIES, 500),
+});
+
 export const initAppConfig = () => {
-  const { sessionIdleMs: SESSION_IDLE_MS } = getSessionConfigFromEnv();
+  const sessionConfig = getSessionConfig();
+  const serverConfig = getServerConfig();
+
   const {
     port: PORT,
     jsonBodyLimit: JSON_BODY_LIMIT,
@@ -81,11 +192,9 @@ export const initAppConfig = () => {
     wechatFrontendUrl: WECHAT_FRONTEND_URL,
     wechatRedirectUri: WECHAT_REDIRECT_URI,
     nodeEnv: NODE_ENV,
-  } = getServerConfigFromEnv();
+  } = serverConfig;
 
-  // Rate limiting is enabled in production or when explicitly configured
   const RATE_LIMIT_ENABLED = NODE_ENV === 'production' || RATE_LIMIT_MAX > 0;
-
   const IS_PRODUCTION = NODE_ENV === 'production';
   const DATABASE_URL = process.env.DATABASE_URL || '';
 
@@ -107,7 +216,7 @@ export const initAppConfig = () => {
     RATE_LIMIT_WINDOW_MS,
     RATE_LIMIT_MAX,
     RATE_LIMIT_ENABLED,
-    SESSION_IDLE_MS,
+    SESSION_IDLE_MS: sessionConfig.sessionIdleMs,
     AI_PROVIDER,
     AVAILABLE_PROVIDERS,
     GOOGLE_CLIENT_ID,

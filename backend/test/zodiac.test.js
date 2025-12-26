@@ -6,7 +6,7 @@ import {
   degToRad,
   radToDeg,
   calculateRisingSign
-} from '../zodiac.js';
+} from '../services/zodiac.service.js';
 
 test('normalizeAngle wraps degrees into [0, 360)', () => {
   assert.equal(normalizeAngle(-30), 330);

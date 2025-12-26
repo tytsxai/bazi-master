@@ -1,4 +1,4 @@
-import { getServerConfig as getServerConfigFromEnv } from '../env.js';
+import { getServerConfig as getServerConfigFromEnv } from '../config/app.js';
 import { createAiGuard } from '../lib/concurrency.js';
 
 const {
@@ -291,6 +291,53 @@ const generateAIContent = async ({ system, user, fallback, provider, onChunk }) 
   }
 };
 
+const buildBaziPrompt = ({ pillars, fiveElements, tenGods, luckCycles, strength }) => {
+  const elementLines = fiveElements
+    ? Object.entries(fiveElements).map(([key, value]) => `- ${key}: ${value}`).join('\n')
+    : '- Not provided';
+  const tenGodLines = Array.isArray(tenGods)
+    ? tenGods
+      .filter((tg) => tg?.strength > 0)
+      .sort((a, b) => b.strength - a.strength)
+      .slice(0, 5)
+      .map((tg) => `- ${tg.name}: ${tg.strength}`)
+      .join('\n')
+    : '- Not provided';
+  const luckLines = Array.isArray(luckCycles)
+    ? luckCycles.map((cycle) => `- ${cycle.range}: ${cycle.stem}${cycle.branch}`).join('\n')
+    : '- Not provided';
+
+  const system = 'You are a seasoned BaZi practitioner. Provide a concise, grounded interpretation in Markdown with sections: Summary, Key Patterns, Advice. Keep under 220 words.';
+  const user = `
+Day Master: ${pillars?.day?.stem || 'Unknown'} (${pillars?.day?.elementStem || 'Unknown'})
+Month Pillar: ${pillars?.month?.stem || 'Unknown'} ${pillars?.month?.branch || 'Unknown'} (${pillars?.month?.elementBranch || 'Unknown'})
+Five Elements:
+${elementLines}
+Ten Gods (top):
+${tenGodLines}
+Luck Cycles:
+${luckLines}
+Strength Notes: ${strength || 'Not provided'}
+  `.trim();
+
+  const fallback = () => {
+    const summary = `A ${pillars?.day?.elementStem || 'balanced'} Day Master chart with notable elemental distribution.`;
+    const patterns = tenGodLines;
+    const advice = 'Focus on balancing elements that are lower in count and lean into favorable cycles.';
+    return `
+## 🔮 BaZi Insight
+**Summary:** ${summary}
+
+**Key Patterns:**
+${patterns}
+
+**Advice:** ${advice}
+    `.trim();
+  };
+
+  return { system, user, fallback };
+};
+
 export {
   callOpenAI,
   callOpenAIStream,
@@ -298,4 +345,5 @@ export {
   callAnthropicStream,
   generateAIContent,
   resolveAiProvider,
+  buildBaziPrompt,
 };

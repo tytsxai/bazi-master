@@ -1,7 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-import { buildAuthToken } from '../auth.js';
+import { buildAuthToken } from '../services/auth.service.js';
 import { cleanupUserInMemory, deleteUserCascade } from '../userCleanup.js';
-import { createSessionStore } from '../sessionStore.js';
+import { createSessionStore } from '../services/session.service.js';
 
 const prisma = new PrismaClient();
 

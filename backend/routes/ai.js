@@ -1,5 +1,5 @@
 import express from 'express';
-import { getServerConfig as getServerConfigFromEnv } from '../env.js';
+import { getServerConfig as getServerConfigFromEnv } from '../config/app.js';
 
 const router = express.Router();
 

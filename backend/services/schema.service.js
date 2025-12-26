@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 
 import { initAppConfig } from '../config/app.js';
 import { prisma, initPrismaConfig } from '../config/prisma.js';
-import { hashPassword, isHashedPassword, verifyPassword } from '../passwords.js';
+import { hashPassword, isHashedPassword, verifyPassword } from '../utils/passwords.js';
 
 const { IS_PRODUCTION } = initAppConfig();
 const { IS_SQLITE, IS_POSTGRES } = initPrismaConfig();

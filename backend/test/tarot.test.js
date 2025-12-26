@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import tarotDeck from '../data/tarotData.js';
-import { drawTarot, getTarotSpreadConfig, TAROT_SPREADS } from '../tarot.js';
+import { drawTarot, getTarotSpreadConfig, TAROT_SPREADS } from '../services/tarot.service.js';
 
 const makeRng = (values, fallback = 0.99) => {
   let index = 0;

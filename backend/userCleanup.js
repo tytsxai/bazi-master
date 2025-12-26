@@ -1,4 +1,4 @@
-import { parseAuthToken } from './auth.js';
+import { parseAuthToken } from './services/auth.service.js';
 
 const deleteUserResetTokens = (userId, resetTokenStore, resetTokenByUser) => {
   if (!resetTokenStore || !resetTokenByUser) return;

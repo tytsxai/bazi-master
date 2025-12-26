@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma.js';
-import { initRedis } from '../redis.js';
+import { initRedis } from '../config/redis.js';
 
 export const withTimeout = (promise, timeoutMs) => {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;

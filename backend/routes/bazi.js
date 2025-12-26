@@ -4,10 +4,10 @@ import { requireAuth } from '../middleware/auth.js';
 import {
     getBaziCalculation,
     buildImportRecord
-} from '../services/bazi.js';
+} from '../services/calculations.service.js';
 import { validateBaziInput, parseIdParam } from '../utils/validation.js';
 import { parseRecordsQuery } from '../utils/query.js';
-import { generateAIContent, resolveAiProvider, buildBaziPrompt } from '../services/ai.js';
+import { generateAIContent, resolveAiProvider, buildBaziPrompt } from '../services/ai.service.js';
 import { createAiGuard } from '../lib/concurrency.js';
 
 const router = express.Router();

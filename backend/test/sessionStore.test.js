@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { createSessionStore } from '../sessionStore.js';
+import { createSessionStore } from '../services/session.service.js';
 
 describe('session store', () => {
   test('set/get/has work with numeric values', () => {

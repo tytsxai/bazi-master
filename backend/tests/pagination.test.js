@@ -6,7 +6,7 @@ import {
   getPagination,
   paginateArray,
   slicePage,
-} from '../pagination.js';
+} from '../utils/pagination.js';
 
 test('normalizePageNumber defaults invalid inputs to 1', () => {
   assert.equal(normalizePageNumber(undefined), 1);

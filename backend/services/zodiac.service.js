@@ -4,10 +4,82 @@ import {
   ZODIAC_PERIODS
 } from '../constants/zodiac.js';
 
-const formatDateLabel = (date, options) =>
+export { ZODIAC_PERIODS };
+
+export const ZODIAC_ORDER = [
+  'aries',
+  'taurus',
+  'gemini',
+  'cancer',
+  'leo',
+  'virgo',
+  'libra',
+  'scorpio',
+  'sagittarius',
+  'capricorn',
+  'aquarius',
+  'pisces'
+];
+
+export const normalizeAngle = (deg) => ((deg % 360) + 360) % 360;
+export const degToRad = (deg) => (deg * Math.PI) / 180;
+export const radToDeg = (rad) => (rad * 180) / Math.PI;
+
+export const calculateRisingSign = ({
+  birthYear,
+  birthMonth,
+  birthDay,
+  birthHour,
+  birthMinute,
+  latitude,
+  longitude,
+  timezoneOffsetMinutes
+}) => {
+  const offsetMinutes = Number.isFinite(timezoneOffsetMinutes) ? timezoneOffsetMinutes : 0;
+  const utcMillis = Date.UTC(
+    birthYear,
+    birthMonth - 1,
+    birthDay,
+    birthHour,
+    birthMinute || 0,
+    0
+  ) - offsetMinutes * 60 * 1000;
+
+  const jd = utcMillis / 86400000 + 2440587.5;
+  const t = (jd - 2451545.0) / 36525;
+  const gmst = normalizeAngle(
+    280.46061837 +
+    360.98564736629 * (jd - 2451545.0) +
+    0.000387933 * t * t -
+    (t * t * t) / 38710000
+  );
+  const lst = normalizeAngle(gmst + longitude);
+
+  const theta = degToRad(lst);
+  const epsilon = degToRad(23.439291 - 0.0130042 * t);
+  const phi = degToRad(latitude);
+
+  const ascRad = Math.atan2(
+    -Math.cos(theta),
+    Math.sin(theta) * Math.cos(epsilon) + Math.tan(phi) * Math.sin(epsilon)
+  );
+  const ascDeg = normalizeAngle(radToDeg(ascRad) + 180);
+  const signIndex = Math.floor(ascDeg / 30);
+  const signKey = ZODIAC_ORDER[signIndex] || 'aries';
+
+  return {
+    signKey,
+    ascendant: {
+      longitude: Number(ascDeg.toFixed(2)),
+      localSiderealTime: Number((lst / 15).toFixed(2))
+    }
+  };
+};
+
+export const formatDateLabel = (date, options) =>
   date.toLocaleDateString('en-US', options);
 
-const getWeekRange = (date) => {
+export const getWeekRange = (date) => {
   const day = date.getDay();
   const diffToMonday = (day + 6) % 7;
   const start = new Date(date);
@@ -17,16 +89,16 @@ const getWeekRange = (date) => {
   return `${formatDateLabel(start, { month: 'short', day: 'numeric' })} - ${formatDateLabel(end, { month: 'short', day: 'numeric' })}`;
 };
 
-const normalizeSign = (raw) => raw?.toString().trim().toLowerCase();
+export const normalizeSign = (raw) => raw?.toString().trim().toLowerCase();
 
-const sanitizeQueryParam = (raw) => {
+export const sanitizeQueryParam = (raw) => {
   const normalized = normalizeSign(raw);
   if (!normalized) return null;
   if (!/^[a-z]+$/.test(normalized)) return null;
   return normalized;
 };
 
-const buildHoroscope = (sign, period) => {
+export const buildHoroscope = (sign, period) => {
   const now = new Date();
   const range =
     period === 'daily'
@@ -61,10 +133,10 @@ const buildHoroscope = (sign, period) => {
   };
 };
 
-const clampScore = (value, min = 0, max = 100) =>
+export const clampScore = (value, min = 0, max = 100) =>
   Math.min(max, Math.max(min, value));
 
-const compatibilityLevel = (score) => {
+export const compatibilityLevel = (score) => {
   if (score >= 80) return 'Cosmic Spark';
   if (score >= 65) return 'Harmonious Flow';
   if (score >= 50) return 'Balanced Orbit';
@@ -75,7 +147,7 @@ const compatibilityLevel = (score) => {
 const buildCompatibilitySummary = (primary, secondary, level) =>
   `${level} between ${primary.name} and ${secondary.name}. ${primary.element} energy meets ${secondary.element} energy with ${primary.modality.toLowerCase()} and ${secondary.modality.toLowerCase()} rhythms.`;
 
-const buildZodiacCompatibility = (primary, secondary) => {
+export const buildZodiacCompatibility = (primary, secondary) => {
   let score = 50;
   const highlights = [];
   const breakdown = {};
@@ -147,14 +219,4 @@ const buildZodiacCompatibility = (primary, secondary) => {
   };
 };
 
-export {
-  ZODIAC_PERIODS,
-  buildHoroscope,
-  buildZodiacCompatibility,
-  compatibilityLevel,
-  clampScore,
-  formatDateLabel,
-  getWeekRange,
-  normalizeSign,
-  sanitizeQueryParam
-};
+// All exports are handled individually above

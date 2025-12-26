@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, before, after } from 'node:test';
-import { buildAuthToken } from '../auth.js';
+import { buildAuthToken } from '../services/auth.service.js';
 import { server, prisma } from '../server.js';
 
 const TOKEN_SECRET = 'test-session-secret-for-auth-me-test';

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildImportRecord } from '../services/bazi.js';
+import { buildImportRecord } from '../services/calculations.service.js';
 import { parseRecordsQuery } from '../utils/query.js';
-import { parseSearchTerms, buildSearchOr, recordMatchesQuery } from '../search.js';
+import { parseSearchTerms, buildSearchOr, recordMatchesQuery } from '../utils/search.js';
 
 test('parseSearchTerms handles quotes and whitespace', () => {
   const terms = parseSearchTerms('foo "bar baz"   \'zip zop\'');

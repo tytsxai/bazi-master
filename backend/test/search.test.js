@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSearchTerms, recordMatchesQuery, buildSearchOr } from '../search.js';
+import { parseSearchTerms, recordMatchesQuery, buildSearchOr } from '../utils/search.js';
 
 describe('parseSearchTerms', () => {
   it('splits by spaces when no quotes are present', () => {

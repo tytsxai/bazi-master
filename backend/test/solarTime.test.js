@@ -4,7 +4,7 @@ import {
   normalizeLocationKey,
   resolveLocationCoordinates,
   computeTrueSolarTime,
-} from '../solarTime.js';
+} from '../services/solarTime.service.js';
 
 describe('solar time helpers', () => {
   test('normalizeLocationKey trims and normalizes punctuation', () => {

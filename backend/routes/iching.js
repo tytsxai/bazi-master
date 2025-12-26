@@ -1,13 +1,13 @@
 import express from 'express';
-import { prisma } from '../config/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { hexagrams } from '../data/ichingHexagrams.js';
+import { generateAIContent } from '../services/ai.service.js';
 import {
     pickTrigram,
     buildHexagram,
     deriveChangingLinesFromNumbers,
     deriveChangingLinesFromTimeContext
-} from '../iching.js';
+} from '../services/iching.service.js';
 
 const router = express.Router();
 

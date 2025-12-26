@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequireAuth } from '../auth.js';
+import { createRequireAuth } from '../services/auth.service.js';
 
 const buildRes = () => {
   const res = {

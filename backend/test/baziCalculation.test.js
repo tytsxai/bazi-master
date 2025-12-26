@@ -13,15 +13,15 @@ import {
   getCachedBaziCalculation,
   buildFiveElementsPercent,
   normalizeBaziResult
-} from '../baziCache.js';
+} from '../services/cache.service.js';
 import {
   buildPillar,
   calculateTenGod,
   getBaziCalculation,
   getElementRelation,
   performCalculation,
-} from '../services/bazi.js';
-import { validateBaziInput } from '../validation.js';
+} from '../services/calculations.service.js';
+import { validateBaziInput } from '../utils/validation.js';
 
 test('validateBaziInput trims inputs and rejects invalid dates', () => {
   const ok = validateBaziInput({

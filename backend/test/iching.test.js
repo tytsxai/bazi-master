@@ -7,7 +7,7 @@ import {
   applyChangingLines,
   deriveChangingLinesFromNumbers,
   deriveChangingLinesFromTimeContext,
-} from '../iching.js';
+} from '../services/iching.service.js';
 
 test('normalizeNumber returns modulo for multiples and null for invalid', () => {
   assert.equal(normalizeNumber(8, 8), 8);
