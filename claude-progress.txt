@@ -215,3 +215,8 @@
 - Added Playwright coverage for profile flow from /tarot with backend data verification, screenshots, and console error checks (security-profile-tarot.spec.js).
 - Verified security-profile-tarot flow end-to-end via Playwright with running dev servers; marked feature_list.json test #51 as passing. Current progress: 73/479 tests passing.
 - Next: continue remaining Security & Access Control scenarios (#52+) or move to next highest-priority failing feature (navigation integrity, search/filter, Zodiac compatibility, Tarot edge cases).
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js); both passed.
+- Added Playwright coverage for Zodiac monthly horoscope from /tarot with backend data verification and screenshots (security-zodiac-monthly-tarot.spec.js).
+- Verified Zodiac monthly tarot flow end-to-end via Playwright; marked feature_list.json test #52 as passing. Current progress: 74/479 tests passing.
+- Mock-data scan: matches only in node_modules/dist assets.
+- Next: continue remaining Security & Access Control scenarios (#53+) or move to next highest-priority failing feature (navigation integrity, Zodiac compatibility, search/filter).
