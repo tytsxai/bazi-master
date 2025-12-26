@@ -30,5 +30,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Frontend React SPA with i18n, routing, and Playwright E2E specs.
 - Prisma schema with initial migration targeting SQLite (dev) and PostgreSQL (prod).
 
-[Unreleased]: https://example.com/compare/0.1.0...HEAD
-[0.1.0]: https://example.com/releases/0.1.0
+[Unreleased]: https://github.com/tytsxai/bazi-master/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/tytsxai/bazi-master/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/tytsxai/bazi-master/releases/tag/v0.1.0
