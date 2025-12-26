@@ -211,3 +211,7 @@
 - Verified register-from-I-Ching flow end-to-end via Playwright; marked feature_list.json test #50 as passing. Current progress: 72/479 tests passing.
 - Mock-data scan: matches only in node_modules.
 - Next: continue remaining Security & Access Control scenarios (#51+) or move to next highest-priority failing feature.
+- Fixed frontend startup regression: removed duplicate React import in App.jsx and corrected i18n fallbackLng default to array to prevent i18next runtime crash.
+- Added Playwright coverage for profile flow from /tarot with backend data verification, screenshots, and console error checks (security-profile-tarot.spec.js).
+- Verified security-profile-tarot flow end-to-end via Playwright with running dev servers; marked feature_list.json test #51 as passing. Current progress: 73/479 tests passing.
+- Next: continue remaining Security & Access Control scenarios (#52+) or move to next highest-priority failing feature (navigation integrity, search/filter, Zodiac compatibility, Tarot edge cases).

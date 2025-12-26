@@ -18,6 +18,7 @@ import Ziwei from './pages/Ziwei.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 function AdminRoute({ children }) {
+  const { t } = useTranslation();
   const { isAuthenticated, user, token } = useAuth();
   const location = useLocation();
   const [status, setStatus] = useState('checking');
@@ -81,7 +82,7 @@ function AdminRoute({ children }) {
     }
     return (
       <div className="mx-auto max-w-3xl px-6 py-16 text-center text-sm text-gray-600">
-        Verifying admin access...
+        {t('admin.verifying')}
       </div>
     );
   }
@@ -96,21 +97,23 @@ function NotFoundRedirect() {
 }
 
 function Forbidden() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto max-w-3xl px-6 py-16 text-center">
-      <h1 className="text-3xl font-semibold">403 - Forbidden</h1>
+      <h1 className="text-3xl font-semibold">{t('admin.forbiddenTitle')}</h1>
       <p className="mt-4 text-base text-gray-600">
-        You do not have access to this admin area.
+        {t('admin.forbiddenDesc')}
       </p>
     </div>
   );
 }
 
 function AdminArea() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Admin</h1>
-      <p className="mt-2 text-sm text-gray-600">Restricted area for administrators.</p>
+      <h1 className="text-2xl font-semibold">{t('admin.areaTitle')}</h1>
+      <p className="mt-2 text-sm text-gray-600">{t('admin.areaDesc')}</p>
     </div>
   );
 }
