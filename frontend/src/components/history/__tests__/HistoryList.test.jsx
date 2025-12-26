@@ -259,3 +259,4 @@ describe('HistoryList', () => {
     expect(screen.getByText('history.next')).toBeInTheDocument();
   });
 });
+

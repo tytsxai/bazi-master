@@ -18,6 +18,15 @@ router.post('/', requireAuth, async (req, res) => {
     if (!recordId) return res.status(400).json({ error: 'Record ID required' });
 
     try {
+        // Verify the record exists and belongs to the current user
+        const record = await prisma.baziRecord.findFirst({
+            where: { id: recordId, userId: req.user.id }
+        });
+
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
         const favorite = await prisma.favorite.create({
             data: { userId: req.user.id, recordId },
             include: { record: true }

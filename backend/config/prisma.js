@@ -22,3 +22,4 @@ export const initPrismaConfig = () => {
 };
 
 export const prisma = new PrismaClient();
+

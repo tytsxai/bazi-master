@@ -34,3 +34,4 @@ export const getBrowserTimezoneLabel = () => {
   const offsetMinutes = -new Date().getTimezoneOffset();
   return formatOffsetMinutes(offsetMinutes);
 };
+
