@@ -179,3 +179,7 @@
 - Added Playwright security-confirmation-dialogs.spec.js to verify confirmation dialogs for AI requests and delete actions with screenshots.
 - Verified confirmation dialogs flow end-to-end via Playwright; marked feature_list.json test #42 as passing. Current progress: 65/479 tests passing.
 - Next: continue remaining Security & Access Control tests (confirmation dialogs in other modules if needed, menu visibility for other roles) and move to next functional module tests.
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js) with dev servers started via scripts/dev-server.mjs and PW_NO_WEB_SERVER=1; both passed after initial connection refused when web server was not running.
+- Added Playwright security test for password reset privacy (security-password-reset-privacy.spec.js) with screenshots; verified reset request returns identical success message for existing vs unknown emails.
+- Marked feature_list.json test "[A. Security & Access Control] Password reset flow does not leak whether email exists" as passing. Current progress: 66/479 tests passing.
+- Next: continue remaining failing tests (e.g., Ziwei V2 placeholders, search/filter/pagination, Zodiac compatibility, Tarot edge cases).
