@@ -164,3 +164,6 @@
 - Added verification screenshots to session-idle-expiry Playwright flow and re-verified.
 - Marked feature_list.json test #38 ([A. Security & Access Control] Session expires after inactivity and forces re-login) as passing. Current progress: 61/479 tests passing.
 - Next: continue remaining Security & Access Control API tests and move to next failing feature.
+- Verified logout clears auth/session cache via Playwright (logout.spec.js) with screenshots; added checks for token origin/profile name cleanup and protected route redirect.
+- Marked feature_list.json test #39 (Logout clears tokens/session/user cache) as passing. Current progress: 62/479 tests passing.
+- Next: continue remaining Security & Access Control tests (direct URL access block, role-based menu visibility, confirmation dialogs) then move to next functional module.
