@@ -1238,19 +1238,35 @@ const ensureUserSettingsTable = async () => {
 const ensureZiweiHistoryTable = async () => {
   if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
-    await prisma.$executeRaw`
-      CREATE TABLE IF NOT EXISTS ZiweiRecord (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId INTEGER NOT NULL,
-        birthYear INTEGER NOT NULL,
-        birthMonth INTEGER NOT NULL,
-        birthDay INTEGER NOT NULL,
-        birthHour INTEGER NOT NULL,
-        gender TEXT NOT NULL,
-        chart TEXT NOT NULL,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
+    if (IS_SQLITE) {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS ZiweiRecord (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          userId INTEGER NOT NULL,
+          birthYear INTEGER NOT NULL,
+          birthMonth INTEGER NOT NULL,
+          birthDay INTEGER NOT NULL,
+          birthHour INTEGER NOT NULL,
+          gender TEXT NOT NULL,
+          chart TEXT NOT NULL,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    } else if (IS_POSTGRES) {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "ZiweiRecord" (
+          "id" SERIAL NOT NULL,
+          "userId" INTEGER NOT NULL,
+          "birthYear" INTEGER NOT NULL,
+          "birthMonth" INTEGER NOT NULL,
+          "birthDay" INTEGER NOT NULL,
+          "birthHour" INTEGER NOT NULL,
+          "gender" TEXT NOT NULL,
+          "chart" TEXT NOT NULL,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    }
   } catch (error) {
     console.error('Failed to ensure ZiweiRecord table:', error);
   }
