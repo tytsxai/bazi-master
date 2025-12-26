@@ -206,3 +206,8 @@
 - Verified Ziwei history security flow end-to-end via Playwright; marked feature_list.json test #49 as passing. Current progress: 71/479 tests passing.
 - Mock-data scan: no mockData matches; TODO/FIXME and placeholder matches only in node_modules/dist assets.
 - Next: continue remaining Security & Access Control scenarios (#50+) or move to next highest-priority failing feature.
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js); initial root run failed due to Playwright config, reran successfully from frontend.
+- Added Playwright coverage for register flow initiated from /iching (security-register-iching.spec.js) with screenshots and backend /api/auth/me verification.
+- Verified register-from-I-Ching flow end-to-end via Playwright; marked feature_list.json test #50 as passing. Current progress: 72/479 tests passing.
+- Mock-data scan: matches only in node_modules.
+- Next: continue remaining Security & Access Control scenarios (#51+) or move to next highest-priority failing feature.
