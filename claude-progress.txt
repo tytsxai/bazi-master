@@ -175,3 +175,7 @@
 - Added Playwright guest role-based menu visibility test (security-role-menu-guest.spec.js) with desktop/mobile screenshots.
 - Verified guest menu visibility flow end-to-end via Playwright; marked feature_list.json test #41 as passing. Current progress: 64/479 tests passing.
 - Next: continue remaining Security & Access Control tests (menu visibility for non-admin roles, confirmation dialogs) then move to next functional module.
+- Ran pre-work Playwright checks (bazi-calculation.spec.js, iching.spec.js); both passed.
+- Added Playwright security-confirmation-dialogs.spec.js to verify confirmation dialogs for AI requests and delete actions with screenshots.
+- Verified confirmation dialogs flow end-to-end via Playwright; marked feature_list.json test #42 as passing. Current progress: 65/479 tests passing.
+- Next: continue remaining Security & Access Control tests (confirmation dialogs in other modules if needed, menu visibility for other roles) and move to next functional module tests.
