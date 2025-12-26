@@ -15,12 +15,14 @@ const serializeRecord = (record) => ({
 
 router.post('/', requireAuth, async (req, res) => {
     const { recordId } = req.body;
-    if (!recordId) return res.status(400).json({ error: 'Record ID required' });
+    // Ensure recordId is an integer
+    const rId = parseInt(recordId, 10);
+    if (!rId || isNaN(rId)) return res.status(400).json({ error: 'Valid Record ID required' });
 
     try {
         // Verify the record exists and belongs to the current user
         const record = await prisma.baziRecord.findFirst({
-            where: { id: recordId, userId: req.user.id }
+            where: { id: rId, userId: req.user.id }
         });
 
         if (!record) {
@@ -28,7 +30,7 @@ router.post('/', requireAuth, async (req, res) => {
         }
 
         const favorite = await prisma.favorite.create({
-            data: { userId: req.user.id, recordId },
+            data: { userId: req.user.id, recordId: rId },
             include: { record: true }
         });
         res.json({

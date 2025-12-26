@@ -107,6 +107,34 @@ router.post('/logout', requireAuth, async (req, res) => {
   res.json({ status: 'ok' });
 });
 
+/**
+ * Request Password Reset (Stub)
+ * POST /api/auth/password/request
+ */
+router.post('/password/request', (req, res) => {
+  // In a real app, this would generate a token and send an email
+  // For now, we simulate success
+  const email = normalizeEmail(req.body?.email);
+  if (!email) return res.status(400).json({ error: 'Email required' });
+
+  console.log(`[Stub] Password reset requested for: ${email}`);
+  res.json({ status: 'ok', message: 'If account exists, email sent.' });
+});
+
+/**
+ * Reset Password (Stub)
+ * POST /api/auth/password/reset
+ */
+router.post('/password/reset', async (req, res) => {
+  // In a real app, verify token and update password
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ error: 'Token and password required' });
+
+  console.log(`[Stub] Password reset with token: ${token}`);
+  // Simulate success
+  res.json({ status: 'ok' });
+});
+
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
 });

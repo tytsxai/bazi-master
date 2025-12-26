@@ -1,5 +1,6 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { prisma } from '../config/prisma.js';
 import { hexagrams } from '../data/ichingHexagrams.js';
 import { generateAIContent } from '../services/ai.service.js';
 import {
@@ -79,9 +80,54 @@ Hexagram: ${hexagramName}
 
     try {
         const content = await generateAIContent({ system, user: userPrompt, fallback });
+
+        // Persist the record
+        // method, numbers (if applicable), hexagram, changingLines? 
+        // Schema: method, numbers(String?), hexagram(String), resultingHexagram?, changingLines?, timeContext?
+        // req.body usually has these.
+        // We need to robustly stringify specific fields.
+
+        await prisma.ichingRecord.create({
+            data: {
+                userId: req.user.id,
+                method: method || 'unknown',
+                numbers: req.body.numbers ? JSON.stringify(req.body.numbers) : null,
+                hexagram: typeof hexagram === 'string' ? hexagram : JSON.stringify(hexagram),
+                // resultingHexagram, changingLines, timeContext might be in body
+                changingLines: req.body.changingLines ? JSON.stringify(req.body.changingLines) : null,
+                timeContext: req.body.timeContext ? JSON.stringify(req.body.timeContext) : null,
+                userQuestion,
+                aiInterpretation: content
+            }
+        });
+
         res.json({ content });
     } catch (error) {
+        console.error('I Ching interpret error:', error);
         res.status(500).json({ error: 'AI interpretation failed' });
+    }
+});
+
+router.get('/history', requireAuth, async (req, res) => {
+    try {
+        const records = await prisma.ichingRecord.findMany({
+            where: { userId: req.user.id },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json({ records });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch history' });
+    }
+});
+
+router.delete('/history/:id', requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid ID' });
+    try {
+        await prisma.ichingRecord.delete({ where: { id, userId: req.user.id } });
+        res.json({ status: 'ok' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete record' });
     }
 });
 
