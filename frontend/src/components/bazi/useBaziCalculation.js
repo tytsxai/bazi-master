@@ -8,167 +8,43 @@ import { getPreferredAiProvider } from '../../utils/aiProvider.js';
 import { getClientId } from '../../utils/clientId.js';
 import { readApiErrorMessage } from '../../utils/apiError.js';
 
-const GUEST_STORAGE_KEY = 'bazi_guest_calculation_v1';
-const LAST_SAVED_FINGERPRINT_KEY = 'bazi_last_saved_fingerprint_v1';
-const PENDING_SAVE_KEY = 'bazi_pending_save_v1';
-const RECENT_SAVE_KEY = 'bazi_recent_save_v1';
-const PREFILL_STORAGE_KEY = 'bazi_prefill_request_v1';
-const formatOffsetMinutes = (offsetMinutes) => {
-  if (!Number.isFinite(offsetMinutes)) return 'UTC';
-  const sign = offsetMinutes >= 0 ? '+' : '-';
-  const abs = Math.abs(offsetMinutes);
-  const hours = Math.floor(abs / 60);
-  const minutes = abs % 60;
-  return `UTC${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-};
-
-const parseTimezoneOffsetMinutes = (raw) => {
-  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw);
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (/^(utc|gmt|z)$/i.test(trimmed)) return 0;
-  const match = trimmed.match(/^(?:utc|gmt)?\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?$/i);
-  if (!match) return null;
-  const sign = match[1] === '-' ? -1 : 1;
-  const hours = Number(match[2]);
-  const minutes = Number(match[3] || 0);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 14 || minutes > 59) return null;
-  return sign * (hours * 60 + minutes);
-};
-
-const getBrowserTimezoneLabel = () => {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz) return tz;
-  } catch {
-    // Ignore Intl issues and fall back to offset label.
-  }
-  const offsetMinutes = -new Date().getTimezoneOffset();
-  return formatOffsetMinutes(offsetMinutes);
-};
-
-const buildDefaultFormData = () => {
-  const now = new Date();
-  return {
-    birthYear: String(now.getFullYear()),
-    birthMonth: String(now.getMonth() + 1),
-    birthDay: String(now.getDate()),
-    birthHour: '14',
-    gender: '',
-    birthLocation: '',
-    timezone: getBrowserTimezoneLabel(),
-  };
-};
-const DEFAULT_FORM_KEYS = Object.keys(buildDefaultFormData());
-const isWhitespaceOnly = (value) =>
-  typeof value === 'string' && value.length > 0 && value.trim().length === 0;
-const normalizeOptionalText = (value) => (typeof value === 'string' ? value.trim() : value);
-const normalizeOverrideArg = (value) => {
-  if (!value) return null;
-  if (typeof value === 'object' && typeof value.preventDefault === 'function') return null;
-  return value;
-};
-const NUMERIC_FIELD_LIMITS = {
-  birthHour: { min: 0, max: 23 },
-};
-const normalizeNumericInput = (value, limits) => {
-  const cleaned = value.replace(/[^\d]/g, '');
-  if (!cleaned) return '';
-  const numeric = Number(cleaned);
-  if (!Number.isFinite(numeric)) return '';
-  if (numeric < limits.min) return String(limits.min);
-  if (numeric > limits.max) return String(limits.max);
-  return cleaned;
-};
-const formatCoordinate = (value) =>
-  Number.isFinite(value) ? Number(value).toFixed(4) : '—';
-const formatLocationLabel = (location) => {
-  if (!location || typeof location !== 'object') return '—';
-  const lat = formatCoordinate(location.latitude);
-  const lon = formatCoordinate(location.longitude);
-  if (location.name) return `${location.name} (${lat}, ${lon})`;
-  if (lat === '—' && lon === '—') return '—';
-  return `${lat}, ${lon}`;
-};
-const coerceInt = (value) => {
-  if (value === '' || value === null || value === undefined) return null;
-  const numeric = Number(value);
-  return Number.isInteger(numeric) ? numeric : null;
-};
-const safeJsonParse = (value) => {
-  if (typeof value !== 'string') return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-};
-const computeFiveElementsPercent = (fiveElements) => {
-  if (!fiveElements || typeof fiveElements !== 'object') return null;
-  const order = ['Wood', 'Fire', 'Earth', 'Metal', 'Water'];
-  const total = order.reduce((sum, element) => {
-    const raw = Number(fiveElements[element]);
-    return sum + (Number.isFinite(raw) ? raw : 0);
-  }, 0);
-  return order.reduce((acc, element) => {
-    const raw = Number(fiveElements[element]);
-    const safe = Number.isFinite(raw) ? raw : 0;
-    acc[element] = total ? Math.round((safe / total) * 100) : 0;
-    return acc;
-  }, {});
-};
-const normalizeBaziApiResponse = (payload) => {
-  if (!payload || typeof payload !== 'object') return null;
-  const root =
-    payload.result && typeof payload.result === 'object'
-      ? payload.result
-      : payload.data && typeof payload.data === 'object'
-        ? payload.data
-        : payload;
-  const timeMeta = payload.timeMeta && typeof payload.timeMeta === 'object' ? payload.timeMeta : null;
-  const merged = { ...root, ...(timeMeta || {}) };
-  if (!merged.trueSolarTime && payload.trueSolarTime) {
-    merged.trueSolarTime = payload.trueSolarTime;
-  }
-  const normalized = {
-    ...merged,
-    pillars: safeJsonParse(merged.pillars),
-    fiveElements: safeJsonParse(merged.fiveElements),
-    fiveElementsPercent: safeJsonParse(merged.fiveElementsPercent),
-    tenGods: safeJsonParse(merged.tenGods),
-    luckCycles: safeJsonParse(merged.luckCycles),
-    trueSolarTime: safeJsonParse(merged.trueSolarTime),
-  };
-  if (!normalized.fiveElementsPercent) {
-    normalized.fiveElementsPercent = computeFiveElementsPercent(normalized.fiveElements);
-  }
-  return normalized;
-};
-const getTodayParts = () => {
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() };
-};
-const getDaysInMonth = (year, month) => {
-  if (!Number.isInteger(year) || !Number.isInteger(month)) return 31;
-  return new Date(year, month, 0).getDate();
-};
-const getDateInputLimits = (data) => {
-  const today = getTodayParts();
-  const year = coerceInt(data.birthYear);
-  const month = coerceInt(data.birthMonth);
-  const maxYear = today.year;
-  const maxMonth = year === today.year ? today.month : 12;
-  const daysInMonth = getDaysInMonth(year ?? today.year, month ?? 1);
-  const maxDay =
-    year === today.year && month === today.month ? Math.min(daysInMonth, today.day) : daysInMonth;
-
-  return {
-    birthYear: { min: 1, max: maxYear },
-    birthMonth: { min: 1, max: maxMonth },
-    birthDay: { min: 1, max: maxDay },
-  };
-};
+// Import utilities
+import {
+  GUEST_STORAGE_KEY,
+  LAST_SAVED_FINGERPRINT_KEY,
+  PENDING_SAVE_KEY,
+  RECENT_SAVE_KEY,
+  PREFILL_STORAGE_KEY,
+  UNSAVED_WARNING_MESSAGE,
+} from './baziConstants.js';
+import {
+  formatOffsetMinutes,
+  parseTimezoneOffsetMinutes,
+  getBrowserTimezoneLabel,
+} from './baziTimezoneUtils.js';
+import {
+  buildDefaultFormData,
+  isWhitespaceOnly,
+  normalizeOptionalText,
+  normalizeOverrideArg,
+  normalizeNumericInput,
+  formatCoordinate,
+  formatLocationLabel,
+  coerceInt,
+  safeJsonParse,
+  isSameFormData,
+} from './baziFormUtils.js';
+import {
+  getTodayParts,
+  getDaysInMonth,
+  getDateInputLimits,
+  isValidCalendarDate,
+} from './baziDateUtils.js';
+import {
+  computeFiveElementsPercent,
+  normalizeBaziApiResponse,
+} from './baziApiUtils.js';
+import { getFieldErrors, hasValidationErrors } from './baziValidationUtils.js';
 
 const useUnsavedChangesWarning = (shouldBlock, message = UNSAVED_WARNING_MESSAGE) => {
   useEffect(() => {
@@ -183,80 +59,6 @@ const useUnsavedChangesWarning = (shouldBlock, message = UNSAVED_WARNING_MESSAGE
   }, [message, shouldBlock]);
 };
 
-const isSameFormData = (left, right) =>
-  DEFAULT_FORM_KEYS.every((key) => left?.[key] === right?.[key]);
-
-const isValidCalendarDate = (year, month, day) => {
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
-};
-
-const getFieldErrors = (data, t) => {
-  const nextErrors = {};
-  const year = Number(data.birthYear);
-  const month = Number(data.birthMonth);
-  const day = Number(data.birthDay);
-  const hour = Number(data.birthHour);
-  const today = getTodayParts();
-
-  if (!data.birthYear) {
-    nextErrors.birthYear = t('bazi.errors.yearRequired');
-  } else if (!Number.isInteger(year) || year < 1 || year > today.year) {
-    nextErrors.birthYear = t('bazi.errors.yearInvalid');
-  }
-
-  if (!data.birthMonth) {
-    nextErrors.birthMonth = t('bazi.errors.monthRequired');
-  } else if (!Number.isInteger(month) || month < 1 || month > 12) {
-    nextErrors.birthMonth = t('bazi.errors.monthInvalid');
-  }
-
-  if (!data.birthDay) {
-    nextErrors.birthDay = t('bazi.errors.dayRequired');
-  } else if (!Number.isInteger(day) || day < 1 || day > 31) {
-    nextErrors.birthDay = t('bazi.errors.dayInvalid');
-  } else if (
-    !nextErrors.birthYear &&
-    !nextErrors.birthMonth &&
-    !isValidCalendarDate(year, month, day)
-  ) {
-    nextErrors.birthDay = t('bazi.errors.dateInvalid');
-  } else if (!nextErrors.birthYear && !nextErrors.birthMonth) {
-    const isFuture =
-      year > today.year ||
-      (year === today.year && month > today.month) ||
-      (year === today.year && month === today.month && day > today.day);
-    if (isFuture) {
-      nextErrors.birthDay = t('bazi.errors.futureDate');
-    }
-  }
-
-  if (data.birthHour === '') {
-    nextErrors.birthHour = t('bazi.errors.hourRequired');
-  } else if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
-    nextErrors.birthHour = t('bazi.errors.hourInvalid');
-  }
-
-  if (!data.gender) {
-    nextErrors.gender = t('bazi.errors.genderRequired');
-  }
-
-  if (isWhitespaceOnly(data.birthLocation)) {
-    nextErrors.birthLocation = t('bazi.errors.locationWhitespace');
-  }
-
-  if (isWhitespaceOnly(data.timezone)) {
-    nextErrors.timezone = t('bazi.errors.timezoneWhitespace');
-  }
-
-  return nextErrors;
-};
 
 export default function useBaziCalculation() {
   const { t } = useTranslation();

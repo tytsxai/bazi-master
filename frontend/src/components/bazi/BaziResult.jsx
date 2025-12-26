@@ -188,20 +188,23 @@ export default function BaziResult({
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <h3 className="text-xs uppercase text-gold-400/80">{t('ziwei.lunarDate')}</h3>
               <p className="mt-2 text-white">
-                {ziweiResult?.lunar?.year}{t('common.year')} {ziweiResult?.lunar?.month}{t('common.month')} {ziweiResult?.lunar?.day}{t('common.day')}
-                {ziweiResult?.lunar?.isLeap ? ` (${t('ziwei.leap')})` : ''}
+                {ziweiResult?.lunar
+                  ? `${ziweiResult.lunar.year}年 ${ziweiResult.lunar.month}月 ${ziweiResult.lunar.day}日${ziweiResult.lunar.isLeap ? ' (Leap)' : ''}`
+                  : '—'}
               </p>
               <p className="mt-1 text-xs text-white/60">
-                {ziweiResult?.lunar?.yearStem}{ziweiResult?.lunar?.yearBranch}{t('common.year')} · {ziweiResult?.lunar?.monthStem}{ziweiResult?.lunar?.monthBranch}{t('common.month')}
+                {ziweiResult?.lunar
+                  ? `${ziweiResult.lunar.yearStem}${ziweiResult.lunar.yearBranch}年 · ${ziweiResult.lunar.monthStem}${ziweiResult.lunar.monthBranch}月`
+                  : '—'}
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <h3 className="text-xs uppercase text-gold-400/80">{t('ziwei.keyPalaces')}</h3>
               <p className="mt-2 text-white">
-                {t('ziwei.mingPalace')}: {ziweiResult?.mingPalace?.palace?.cn} · {ziweiResult?.mingPalace?.branch?.name}
+                命宫: {ziweiResult?.mingPalace?.palace?.cn} · {ziweiResult?.mingPalace?.branch?.name}
               </p>
               <p className="mt-1 text-white">
-                {t('ziwei.shenPalace')}: {ziweiResult?.shenPalace?.palace?.cn} · {ziweiResult?.shenPalace?.branch?.name}
+                身宫: {ziweiResult?.shenPalace?.palace?.cn} · {ziweiResult?.shenPalace?.branch?.name}
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">

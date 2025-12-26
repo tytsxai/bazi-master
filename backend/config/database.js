@@ -3,21 +3,37 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 export const readPrismaDatasourceInfo = () => {
-  try {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const schemaPath = path.resolve(here, '..', '..', 'prisma', 'schema.prisma');
-    const raw = fs.readFileSync(schemaPath, 'utf8');
-    const datasourceMatch = raw.match(/datasource\s+db\s*{([\s\S]*?)}/m);
-    const block = datasourceMatch?.[1] ?? '';
-    const provider = (block.match(/\bprovider\s*=\s*"([^"]+)"/)?.[1] ?? '')
-      .trim()
-      .toLowerCase();
-    const urlExpr = (block.match(/\burl\s*=\s*([^\n\r]+)/)?.[1] ?? '').trim();
-    const urlUsesDatabaseUrlEnv = /env\(\s*"DATABASE_URL"\s*\)/.test(urlExpr);
-    return { provider, urlUsesDatabaseUrlEnv };
-  } catch {
-    return { provider: '', urlUsesDatabaseUrlEnv: false };
+  // Determine provider from DATABASE_URL environment variable
+  const databaseUrl = process.env.DATABASE_URL || '';
+
+  let provider = 'postgresql'; // Default to PostgreSQL for production
+  let urlUsesDatabaseUrlEnv = true;
+
+  if (databaseUrl.startsWith('file:') || databaseUrl.includes('sqlite')) {
+    provider = 'sqlite';
+  } else if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
+    provider = 'postgresql';
   }
+
+  // Fallback: try to read from schema file if DATABASE_URL is not set
+  if (!databaseUrl) {
+    try {
+      const here = path.dirname(fileURLToPath(import.meta.url));
+      const schemaPath = path.resolve(here, '..', '..', 'prisma', 'schema.prisma');
+      const raw = fs.readFileSync(schemaPath, 'utf8');
+      const datasourceMatch = raw.match(/datasource\s+db\s*{([\s\S]*?)}/m);
+      const block = datasourceMatch?.[1] ?? '';
+      provider = (block.match(/\bprovider\s*=\s*"([^"]+)"/)?.[1] ?? '')
+        .trim()
+        .toLowerCase();
+      const urlExpr = (block.match(/\burl\s*=\s*([^\n\r]+)/)?.[1] ?? '').trim();
+      urlUsesDatabaseUrlEnv = /env\(\s*"DATABASE_URL"\s*\)/.test(urlExpr);
+    } catch {
+      // Ignore errors, use default
+    }
+  }
+
+  return { provider, urlUsesDatabaseUrlEnv };
 };
 
 export const ensureDatabaseUrl = () => {

@@ -755,10 +755,10 @@ export default function Profile() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <h3 className="text-xs uppercase text-gold-400/80">{t('bazi.fourPillars')}</h3>
               <p className="mt-2 text-white">
-                {t('ziwei.mingPalace')}: {ziweiResult?.mingPalace?.palace?.cn} · {ziweiResult?.mingPalace?.branch?.name}
+                命宫: {ziweiResult?.mingPalace?.palace?.cn} · {ziweiResult?.mingPalace?.branch?.name}
               </p>
               <p className="mt-1 text-white">
-                {t('ziwei.shenPalace')}: {ziweiResult?.shenPalace?.palace?.cn} · {ziweiResult?.shenPalace?.branch?.name}
+                身宫: {ziweiResult?.shenPalace?.palace?.cn} · {ziweiResult?.shenPalace?.branch?.name}
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">

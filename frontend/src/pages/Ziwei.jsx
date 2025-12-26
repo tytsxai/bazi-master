@@ -715,10 +715,10 @@ export default function Ziwei() {
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <h2 className="text-sm uppercase text-gold-400/80">{t('ziwei.keyPalaces')}</h2>
                 <p className="mt-2 text-white">
-                  {t('ziwei.palace')}: {result?.mingPalace?.palace?.cn} · {result?.mingPalace?.branch?.name}
+                  命宫: {result?.mingPalace?.palace?.cn} · {result?.mingPalace?.branch?.name}
                 </p>
                 <p className="mt-1 text-white">
-                  {t('ziwei.palace')}: {result?.shenPalace?.palace?.cn} · {result?.shenPalace?.branch?.name}
+                  身宫: {result?.shenPalace?.palace?.cn} · {result?.shenPalace?.branch?.name}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -899,7 +899,7 @@ export default function Ziwei() {
                             {t('bazi.gender')}: {record.gender === 'male' ? t('bazi.genderMale') : t('bazi.genderFemale')} · {t('iching.savedAt', { date: new Date(record.createdAt).toLocaleString() })}
                           </p>
                           <p className="mt-2 text-sm text-gold-200" data-testid="ziwei-history-ming">
-                            {t('ziwei.palace')}: {mingPalace} · {mingBranch}
+                            命宫: {mingPalace} · {mingBranch}
                           </p>
                           <p className="text-xs text-white/60" data-testid="ziwei-history-lunar">
                             {t('ziwei.lunarDate')}: {lunar.year && lunar.month && lunar.day

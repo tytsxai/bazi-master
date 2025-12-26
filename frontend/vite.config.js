@@ -15,16 +15,35 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
+        manualChunks: (id) => {
           // React and core libraries
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          if (id.includes('node_modules/react') ||
+              id.includes('node_modules/react-dom') ||
+              id.includes('node_modules/react-router-dom')) {
+            return 'react-vendor';
+          }
 
           // i18n libraries
-          'i18n-vendor': ['i18next', 'react-i18next'],
+          if (id.includes('node_modules/i18next') ||
+              id.includes('node_modules/react-i18next')) {
+            return 'i18n-vendor';
+          }
+
+          // Page components - split by route
+          if (id.includes('/src/pages/')) {
+            const pageName = id.split('/src/pages/')[1].split('.')[0].toLowerCase();
+            return `page-${pageName}`;
+          }
+
+          // Large utility libraries
+          if (id.includes('node_modules/date-fns') ||
+              id.includes('node_modules/lodash')) {
+            return 'utils-vendor';
+          }
         },
       },
     },
-    chunkSizeWarningLimit: 500,
+    chunkSizeWarningLimit: 600,
   },
   server: {
     port: 3000,
