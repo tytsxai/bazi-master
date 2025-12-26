@@ -1,3 +1,5 @@
+import i18next from 'i18next';
+
 export const getApiErrorMessage = (payload, fallback) => {
   if (!payload) return fallback;
   if (typeof payload === 'string' && payload.trim()) return payload;
@@ -8,7 +10,8 @@ export const getApiErrorMessage = (payload, fallback) => {
     if (stringErrors.length) return stringErrors.join(', ');
     const numericErrors = payload.errors.filter((entry) => Number.isFinite(entry));
     if (numericErrors.length) {
-      return `${fallback} (${numericErrors.length} item${numericErrors.length === 1 ? '' : 's'} failed)`;
+      const detail = i18next.t('errors.itemsFailed', { count: numericErrors.length });
+      return `${fallback} (${detail})`;
     }
   }
   return fallback;

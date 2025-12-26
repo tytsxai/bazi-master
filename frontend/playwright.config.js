@@ -56,6 +56,14 @@ const explicitWebPort = resolvePort(process.env.E2E_WEB_PORT)
 const webPort = explicitWebPort
     ?? (noWebServer ? fallbackPort : await pickSafePort());
 
+// Ensure the chosen web port is stable across config evaluations/workers.
+if (!process.env.E2E_WEB_PORT) {
+    process.env.E2E_WEB_PORT = String(webPort);
+}
+if (!process.env.PW_PORT) {
+    process.env.PW_PORT = String(webPort);
+}
+
 if (!isSafeBrowserPort(webPort)) {
     throw new Error(
         `E2E web port ${webPort} is blocked by Chromium as an unsafe port. Choose a different E2E_WEB_PORT/PW_PORT.`

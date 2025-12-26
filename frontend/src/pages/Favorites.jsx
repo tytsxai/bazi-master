@@ -17,18 +17,18 @@ const buildShareUrl = (record) => {
   }
 };
 
-const buildShareText = (record) => {
+const buildShareText = (record, t) => {
   if (!record) return '';
   const { birthYear, birthMonth, birthDay, birthHour, gender, birthLocation, timezone, pillars } = record;
   const shareUrl = buildShareUrl(record);
   const lines = [
-    'BaZi Master Favorite',
-    `Date: ${birthYear}-${birthMonth}-${birthDay} · ${birthHour}:00`,
-    `Profile: ${gender} · ${birthLocation || '—'} · ${timezone || 'UTC'}`,
-    `Pillars: ${pillars.year.stem}/${pillars.year.branch}, ${pillars.month.stem}/${pillars.month.branch}, ${pillars.day.stem}/${pillars.day.branch}, ${pillars.hour.stem}/${pillars.hour.branch}`,
+    t('home.title') + ' ' + t('nav.favorites'),
+    `${t('common.year')}: ${birthYear}-${birthMonth}-${birthDay} · ${birthHour}:00`,
+    `${t('profile.name')}: ${gender} · ${birthLocation || '—'} · ${timezone || 'UTC'}`,
+    `${t('bazi.fourPillars')}: ${pillars.year.stem}/${pillars.year.branch}, ${pillars.month.stem}/${pillars.month.branch}, ${pillars.day.stem}/${pillars.day.branch}, ${pillars.hour.stem}/${pillars.hour.branch}`,
   ];
   if (shareUrl) {
-    lines.push(`View: ${shareUrl}`);
+    lines.push(`${t('favorites.view')}: ${shareUrl}`);
   }
   return lines.join('\n');
 };
@@ -220,7 +220,7 @@ export default function Favorites() {
   };
 
   const handleShare = async (record) => {
-    const shareText = buildShareText(record);
+    const shareText = buildShareText(record, t);
     const shareUrl = buildShareUrl(record);
     if (!shareText) return;
     setShareStatus(null);
@@ -228,7 +228,7 @@ export default function Favorites() {
     try {
       if (navigator.share) {
         await navigator.share({
-          title: 'BaZi Master Favorite',
+          title: t('home.title') + ' ' + t('nav.favorites'),
           text: shareText,
           url: shareUrl || undefined,
         });
@@ -340,13 +340,13 @@ export default function Favorites() {
                       <div>
                         <p className="text-white/50">{t('bazi.fiveElements')}</p>
                         <p>
-                          {t('bazi.fiveElements').includes('五行') ? '木' : 'Wood'} {record.fiveElements.Wood} · {t('bazi.fiveElements').includes('五行') ? '火' : 'Fire'} {record.fiveElements.Fire} · {t('bazi.fiveElements').includes('五行') ? '土' : 'Earth'} {record.fiveElements.Earth}
+                          {t(`bazi.elements.Wood`)} {record.fiveElements.Wood} · {t(`bazi.elements.Fire`)} {record.fiveElements.Fire} · {t(`bazi.elements.Earth`)} {record.fiveElements.Earth}
                         </p>
                       </div>
                       <div>
                         <p className="text-white/50">{t('bazi.fiveElements')}</p>
                         <p>
-                          {t('bazi.fiveElements').includes('五行') ? '金' : 'Metal'} {record.fiveElements.Metal} · {t('bazi.fiveElements').includes('五行') ? '水' : 'Water'} {record.fiveElements.Water}
+                          {t(`bazi.elements.Metal`)} {record.fiveElements.Metal} · {t(`bazi.elements.Water`)} {record.fiveElements.Water}
                         </p>
                       </div>
                     </div>

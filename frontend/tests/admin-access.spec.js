@@ -38,6 +38,6 @@ test('Admin user can access admin area', async ({ page }) => {
   await page.screenshot({ path: screenshotPath('step-1-admin-page') });
 
   await expect(page).toHaveURL(/\/admin$/);
-  await expect(page.getByRole('heading', { name: 'Admin' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Admin Area' })).toBeVisible();
   await page.screenshot({ path: screenshotPath('step-2-admin-heading') });
 });

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Breadcrumbs from '../components/Breadcrumbs.jsx';
@@ -6,6 +7,7 @@ import { getPreferredAiProvider } from '../utils/aiProvider.js';
 import { readApiErrorMessage } from '../utils/apiError.js';
 
 export default function Iching() {
+  const { t } = useTranslation();
   const { token, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -83,7 +85,7 @@ export default function Iching() {
     fetch('/api/iching/hexagrams')
       .then(async (res) => {
         if (!res.ok) {
-          const message = await readApiErrorMessage(res, 'Failed to load hexagrams');
+          const message = await readApiErrorMessage(res, t('iching.loadingHexagrams'));
           throw new Error(message);
         }
         return res.json();
@@ -92,10 +94,10 @@ export default function Iching() {
         if (isMounted) setHexagrams(data.hexagrams || []);
       })
       .catch(() => {
-        if (isMounted) setStatus({ type: 'error', message: 'Unable to load hexagram library.' });
+        if (isMounted) setStatus({ type: 'error', message: t('iching.loadingHexagrams') });
       });
     return () => { isMounted = false; };
-  }, []);
+  }, [t]);
 
   const loadHistory = async () => {
     if (!token) return;
@@ -105,14 +107,14 @@ export default function Iching() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Unable to load history.');
+        const message = await readApiErrorMessage(res, t('iching.historyLoadError'));
         throw new Error(message);
       }
       const data = await res.json();
       setHistory(data.records || []);
     } catch (error) {
       console.error(error);
-      setStatus({ type: 'error', message: 'Unable to load history.' });
+      setStatus({ type: 'error', message: t('iching.historyLoadError') });
     } finally {
       setHistoryLoading(false);
     }
@@ -140,14 +142,14 @@ export default function Iching() {
     ['first', 'second', 'third'].forEach((field) => {
       const rawValue = values[field];
       if (rawValue === '' || rawValue === null || rawValue === undefined) {
-        nextErrors[field] = 'Number is required.';
+        nextErrors[field] = t('iching.errors.numberRequired');
         return;
       }
       const parsed = Number(rawValue);
       if (!Number.isFinite(parsed)) {
-        nextErrors[field] = 'Enter a valid number.';
+        nextErrors[field] = t('iching.errors.numberInvalid');
       } else if (parsed < 1) {
-        nextErrors[field] = 'Enter a number of at least 1.';
+        nextErrors[field] = t('iching.errors.numberMin');
       }
     });
     return nextErrors;
@@ -155,7 +157,7 @@ export default function Iching() {
 
   const getFirstErrorMessage = (nextErrors) => {
     const firstMessage = Object.values(nextErrors).find((value) => typeof value === 'string' && value.trim());
-    return firstMessage || 'Please correct the highlighted fields.';
+    return firstMessage || t('iching.errors.correctFields');
   };
 
   const numberErrorAnnouncement =
@@ -200,12 +202,12 @@ export default function Iching() {
         body: JSON.stringify({ method: 'number', numbers: parsed })
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Divination failed.');
+        const message = await readApiErrorMessage(res, t('iching.saveFailed'));
         throw new Error(message);
       }
       const data = await res.json();
       setDivination(data);
-      setStatus({ type: 'success', message: 'The hexagram is revealed.' });
+      setStatus({ type: 'success', message: t('iching.revealed') });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     } finally {
@@ -226,12 +228,12 @@ export default function Iching() {
         body: JSON.stringify({ method: 'time' })
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Divination failed.');
+        const message = await readApiErrorMessage(res, t('iching.saveFailed'));
         throw new Error(message);
       }
       const data = await res.json();
       setDivination(data);
-      setStatus({ type: 'success', message: 'The time hexagram is revealed.' });
+      setStatus({ type: 'success', message: t('iching.timeRevealed') });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     } finally {
@@ -254,12 +256,12 @@ export default function Iching() {
 
   const handleAiInterpret = async () => {
     if (!isAuthenticated) {
-      setStatus({ type: 'error', message: 'Create an account to unlock AI interpretation.' });
+      setStatus({ type: 'error', message: t('iching.loginRequiredAi') });
       redirectToAuth('register');
       return;
     }
     if (!divination?.hexagram) {
-      setStatus({ type: 'error', message: 'Divine a hexagram first.' });
+      setStatus({ type: 'error', message: t('iching.divineFirst') });
       return;
     }
     if (aiLoading) return;
@@ -267,7 +269,7 @@ export default function Iching() {
     wsStatusRef.current = { done: false, errored: false };
     setAiResult('');
     setAiLoading(true);
-    setStatus({ type: 'info', message: 'Listening to the oracle...' });
+    setStatus({ type: 'info', message: t('bazi.aiThinking') });
 
     try {
       const ws = new WebSocket(resolveWsUrl());
@@ -311,14 +313,14 @@ export default function Iching() {
         if (message?.type === 'done') {
           wsStatusRef.current.done = true;
           setAiLoading(false);
-          setStatus({ type: 'success', message: 'Interpretation received.' });
+          setStatus({ type: 'success', message: t('iching.revealed') });
           closeAiSocket(1000, 'Stream complete');
           return;
         }
         if (message?.type === 'error') {
           wsStatusRef.current.errored = true;
           setAiLoading(false);
-          setStatus({ type: 'error', message: message.message || 'AI Interpretation failed.' });
+          setStatus({ type: 'error', message: message.message || t('iching.saveFailed') });
           closeAiSocket(1011, 'AI error');
         }
       };
@@ -347,12 +349,12 @@ export default function Iching() {
 
   const requestAiConfirm = () => {
     if (!isAuthenticated) {
-      setStatus({ type: 'error', message: 'Create an account to unlock AI interpretation.' });
+      setStatus({ type: 'error', message: t('iching.loginRequiredAi') });
       redirectToAuth('register');
       return;
     }
     if (!divination?.hexagram) {
-      setStatus({ type: 'error', message: 'Divine a hexagram first.' });
+      setStatus({ type: 'error', message: t('iching.divineFirst') });
       return;
     }
     setConfirmAiOpen(true);
@@ -360,12 +362,12 @@ export default function Iching() {
 
   const handleSave = async () => {
     if (!isAuthenticated) {
-      setStatus({ type: 'error', message: 'Create an account to save this reading.' });
+      setStatus({ type: 'error', message: t('iching.loginRequiredSave') });
       redirectToAuth('register');
       return;
     }
     if (!divination?.hexagram) {
-      setStatus({ type: 'error', message: 'Divine a hexagram before saving.' });
+      setStatus({ type: 'error', message: t('iching.divineFirstSave') });
       return;
     }
     if (saveLoading) return;
@@ -387,7 +389,7 @@ export default function Iching() {
         }),
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Save failed.');
+        const message = await readApiErrorMessage(res, t('iching.saveFailed'));
         throw new Error(message);
       }
       const data = await res.json();
@@ -396,9 +398,9 @@ export default function Iching() {
       } else {
         await loadHistory();
       }
-      setStatus({ type: 'success', message: 'Reading saved to history.' });
+      setStatus({ type: 'success', message: t('iching.saveSuccess') });
     } catch (error) {
-      setStatus({ type: 'error', message: error.message || 'Save failed.' });
+      setStatus({ type: 'error', message: error.message || t('iching.saveFailed') });
     } finally {
       setSaveLoading(false);
     }
@@ -421,7 +423,7 @@ export default function Iching() {
         return;
       }
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Delete failed.');
+        const message = await readApiErrorMessage(res, t('history.recordLoadError'));
         throw new Error(message);
       }
     } catch (error) {
@@ -478,7 +480,7 @@ export default function Iching() {
                   </div>
                 )}
               </div>
-              <span className="text-xs text-white/50">Line {item.number}</span>
+              <span className="text-xs text-white/50">{t('iching.line')} {item.number}</span>
             </div>
           );
         })}
@@ -509,10 +511,10 @@ export default function Iching() {
             className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/95 p-6 text-white shadow-2xl backdrop-blur"
           >
             <h2 id="iching-ai-title" className="text-lg font-semibold text-white">
-              Request AI interpretation?
+              {t('iching.aiConfirmTitle')}
             </h2>
             <p className="mt-2 text-sm text-white/70">
-              This sends your hexagram details for an AI reading. Continue when you are ready.
+              {t('iching.aiConfirmDesc')}
             </p>
             <div className="mt-6 flex flex-wrap gap-3 sm:justify-end">
               <button
@@ -521,7 +523,7 @@ export default function Iching() {
                 onClick={() => setConfirmAiOpen(false)}
                 className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white"
               >
-                Cancel
+                {t('profile.cancel')}
               </button>
               <button
                 type="button"
@@ -531,7 +533,7 @@ export default function Iching() {
                 }}
                 className="rounded-full border border-purple-400/40 bg-purple-500/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-purple-100 transition hover:border-purple-300 hover:text-purple-200"
               >
-                Request AI
+                {t('bazi.aiInterpret')}
               </button>
             </div>
           </div>
@@ -551,13 +553,13 @@ export default function Iching() {
             className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/95 p-6 text-white shadow-2xl backdrop-blur"
           >
             <h2 id="iching-delete-title" className="text-lg font-semibold text-white">
-              Delete this reading?
+              {t('iching.deleteConfirmTitle')}
             </h2>
             <p className="mt-2 text-sm text-white/70">
-              This removes the saved reading from your history.
+              {t('iching.deleteConfirmDesc')}
             </p>
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
-              {confirmDeleteRecord.userQuestion || 'Saved reading'}
+              {confirmDeleteRecord.userQuestion || t('iching.historySubtitle')}
             </div>
             <div className="mt-6 flex flex-wrap gap-3 sm:justify-end">
               <button
@@ -566,14 +568,14 @@ export default function Iching() {
                 onClick={() => setConfirmDeleteRecord(null)}
                 className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white"
               >
-                Cancel
+                {t('profile.cancel')}
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDelete}
                 className="rounded-full border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-rose-100 transition hover:border-rose-300 hover:text-rose-200"
               >
-                Delete
+                {t('favorites.remove')}
               </button>
             </div>
           </div>
@@ -581,9 +583,9 @@ export default function Iching() {
       )}
       <section className="grid gap-8 lg:grid-cols-[1.2fr_0.9fr]">
         <div className="glass-card rounded-3xl border border-white/10 p-8 shadow-glass">
-          <h1 className="font-display text-3xl text-gold-400">I Ching Oracle</h1>
+          <h1 className="font-display text-3xl text-gold-400">{t('iching.title')}</h1>
           <p className="mt-2 text-sm text-white/70">
-            Focus on your question and let the numbers reveal the pattern beneath.
+            {t('iching.subtitle')}
           </p>
           <div className="sr-only" role="alert" aria-live="assertive">
             {numberErrorAnnouncement}
@@ -592,7 +594,7 @@ export default function Iching() {
           <form onSubmit={handleDivine} className="mt-6 grid gap-4">
             <div className="grid gap-4 md:grid-cols-3">
               <label className="text-sm text-white/80">
-                First number
+                {t('iching.firstNumber')}
                 <input
                   type="number"
                   min="1"
@@ -611,7 +613,7 @@ export default function Iching() {
                 )}
               </label>
               <label className="text-sm text-white/80">
-                Second number
+                {t('iching.secondNumber')}
                 <input
                   type="number"
                   min="1"
@@ -630,7 +632,7 @@ export default function Iching() {
                 )}
               </label>
               <label className="text-sm text-white/80">
-                Third number
+                {t('iching.thirdNumber')}
                 <input
                   type="number"
                   min="1"
@@ -651,13 +653,13 @@ export default function Iching() {
             </div>
 
             <label className="text-sm text-white/80">
-              Your question (optional)
+              {t('iching.question')}
               <input
                 type="text"
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"
-                placeholder="What guidance do I need today?"
+                placeholder={t('iching.questionPlaceholder')}
               />
             </label>
 
@@ -667,7 +669,7 @@ export default function Iching() {
                 disabled={loading || saveLoading}
                 className="rounded-full bg-gold-400 px-8 py-2 font-bold text-mystic-900 shadow-lg transition hover:scale-105 disabled:opacity-50"
               >
-                {loading ? 'Divining...' : 'Divine with Numbers'}
+                {loading ? t('iching.divining') : t('iching.divineNumbers')}
               </button>
               <button
                 type="button"
@@ -675,7 +677,7 @@ export default function Iching() {
                 disabled={loading || saveLoading}
                 className="rounded-full border border-gold-400/50 px-6 py-2 text-sm font-semibold text-gold-200 transition hover:bg-gold-400/10 disabled:opacity-50"
               >
-                Use Current Time
+                {t('iching.divineTime')}
               </button>
             </div>
           </form>
@@ -692,9 +694,9 @@ export default function Iching() {
 
           {!isAuthenticated && (
             <section className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-6">
-              <h2 className="font-display text-2xl text-white">Unlock the full oracle</h2>
+              <h2 className="font-display text-2xl text-white">{t('protected.title')}</h2>
               <p className="mt-2 text-sm text-white/70">
-                Create an account to save readings and request AI interpretations.
+                {t('iching.loginRequiredSave')}
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <button
@@ -702,14 +704,14 @@ export default function Iching() {
                   onClick={() => redirectToAuth('register')}
                   className="rounded-full bg-gold-400 px-6 py-2 text-sm font-semibold text-mystic-900 shadow-lg transition hover:scale-105"
                 >
-                  Create account
+                  {t('login.registerSubmit')}
                 </button>
                 <button
                   type="button"
                   onClick={() => redirectToAuth('login')}
                   className="rounded-full border border-white/30 px-6 py-2 text-sm font-semibold text-white/80 transition hover:border-white/50 hover:text-white"
                 >
-                  Sign in
+                  {t('nav.login')}
                 </button>
               </div>
             </section>
@@ -718,22 +720,22 @@ export default function Iching() {
           {divination?.hexagram && (
             <div className="mt-8 grid gap-6 md:grid-cols-2">
               <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                <h2 className="font-display text-xl text-white">Primary Hexagram</h2>
+                <h2 className="font-display text-xl text-white">{t('iching.primaryHexagram')}</h2>
                 <p className="mt-1 text-sm text-white/70">{divination.hexagram.name}</p>
                 <p className="text-xs text-white/50">{divination.hexagram.title}</p>
                 {divination.method === 'time' && divination.timeContext && (
                   <p className="mt-2 text-xs text-white/60">
-                    Time used: {formatTimeContext(divination.timeContext)}
+                    {t('iching.timeUsed')}: {formatTimeContext(divination.timeContext)}
                   </p>
                 )}
                 <div className="mt-4">{renderLines(divination.hexagram, divination.changingLines)}</div>
-                <div className="mt-4 text-xs text-white/60">
-                  Changing lines: {divination.changingLines?.length ? divination.changingLines.join(', ') : 'None'}
+                <div className="mt-4 text-xs text-white/60" data-testid="iching-changing-lines">
+                  {t('iching.changingLines')}: {divination.changingLines?.length ? divination.changingLines.join(', ') : t('iching.none')}
                 </div>
               </section>
 
               <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                <h2 className="font-display text-xl text-white">Resulting Hexagram</h2>
+                <h2 className="font-display text-xl text-white">{t('iching.resultingHexagram')}</h2>
                 {divination.resultingHexagram ? (
                   <>
                     <p className="mt-1 text-sm text-white/70">{divination.resultingHexagram.name}</p>
@@ -741,7 +743,7 @@ export default function Iching() {
                     <div className="mt-4">{renderLines(divination.resultingHexagram)}</div>
                   </>
                 ) : (
-                  <p className="mt-2 text-sm text-white/60">No resulting hexagram yet.</p>
+                  <p className="mt-2 text-sm text-white/60">{t('iching.noResulting')}</p>
                 )}
               </section>
             </div>
@@ -755,7 +757,7 @@ export default function Iching() {
                 disabled={aiLoading}
                 className="rounded-full bg-indigo-600 px-8 py-3 font-bold text-white shadow-lg transition hover:bg-indigo-500 disabled:opacity-60"
               >
-                {aiLoading ? 'Interpreting...' : 'Reveal AI Interpretation'}
+                {aiLoading ? t('iching.interpreting') : t('iching.aiInterpret')}
               </button>
               <button
                 type="button"
@@ -763,14 +765,14 @@ export default function Iching() {
                 disabled={saveLoading}
                 className="rounded-full border border-emerald-400/40 px-8 py-3 text-sm font-semibold text-emerald-100 transition hover:border-emerald-300 hover:text-white disabled:opacity-60"
               >
-                {saveLoading ? 'Saving...' : 'Save to History'}
+                {saveLoading ? t('profile.saving') : t('bazi.saveRecord')}
               </button>
             </div>
           )}
 
           {aiResult && (
             <section className="mt-10 rounded-3xl border border-purple-500/30 bg-purple-900/20 p-8">
-              <h3 className="font-display text-2xl text-purple-300">Oracle Reflection</h3>
+              <h3 className="font-display text-2xl text-purple-300">{t('iching.oracleReflection')}</h3>
               <div
                 data-testid="iching-ai-result"
                 className="mt-4 prose prose-invert max-w-none whitespace-pre-wrap text-white/90"
@@ -783,15 +785,15 @@ export default function Iching() {
             <section className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-display text-2xl text-white">I Ching History</h3>
-                  <p className="text-sm text-white/60">Saved hexagrams from your recent consultations.</p>
+                  <h3 className="font-display text-2xl text-white">{t('iching.historyTitle')}</h3>
+                  <p className="text-sm text-white/60">{t('iching.historySubtitle')}</p>
                 </div>
                 <div className="text-xs text-white/60">
-                  {history.length} saved
+                  {t('iching.hexagramsLoaded', { count: history.length })}
                 </div>
               </div>
               {historyLoading ? (
-                <p className="mt-4 text-sm text-white/60">Loading history...</p>
+                <p className="mt-4 text-sm text-white/60">{t('history.recordLoading')}</p>
               ) : history.length ? (
                 <div className="mt-4 grid gap-4">
                   {history.map((record) => (
@@ -799,16 +801,16 @@ export default function Iching() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-sm text-white">
-                            {record.hexagram?.name} → {record.resultingHexagram?.name || 'No change'}
+                            {record.hexagram?.name} → {record.resultingHexagram?.name || t('iching.none')}
                           </p>
                           <p className="mt-1 text-xs text-white/60">
-                            Lines: {record.changingLines?.length ? record.changingLines.join(', ') : 'None'} · Method: {record.method}
+                            {t('iching.changingLines')}: {record.changingLines?.length ? record.changingLines.join(', ') : t('iching.none')} · {t('iching.method')}: {record.method}
                           </p>
                           {record.userQuestion && (
-                            <p className="mt-2 text-xs text-white/70">Question: {record.userQuestion}</p>
+                            <p className="mt-2 text-xs text-white/70">{t('iching.question')}: {record.userQuestion}</p>
                           )}
                           <p className="mt-2 text-[0.7rem] uppercase tracking-[0.2em] text-white/40">
-                            Saved {new Date(record.createdAt).toLocaleDateString()}
+                            {t('iching.savedAt', { date: new Date(record.createdAt).toLocaleDateString() })}
                           </p>
                         </div>
                         <button
@@ -816,7 +818,7 @@ export default function Iching() {
                           onClick={() => requestDeleteConfirm(record)}
                           className="rounded-full border border-rose-400/40 px-3 py-1 text-xs text-rose-100 transition hover:border-rose-300 hover:text-rose-200"
                         >
-                          Delete
+                          {t('favorites.remove')}
                         </button>
                       </div>
                       {record.aiInterpretation && (
@@ -828,7 +830,7 @@ export default function Iching() {
                   ))}
                 </div>
               ) : (
-                <p className="mt-4 text-sm text-white/60">No saved readings yet.</p>
+                <p className="mt-4 text-sm text-white/60">{t('iching.noHistory')}</p>
               )}
             </section>
           )}
@@ -836,31 +838,31 @@ export default function Iching() {
 
         <aside className="glass-card rounded-3xl border border-white/10 p-8 shadow-glass">
           <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-            <h2 className="font-display text-xl text-white">Zodiac Compatibility</h2>
+            <h2 className="font-display text-xl text-white">{t('zodiac.compatibilityTitle')}</h2>
             <p className="mt-2 text-sm text-white/70">
-              Compare two signs and see how their energies align.
+              {t('zodiac.compatibilitySubtitle')}
             </p>
             <Link
               to="/zodiac#compatibility"
               className="mt-4 inline-flex rounded-full bg-indigo-600 px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:scale-105"
             >
-              Check Compatibility
+              {t('zodiac.checkCompatibility')}
             </Link>
           </div>
           <div className="mt-6 flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-display text-2xl text-white">Hexagram Library</h2>
-              <p className="text-sm text-white/60">{hexagrams.length} hexagrams loaded</p>
+              <h2 className="font-display text-2xl text-white">{t('iching.hexagramLibrary')}</h2>
+              <p className="text-sm text-white/60">{t('iching.hexagramsLoaded', { count: hexagrams.length })}</p>
             </div>
             <label htmlFor="iching-search" className="sr-only">
-              Search hexagrams
+              {t('iching.searchPlaceholder')}
             </label>
             <input
               id="iching-search"
               type="text"
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
-              placeholder="Search"
+              placeholder={t('iching.searchPlaceholder')}
               className="w-32 rounded-xl border border-white/10 bg-white/10 px-3 py-1 text-xs text-white"
             />
           </div>
@@ -877,7 +879,7 @@ export default function Iching() {
               </div>
             ))}
             {!filteredHexagrams.length && (
-              <p className="text-sm text-white/60">No hexagrams match that search.</p>
+              <p className="text-sm text-white/60">{t('iching.noMatches')}</p>
             )}
           </div>
         </aside>

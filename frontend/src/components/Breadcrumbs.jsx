@@ -12,7 +12,7 @@ const ROUTE_LABELS = {
   '/history': 'nav.history',
   '/favorites': 'nav.favorites',
   '/login': 'nav.login',
-  '/admin': 'Admin',
+  '/admin': 'nav.admin',
   '/404': '404',
   '/403': '403'
 };
@@ -40,7 +40,7 @@ export default function Breadcrumbs() {
 
   if (basePath !== '/') {
     const labelKey = ROUTE_LABELS[basePath];
-    const label = labelKey?.startsWith?.('nav.')
+    const label = labelKey?.includes?.('.')
       ? t(labelKey, { defaultValue: basePath.replace('/', '') })
       : labelKey || basePath.replace('/', '');
     crumbs.push({ label, path: basePath });
@@ -59,12 +59,12 @@ export default function Breadcrumbs() {
         ? recordFromQuery
         : null;
     if (recordId) {
-      crumbs.push({ label: `Record #${recordId}`, path: location.pathname + location.search });
+      crumbs.push({ label: t('history.recordHeading', { id: recordId }), path: location.pathname + location.search });
     }
   }
 
   return (
-    <nav aria-label="Breadcrumb" className="mb-4 text-xs text-white/60">
+    <nav aria-label={t('common.breadcrumbs')} className="mb-4 text-xs text-white/60">
       <ol className="flex flex-wrap items-center gap-2">
         {crumbs.map((crumb, index) => {
           const isLast = index === crumbs.length - 1;

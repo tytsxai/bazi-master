@@ -44,17 +44,24 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.screenshot({ path: screenshotPath('step-1-home') });
+
+  // Clear auth state and wait for re-render
   await page.evaluate(() => {
     localStorage.removeItem('bazi_token');
     localStorage.removeItem('bazi_user');
     localStorage.removeItem('bazi_last_activity');
   });
 
+  // Force a page reload to clear React state
+  await page.reload({ waitUntil: 'domcontentloaded' });
+
   await page.request.post('/api/auth/register', {
     data: { email: 'test@example.com', password: 'password123', name: 'Test User' },
   });
 
+  // Wait for login link to be visible
   const loginLink = page.getByRole('link', { name: 'Login', exact: true });
+  await expect(loginLink).toBeVisible({ timeout: 10000 });
   await loginLink.focus();
   await page.waitForTimeout(450);
   await loginLink.press('Enter');

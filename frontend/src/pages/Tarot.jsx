@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import { ZODIAC_PERIODS, ZODIAC_SIGNS } from '../data/zodiac.js';
@@ -8,6 +8,8 @@ import { getPreferredAiProvider } from '../utils/aiProvider.js';
 import { readApiErrorMessage } from '../utils/apiError.js';
 
 export default function Tarot() {
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language?.startsWith('zh');
   const { token, isAuthenticated } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -101,23 +103,23 @@ export default function Tarot() {
   };
 
   const celticCrossPositions = useMemo(() => ([
-    { position: 1, label: 'Present', meaning: 'Your current situation or heart of the matter.' },
-    { position: 2, label: 'Challenge', meaning: 'The obstacle, tension, or crossing influence.' },
-    { position: 3, label: 'Past', meaning: 'Recent past events or influences fading.' },
-    { position: 4, label: 'Future', meaning: 'Near-future direction or next steps.' },
-    { position: 5, label: 'Above', meaning: 'Conscious goals, aspirations, or ideals.' },
-    { position: 6, label: 'Below', meaning: 'Subconscious roots, foundations, or hidden motives.' },
-    { position: 7, label: 'Advice', meaning: 'Guidance on how to respond or proceed.' },
-    { position: 8, label: 'External', meaning: 'Outside influences, people, or environment.' },
-    { position: 9, label: 'Hopes/Fears', meaning: 'Inner desires, anxieties, or expectations.' },
-    { position: 10, label: 'Outcome', meaning: 'Likely outcome if current course continues.' }
-  ]), []);
+    { position: 1, label: t('tarot.celticPositions.p1.label'), meaning: t('tarot.celticPositions.p1.meaning') },
+    { position: 2, label: t('tarot.celticPositions.p2.label'), meaning: t('tarot.celticPositions.p2.meaning') },
+    { position: 3, label: t('tarot.celticPositions.p3.label'), meaning: t('tarot.celticPositions.p3.meaning') },
+    { position: 4, label: t('tarot.celticPositions.p4.label'), meaning: t('tarot.celticPositions.p4.meaning') },
+    { position: 5, label: t('tarot.celticPositions.p5.label'), meaning: t('tarot.celticPositions.p5.meaning') },
+    { position: 6, label: t('tarot.celticPositions.p6.label'), meaning: t('tarot.celticPositions.p6.meaning') },
+    { position: 7, label: t('tarot.celticPositions.p7.label'), meaning: t('tarot.celticPositions.p7.meaning') },
+    { position: 8, label: t('tarot.celticPositions.p8.label'), meaning: t('tarot.celticPositions.p8.meaning') },
+    { position: 9, label: t('tarot.celticPositions.p9.label'), meaning: t('tarot.celticPositions.p9.meaning') },
+    { position: 10, label: t('tarot.celticPositions.p10.label'), meaning: t('tarot.celticPositions.p10.meaning') }
+  ]), [t]);
 
   const spreadLabel = useMemo(() => {
-    if (spreadType === 'ThreeCard') return 'Three Card';
-    if (spreadType === 'CelticCross') return 'Celtic Cross';
-    return 'Single Card';
-  }, [spreadType]);
+    if (spreadType === 'ThreeCard') return t('tarot.spreads.three');
+    if (spreadType === 'CelticCross') return t('tarot.spreads.celtic');
+    return t('tarot.spreads.single');
+  }, [spreadType, t]);
 
   const loadHistory = async () => {
     if (!token) return;
@@ -127,7 +129,7 @@ export default function Tarot() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Unable to load history.');
+        const message = await readApiErrorMessage(res, t('history.recordLoadError'));
         throw new Error(message);
       }
       const data = await res.json();
@@ -176,16 +178,16 @@ export default function Tarot() {
         body: JSON.stringify({ spreadType })
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Draw failed');
+        const message = await readApiErrorMessage(res, t('tarot.loadError'));
         throw new Error(message);
       }
       const data = await res.json();
       setSpread(data);
       if (isGuest) {
-        setStatus({ type: 'success', message: 'Guest draw completed. Log in to unlock spreads & AI.' });
+        setStatus({ type: 'success', message: t('tarot.guestDrawSuccess') });
       }
     } catch (e) {
-      setStatus({ type: 'error', message: e.message || 'Draw failed' });
+      setStatus({ type: 'error', message: e.message || t('tarot.loadError') });
     } finally {
       setLoading(false);
     }
@@ -194,7 +196,7 @@ export default function Tarot() {
   const handleInterpret = async () => {
     if (!spread) return;
     if (!isAuthenticated) {
-      setStatus({ type: 'error', message: 'Create an account to unlock AI interpretation.' });
+      setStatus({ type: 'error', message: t('tarot.loginRequiredAi') || t('iching.loginRequiredAi') });
       redirectToAuth('register');
       return;
     }
@@ -203,7 +205,7 @@ export default function Tarot() {
     wsStatusRef.current = { done: false, errored: false };
     setAiResult('');
     setIsInterpreting(true);
-    setStatus({ type: 'info', message: 'Consulting the oracle...' });
+    setStatus({ type: 'info', message: t('bazi.aiThinking') });
 
     try {
       const ws = new WebSocket(resolveWsUrl());
@@ -252,7 +254,7 @@ export default function Tarot() {
         if (message?.type === 'done') {
           wsStatusRef.current.done = true;
           setIsInterpreting(false);
-          setStatus({ type: 'success', message: 'Interpretation received.' });
+          setStatus({ type: 'success', message: t('bazi.aiReady') });
           closeAiSocket(1000, 'Stream complete');
           void loadHistory();
           return;
@@ -260,7 +262,7 @@ export default function Tarot() {
         if (message?.type === 'error') {
           wsStatusRef.current.errored = true;
           setIsInterpreting(false);
-          setStatus({ type: 'error', message: message.message || 'AI Interpretation failed.' });
+          setStatus({ type: 'error', message: message.message || t('tarot.loadError') });
           closeAiSocket(1011, 'AI error');
         }
       };
@@ -269,28 +271,28 @@ export default function Tarot() {
         if (!isMountedRef.current) return;
         wsStatusRef.current.errored = true;
         setIsInterpreting(false);
-        setStatus({ type: 'error', message: 'WebSocket connection error.' });
+        setStatus({ type: 'error', message: t('tarot.errors.wsError') });
       };
 
       ws.onclose = () => {
         if (!isMountedRef.current) return;
         const { done, errored } = wsStatusRef.current;
         if (!done && !errored) {
-          setStatus({ type: 'error', message: 'Connection closed unexpectedly.' });
+          setStatus({ type: 'error', message: t('tarot.errors.wsClosed') });
         }
         setIsInterpreting(false);
         wsRef.current = null;
       };
     } catch (e) {
       setIsInterpreting(false);
-      setStatus({ type: 'error', message: e.message || 'Connection error' });
+      setStatus({ type: 'error', message: e.message || t('tarot.errors.connError') });
     }
   };
 
   const requestAiConfirm = () => {
     if (!spread) return;
     if (!isAuthenticated) {
-      setStatus({ type: 'error', message: 'Create an account to unlock AI interpretation.' });
+      setStatus({ type: 'error', message: t('tarot.loginRequiredAi') || t('iching.loginRequiredAi') });
       redirectToAuth('register');
       return;
     }
@@ -308,7 +310,7 @@ export default function Tarot() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Delete failed.');
+        const message = await readApiErrorMessage(res, t('history.recordLoadError'));
         throw new Error(message);
       }
     } catch (error) {
@@ -338,14 +340,14 @@ export default function Tarot() {
     try {
       const res = await fetch('/api/tarot/cards');
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Unable to load deck');
+        const message = await readApiErrorMessage(res, t('tarot.loadError'));
         throw new Error(message);
       }
       const data = await res.json();
       setDeck(data.cards || []);
       setShowDeck(true);
     } catch (error) {
-      setDeckError(error.message || 'Unable to load deck');
+      setDeckError(error.message || t('tarot.loadError'));
     } finally {
       setDeckLoading(false);
     }
@@ -362,7 +364,7 @@ export default function Tarot() {
     try {
       const res = await fetch(`/api/zodiac/${zodiacSign}/horoscope?period=${period}`);
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Unable to fetch horoscope.');
+        const message = await readApiErrorMessage(res, t('zodiac.errors.horoscopeFailed'));
         throw new Error(message);
       }
       const data = await res.json();
@@ -370,13 +372,17 @@ export default function Tarot() {
       setZodiacHoroscope(data);
       setZodiacStatus({
         type: 'success',
-        message: `${data.sign.name} ${data.period} horoscope loaded.`
+        message: t('tarot.horoscopeLoaded', {
+          name: t(`zodiac.signs.${data.sign.name.toLowerCase()}`),
+          period: t(`zodiac.periods.${data.period}`),
+          label: t('tarot.horoscope')
+        })
       });
     } catch (error) {
       if (requestId !== zodiacRequestRef.current) return;
       setZodiacStatus({ type: 'error', message: error.message });
     } finally {
-      if (requestId === zodiacRequestRef.current) {
+      if (requestId === requestId) {
         setZodiacLoading(false);
       }
     }
@@ -442,10 +448,10 @@ export default function Tarot() {
             className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/95 p-6 text-white shadow-2xl backdrop-blur"
           >
             <h2 id="tarot-ai-title" className="text-lg font-semibold text-white">
-              Request AI interpretation?
+              {t('tarot.aiConfirmTitle')}
             </h2>
             <p className="mt-2 text-sm text-white/70">
-              This sends your spread details for an AI reading. Continue when you are ready.
+              {t('tarot.aiConfirmDesc')}
             </p>
             <div className="mt-6 flex flex-wrap gap-3 sm:justify-end">
               <button
@@ -454,7 +460,7 @@ export default function Tarot() {
                 onClick={() => setConfirmAiOpen(false)}
                 className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white"
               >
-                Cancel
+                {t('profile.cancel')}
               </button>
               <button
                 type="button"
@@ -464,7 +470,7 @@ export default function Tarot() {
                 }}
                 className="rounded-full border border-purple-400/40 bg-purple-500/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-purple-100 transition hover:border-purple-300 hover:text-purple-200"
               >
-                Request AI
+                {t('bazi.aiInterpret')}
               </button>
             </div>
           </div>
@@ -484,13 +490,13 @@ export default function Tarot() {
             className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/95 p-6 text-white shadow-2xl backdrop-blur"
           >
             <h2 id="tarot-delete-title" className="text-lg font-semibold text-white">
-              Delete this reading?
+              {t('tarot.deleteConfirmTitle')}
             </h2>
             <p className="mt-2 text-sm text-white/70">
-              This removes the saved reading from your history.
+              {t('tarot.deleteConfirmDesc')}
             </p>
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
-              {confirmDeleteRecord.userQuestion || confirmDeleteRecord.spreadType || 'Saved reading'}
+              {confirmDeleteRecord.userQuestion || confirmDeleteRecord.spreadType || t('tarot.generalReading')}
             </div>
             <div className="mt-6 flex flex-wrap gap-3 sm:justify-end">
               <button
@@ -499,29 +505,29 @@ export default function Tarot() {
                 onClick={() => setConfirmDeleteRecord(null)}
                 className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white"
               >
-                Cancel
+                {t('profile.cancel')}
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDelete}
                 className="rounded-full border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-rose-100 transition hover:border-rose-300 hover:text-rose-200"
               >
-                Delete
+                {t('favorites.remove')}
               </button>
             </div>
           </div>
         </div>
       )}
       <div className="glass-card mx-auto rounded-3xl border border-white/10 p-8 shadow-glass">
-        <h1 className="font-display text-4xl text-gold-400">Tarot Sanctuary</h1>
-        <p className="mt-2 text-white/60">Focus on your question and choose a spread to reveal the story.</p>
+        <h1 className="font-display text-4xl text-gold-400">{t('tarot.title')}</h1>
+        <p className="mt-2 text-white/60">{t('tarot.subtitle')}</p>
 
         <section className="mt-8 rounded-3xl border border-indigo-500/30 bg-indigo-900/20 p-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="font-display text-2xl text-indigo-200">Weekly Zodiac Snapshot</h2>
+              <h2 className="font-display text-2xl text-indigo-200">{t('tarot.weeklySnapshot')}</h2>
               <p className="text-sm text-white/60">
-                Pull a weekly horoscope without leaving Tarot.
+                {t('tarot.weeklySnapshotSubtitle')}
               </p>
             </div>
             <button
@@ -530,13 +536,13 @@ export default function Tarot() {
               disabled={zodiacLoading}
               className="rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-500 disabled:opacity-60"
             >
-              {zodiacLoading ? 'Reading...' : `Get ${zodiacPeriod} Horoscope`}
+              {zodiacLoading ? t('tarot.loading') : t('tarot.getPeriodHoroscope', { period: zodiacPeriod })}
             </button>
           </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2 text-sm text-white/70">
-              Sign
+              {t('tarot.sign')}
               <select
                 value={zodiacSign}
                 onChange={(event) => setZodiacSign(event.target.value)}
@@ -544,13 +550,13 @@ export default function Tarot() {
               >
                 {ZODIAC_SIGNS.map((sign) => (
                   <option key={sign.value} value={sign.value} className="bg-slate-900 text-white">
-                    {sign.label} • {sign.range}
+                    {t(`zodiac.signs.${sign.value}`)} • {t(`zodiac.ranges.${sign.value}`)}
                   </option>
                 ))}
               </select>
             </label>
             <label className="flex flex-col gap-2 text-sm text-white/70">
-              Period
+              {t('tarot.period')}
               <select
                 value={zodiacPeriod}
                 onChange={(event) => setZodiacPeriod(event.target.value)}
@@ -558,7 +564,7 @@ export default function Tarot() {
               >
                 {ZODIAC_PERIODS.map((period) => (
                   <option key={period.value} value={period.value} className="bg-slate-900 text-white">
-                    {period.label}
+                    {t(`zodiac.periods.${period.value}`)}
                   </option>
                 ))}
               </select>
@@ -569,11 +575,10 @@ export default function Tarot() {
             <div
               role={zodiacStatus.type === 'error' ? 'alert' : 'status'}
               aria-live={zodiacStatus.type === 'error' ? 'assertive' : 'polite'}
-              className={`mt-4 rounded-2xl border px-4 py-2 text-sm ${
-                zodiacStatus.type === 'error'
-                  ? 'border-rose-400/40 bg-rose-500/10 text-rose-100'
-                  : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100'
-              }`}
+              className={`mt-4 rounded-2xl border px-4 py-2 text-sm ${zodiacStatus.type === 'error'
+                ? 'border-rose-400/40 bg-rose-500/10 text-rose-100'
+                : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100'
+                }`}
             >
               {zodiacStatus.message}
             </div>
@@ -583,39 +588,39 @@ export default function Tarot() {
             <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
               <div className="flex flex-col gap-1">
                 <h3 className="font-display text-xl text-white">
-                  {zodiacHoroscope.sign.name} {zodiacHoroscope.period.charAt(0).toUpperCase() + zodiacHoroscope.period.slice(1)} Horoscope
+                  {t(`zodiac.signs.${zodiacHoroscope.sign.name.toLowerCase()}`)} {t(`zodiac.periods.${zodiacHoroscope.period}`)} {t('tarot.horoscope')}
                 </h3>
                 <p className="text-xs text-white/60">
-                  {zodiacHoroscope.range} • Generated {new Date(zodiacHoroscope.generatedAt).toLocaleString()}
+                  {t(`zodiac.ranges.${zodiacHoroscope.sign.name.toLowerCase()}`)} • {t('zodiac.generatedAt', { date: new Date(zodiacHoroscope.generatedAt).toLocaleString() })}
                 </p>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="rounded-xl border border-white/10 bg-black/30 p-3">
-                  <div className="text-xs uppercase text-white/40">Overview</div>
+                  <div className="text-xs uppercase text-white/40">{t('zodiac.overview')}</div>
                   <p className="mt-1 text-sm text-white/80">{zodiacHoroscope.horoscope.overview}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/30 p-3">
-                  <div className="text-xs uppercase text-white/40">Love</div>
+                  <div className="text-xs uppercase text-white/40">{t('zodiac.love')}</div>
                   <p className="mt-1 text-sm text-white/80">{zodiacHoroscope.horoscope.love}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/30 p-3">
-                  <div className="text-xs uppercase text-white/40">Career</div>
+                  <div className="text-xs uppercase text-white/40">{t('zodiac.career')}</div>
                   <p className="mt-1 text-sm text-white/80">{zodiacHoroscope.horoscope.career}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/30 p-3">
-                  <div className="text-xs uppercase text-white/40">Wellness</div>
+                  <div className="text-xs uppercase text-white/40">{t('zodiac.wellness')}</div>
                   <p className="mt-1 text-sm text-white/80">{zodiacHoroscope.horoscope.wellness}</p>
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/70">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                  Lucky colors: {zodiacHoroscope.horoscope.lucky.colors.join(', ')}
+                  {t('zodiac.luckyColors')}: {zodiacHoroscope.horoscope.lucky.colors.join(', ')}
                 </span>
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                  Lucky numbers: {zodiacHoroscope.horoscope.lucky.numbers.join(', ')}
+                  {t('zodiac.luckyNumbers')}: {zodiacHoroscope.horoscope.lucky.numbers.join(', ')}
                 </span>
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                  Mantra: {zodiacHoroscope.horoscope.mantra}
+                  {t('zodiac.mantra')}: {zodiacHoroscope.horoscope.mantra}
                 </span>
               </div>
             </div>
@@ -625,34 +630,34 @@ export default function Tarot() {
         <section className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-6">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="font-display text-2xl text-white">Zodiac Compatibility</h2>
+              <h2 className="font-display text-2xl text-white">{t('zodiac.compatibilityTitle')}</h2>
               <p className="text-sm text-white/60">
-                Jump to the Compatibility Compass to compare two signs.
+                {t('zodiac.compatibilitySubtitle')}
               </p>
             </div>
             <Link
               to="/zodiac#compatibility"
               className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-6 py-2 text-sm font-semibold text-white shadow-lg transition hover:scale-105"
             >
-              Check Compatibility
+              {t('zodiac.checkCompatibility')}
             </Link>
           </div>
         </section>
 
         <div className="mt-6 flex flex-col gap-4 md:flex-row">
           <label htmlFor="tarot-question" className="sr-only">
-            Your question (optional)
+            {t('iching.question')}
           </label>
           <input
             id="tarot-question"
             type="text"
-            placeholder="What is your question? (Optional)"
+            placeholder={t('tarot.questionPlaceholder')}
             className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-white"
             value={userQuestion}
             onChange={e => setUserQuestion(e.target.value)}
           />
           <label htmlFor="tarot-spread" className="sr-only">
-            Spread type
+            {t('tarot.spreadType')}
           </label>
           <select
             id="tarot-spread"
@@ -660,13 +665,13 @@ export default function Tarot() {
             onChange={(event) => setSpreadType(event.target.value)}
             className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-white"
           >
-            <option value="SingleCard">Single Card</option>
-            <option value="ThreeCard">Three Card</option>
-            <option value="CelticCross">Celtic Cross</option>
+            <option value="SingleCard">{t('tarot.spreads.single')}</option>
+            <option value="ThreeCard">{t('tarot.spreads.three')}</option>
+            <option value="CelticCross">{t('tarot.spreads.celtic')}</option>
           </select>
           {isGuest && (
             <span className="text-xs text-white/60">
-              Guest mode: Single Card only
+              {t('tarot.guestMode')}
             </span>
           )}
           <button
@@ -674,7 +679,7 @@ export default function Tarot() {
             disabled={loading || isInterpreting}
             className="rounded-full bg-gold-400 px-8 py-2 font-bold text-mystic-900 shadow-lg transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? 'Shuffling...' : `Draw ${spreadLabel}`}
+            {loading ? t('tarot.shuffling') : t('tarot.drawCard', { label: spreadLabel })}
           </button>
         </div>
 
@@ -690,9 +695,9 @@ export default function Tarot() {
 
         {!isAuthenticated && (
           <section className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-6">
-            <h2 className="font-display text-2xl text-white">Unlock the full deck</h2>
+            <h2 className="font-display text-2xl text-white">{t('tarot.unlockDeck')}</h2>
             <p className="mt-2 text-sm text-white/70">
-              Create an account to explore advanced spreads, save readings, and request AI interpretations.
+              {t('tarot.unlockDeckSubtitle')}
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
@@ -700,14 +705,14 @@ export default function Tarot() {
                 onClick={() => redirectToAuth('register')}
                 className="rounded-full bg-gold-400 px-6 py-2 text-sm font-semibold text-mystic-900 shadow-lg transition hover:scale-105"
               >
-                Create account
+                {t('login.registerSubmit')}
               </button>
               <button
                 type="button"
                 onClick={() => redirectToAuth('login')}
                 className="rounded-full border border-white/30 px-6 py-2 text-sm font-semibold text-white/80 transition hover:border-white/50 hover:text-white"
               >
-                Sign in
+                {t('nav.login')}
               </button>
             </div>
           </section>
@@ -715,7 +720,7 @@ export default function Tarot() {
 
         {spread && (
           <div className="mt-8">
-            <h2 className="mb-4 font-display text-2xl text-white">Your Spread</h2>
+            <h2 className="mb-4 font-display text-2xl text-white">{t('tarot.yourSpread')}</h2>
             <div className={`grid place-items-center ${spreadGridClass}`}>
               {spread.cards.map((card) => {
                 const cardImage = getCardImage(card);
@@ -734,7 +739,7 @@ export default function Tarot() {
                       <div className="absolute h-full w-full rotate-y-180 rounded-xl border border-gold-400/50 bg-black/80 p-2 shadow-xl backface-hidden">
                         <div className="flex h-full flex-col items-center justify-between text-center">
                           <span className="text-[10px] text-gold-400">
-                            {card.positionLabel || `Position ${card.position}`}
+                            {card.positionLabel || `${t('tarot.position')} ${card.position}`}
                           </span>
                           {card.positionMeaning && (
                             <span className="text-[9px] text-white/60">{card.positionMeaning}</span>
@@ -749,8 +754,8 @@ export default function Tarot() {
                             />
                           )}
                           <div>
-                            <div className="text-lg font-bold text-white">{card.name}</div>
-                            {card.isReversed && <div className="text-xs text-rose-400 uppercase tracking-wider">Reversed</div>}
+                            <div className="text-lg font-bold text-white">{isZh && card.nameCN ? card.nameCN : card.name}</div>
+                            {card.isReversed && <div className="text-xs text-rose-400 uppercase tracking-wider">{t('tarot.reversed')}</div>}
                           </div>
                           <p className="text-[10px] text-white/70 line-clamp-4">{card.isReversed ? card.meaningRev : card.meaningUp}</p>
                         </div>
@@ -767,7 +772,7 @@ export default function Tarot() {
                 disabled={isInterpreting}
                 className="rounded-full bg-indigo-600 px-8 py-3 font-bold text-white shadow-lg transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                ✨ {isInterpreting ? 'Revealing...' : 'Reveal AI Meaning'}
+                ✨ {isInterpreting ? t('tarot.revealing') : t('tarot.revealAi')}
               </button>
             </div>
           </div>
@@ -775,12 +780,12 @@ export default function Tarot() {
 
         {spread?.spreadType === 'CelticCross' && (
           <section className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-6">
-            <h3 className="font-display text-2xl text-white">Celtic Cross Positions</h3>
-            <p className="mt-2 text-sm text-white/60">Each position adds context to the story unfolding across the spread.</p>
+            <h3 className="font-display text-2xl text-white">{t('tarot.celticCrossPositions')}</h3>
+            <p className="mt-2 text-sm text-white/60">{t('tarot.celticCrossDesc')}</p>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {(spread.spreadMeta?.positions || celticCrossPositions).map((position) => (
                 <div key={position.position} className="rounded-2xl border border-white/10 bg-black/30 p-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-gold-400">Position {position.position}</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-gold-400">{t('tarot.position')} {position.position}</div>
                   <div className="text-sm font-semibold text-white">{position.label}</div>
                   <p className="mt-1 text-xs text-white/70">{position.meaning}</p>
                 </div>
@@ -791,7 +796,7 @@ export default function Tarot() {
 
         {aiResult && (
           <section className="mt-10 rounded-3xl border border-purple-500/30 bg-purple-900/20 p-8">
-            <h3 className="font-display text-2xl text-purple-300">Often the cards whisper...</h3>
+            <h3 className="font-display text-2xl text-purple-300">{t('tarot.whisper')}</h3>
             <div className="mt-4 prose prose-invert max-w-none whitespace-pre-wrap text-white/90">
               {aiResult}
             </div>
@@ -801,16 +806,16 @@ export default function Tarot() {
         {isAuthenticated && (
           <section className="mt-12 rounded-3xl border border-white/10 bg-white/5 p-6">
             <div className="flex items-center justify-between">
-              <h3 className="font-display text-2xl text-white">Saved Readings</h3>
+              <h3 className="font-display text-2xl text-white">{t('tarot.historyTitle')}</h3>
               <span className="text-xs text-white/60">
-                {historyLoading ? 'Loading...' : `${history.length} entries`}
+                {historyLoading ? t('tarot.loading') : t('tarot.historyCount', { count: history.length })}
               </span>
             </div>
-            <p className="mt-2 text-sm text-white/60">AI interpretations are automatically saved after each reading.</p>
+            <p className="mt-2 text-sm text-white/60">{t('tarot.historySubtitle')}</p>
             <div className="mt-6 space-y-4">
               {history.length === 0 && !historyLoading && (
                 <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-white/50">
-                  No readings saved yet. Complete an AI interpretation to begin a history trail.
+                  {t('tarot.noHistory')}
                 </div>
               )}
               {history.map((record) => (
@@ -821,16 +826,16 @@ export default function Tarot() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.2em] text-white/40">{record.spreadType}</p>
+                      <p className="text-xs uppercase tracking-[0.2em] text-white/40">{t(`tarot.spreads.${record.spreadType}`)}</p>
                       <h4 className="text-lg font-semibold text-white">
-                        {record.userQuestion || 'General Reading'}
+                        {record.userQuestion || t('tarot.generalReading')}
                       </h4>
                     </div>
                     <button
                       onClick={() => requestDeleteConfirm(record)}
                       className="rounded-full border border-rose-400/40 px-3 py-1 text-xs text-rose-200 transition hover:bg-rose-500/20"
                     >
-                      Remove
+                      {t('favorites.remove')}
                     </button>
                   </div>
                   <p className="mt-2 text-xs text-white/50">
@@ -839,7 +844,7 @@ export default function Tarot() {
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/70">
                     {record.cards?.map((card) => (
                       <span key={`${record.id}-${card.position}`} className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                        {card.positionLabel || `#${card.position}`} · {card.name}
+                        {card.positionLabel || `#${card.position}`} · {isZh && card.nameCN ? card.nameCN : card.name}
                       </span>
                     ))}
                   </div>
@@ -857,8 +862,8 @@ export default function Tarot() {
         <div className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="font-display text-2xl text-gold-300">Tarot Library</h2>
-              <p className="mt-1 text-sm text-white/60">Browse the full 78-card deck.</p>
+              <h2 className="font-display text-2xl text-gold-300">{t('tarot.libraryTitle')}</h2>
+              <p className="mt-1 text-sm text-white/60">{t('tarot.librarySubtitle')}</p>
             </div>
             <button
               type="button"
@@ -866,7 +871,7 @@ export default function Tarot() {
               disabled={deckLoading}
               className="rounded-full border border-gold-400/60 px-4 py-2 text-sm text-gold-200 transition hover:bg-gold-400/10 disabled:opacity-60"
             >
-              {deckLoading ? 'Loading...' : deck.length ? 'Reload Deck' : 'Load Deck'}
+              {deckLoading ? t('tarot.loading') : deck.length ? t('tarot.reloadDeck') : t('tarot.loadDeck')}
             </button>
           </div>
           {deckError && (
@@ -879,7 +884,7 @@ export default function Tarot() {
               {deck.map((card) => (
                 <div key={card.id} className="rounded-xl border border-white/10 bg-black/40 p-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-gold-200">{card.name} · {card.nameCN}</p>
+                    <p className="text-sm text-gold-200">{isZh && card.nameCN ? card.nameCN : card.name}</p>
                     <span className="text-xs text-white/40">#{card.id}</span>
                   </div>
                   <p className="mt-2 text-xs text-white/70">{card.meaningUp}</p>

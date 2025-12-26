@@ -7,7 +7,7 @@ import { getPreferredAiProvider, setPreferredAiProvider } from '../utils/aiProvi
 import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import { readApiErrorMessage } from '../utils/apiError.js';
 
-const UNSAVED_WARNING_MESSAGE = 'You have unsaved changes. Are you sure you want to leave this page?';
+const UNSAVED_WARNING_MESSAGE = '';
 const PROFILE_NAME_MIN_LENGTH = 2;
 const PROFILE_NAME_MAX_LENGTH = 40;
 
@@ -55,6 +55,7 @@ export default function Profile() {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const savedSettingsRef = useRef({ locale, preferences });
   const confirmDeleteCancelRef = useRef(null);
+
   const getStoredLocale = () => {
     try {
       return localStorage.getItem('locale');
@@ -102,11 +103,15 @@ export default function Profile() {
         const nextLocale = data?.settings?.locale;
         const nextPreferences = data?.settings?.preferences;
         if (nextLocale) {
-          setLocale(nextLocale);
+          const lowered = String(nextLocale).toLowerCase();
+          const normalizedLocale = lowered.startsWith('zh')
+            ? (lowered.includes('hant') || lowered.includes('-tw') ? 'zh-TW' : 'zh-CN')
+            : nextLocale;
+          setLocale(normalizedLocale);
           const storedLocale = getStoredLocale();
-          const shouldSyncLanguage = !storedLocale || storedLocale === nextLocale;
-          if (shouldSyncLanguage && nextLocale !== i18n.language) {
-            void i18n.changeLanguage(nextLocale);
+          const shouldSyncLanguage = !storedLocale || storedLocale === normalizedLocale;
+          if (shouldSyncLanguage && normalizedLocale !== i18n.language) {
+            void i18n.changeLanguage(normalizedLocale);
           }
         }
         if (nextPreferences) {
@@ -156,7 +161,7 @@ export default function Profile() {
           cache: 'no-store',
         });
         if (!res.ok) {
-          const message = await readApiErrorMessage(res, 'Unable to load latest BaZi record.');
+          const message = await readApiErrorMessage(res, t('profile.recordsLoadError'));
           throw new Error(message);
         }
         const data = await res.json();
@@ -165,13 +170,13 @@ export default function Profile() {
         setLatestBaziRecord(record || null);
         setLatestBaziStatus({
           type: 'success',
-          message: record ? '' : 'No saved BaZi records found yet.',
+          message: record ? '' : t('profile.noRecordAvailable'),
         });
       } catch (error) {
         if (!isMounted) return;
         setLatestBaziStatus({
           type: 'error',
-          message: error.message || 'Unable to load your latest BaZi record.',
+          message: error.message || t('profile.recordsLoadError'),
         });
       }
     };
@@ -179,7 +184,7 @@ export default function Profile() {
     return () => {
       isMounted = false;
     };
-  }, [authFetch, token]);
+  }, [authFetch, token, t]);
 
   useEffect(() => {
     let isMounted = true;
@@ -197,7 +202,7 @@ export default function Profile() {
           cache: 'no-store',
         });
         if (!res.ok) {
-          const message = await readApiErrorMessage(res, 'Unable to load history.');
+          const message = await readApiErrorMessage(res, t('profile.recordsLoadError'));
           throw new Error(message);
         }
         const data = await res.json();
@@ -215,7 +220,7 @@ export default function Profile() {
         setHistoryMeta({ totalCount: 0, filteredCount: 0, hasMore: false });
         setHistoryStatus({
           type: 'error',
-          message: error.message || 'Unable to load history.',
+          message: error.message || t('profile.recordsLoadError'),
         });
       } finally {
         if (isMounted) setHistoryLoading(false);
@@ -225,7 +230,7 @@ export default function Profile() {
     return () => {
       isMounted = false;
     };
-  }, [authFetch, token]);
+  }, [authFetch, token, t]);
 
   useEffect(() => {
     if (!confirmDeleteOpen) return;
@@ -274,16 +279,16 @@ export default function Profile() {
         profileNameLength <= PROFILE_NAME_MAX_LENGTH);
     if (!isProfileNameValid) {
       setProfileNameError(
-        `Display name must be between ${PROFILE_NAME_MIN_LENGTH} and ${PROFILE_NAME_MAX_LENGTH} characters.`
+        t('login.errors.nameTooShort')
       );
-      setStatus({ type: 'error', message: 'Please fix the highlighted field.' });
+      setStatus({ type: 'error', message: t('iching.errors.correctFields') });
       return;
     }
     if (preferences.aiProvider) {
       const providerMeta = aiProviders.find((provider) => provider.name === preferences.aiProvider);
       if (providerMeta && !providerMeta.enabled) {
-        setAiProviderError('Selected AI provider is not available in this environment.');
-        setStatus({ type: 'error', message: 'Please choose an available AI provider.' });
+        setAiProviderError(t('profile.unavailable'));
+        setStatus({ type: 'error', message: t('iching.errors.correctFields') });
         return;
       }
     }
@@ -305,7 +310,7 @@ export default function Profile() {
         body: JSON.stringify({ locale, preferences: nextPreferences }),
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Failed to save settings');
+        const message = await readApiErrorMessage(res, t('profile.loadError'));
         throw new Error(message);
       }
       await res.json();
@@ -315,10 +320,10 @@ export default function Profile() {
       setPreferredAiProvider(nextPreferences.aiProvider || '');
       setProfileName(nextPreferences.profileName);
       savedSettingsRef.current = { locale, preferences: nextPreferences };
-      setStatus({ type: 'success', message: 'Settings saved.' });
+      setStatus({ type: 'success', message: t('profile.settingsSaved') });
     } catch (error) {
       console.error('Failed to save settings', error);
-      setStatus({ type: 'error', message: error.message || 'Unable to save settings. Please try again.' });
+      setStatus({ type: 'error', message: error.message || t('profile.loadError') });
     }
   };
 
@@ -329,7 +334,7 @@ export default function Profile() {
     return Object.keys(preferences).some((key) => preferences[key] !== saved.preferences?.[key]);
   }, [locale, preferences]);
 
-  useUnsavedChangesWarning(hasUnsavedChanges);
+  useUnsavedChangesWarning(hasUnsavedChanges, t('errors.unsavedChanges'));
 
   const handleCancel = () => {
     if (window.history.length > 1) {
@@ -341,21 +346,21 @@ export default function Profile() {
 
   const handleDeleteAccount = async () => {
     if (!token) return;
-    setStatus({ type: 'saving', message: 'Deleting account…' });
+    setStatus({ type: 'saving', message: t('profile.removing') });
     try {
       const res = await fetch('/api/auth/me', {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Failed to delete account');
+        const message = await readApiErrorMessage(res, t('profile.removeError'));
         throw new Error(message);
       }
       logout();
       setConfirmDeleteOpen(false);
       navigate('/login?reason=deleted');
     } catch (error) {
-      setStatus({ type: 'error', message: error.message || 'Unable to delete account. Please try again.' });
+      setStatus({ type: 'error', message: error.message || t('profile.removeError') });
       setConfirmDeleteOpen(false);
     }
   };
@@ -385,7 +390,7 @@ export default function Profile() {
   const handleZiweiGenerate = async () => {
     if (ziweiLoading) return;
     if (!latestBaziRecord) {
-      setZiweiStatus({ type: 'error', message: 'Save a BaZi record first to generate Zi Wei charts.' });
+      setZiweiStatus({ type: 'error', message: t('profile.saveBaziFirst') });
       return;
     }
     setZiweiLoading(true);
@@ -404,14 +409,14 @@ export default function Profile() {
         }),
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Unable to calculate Zi Wei chart.');
+        const message = await readApiErrorMessage(res, t('ziwei.errors.calculateFailed'));
         throw new Error(message);
       }
       const data = await res.json();
       setZiweiResult(data);
-      setZiweiStatus({ type: 'success', message: 'Zi Wei chart generated from your latest BaZi record.' });
+      setZiweiStatus({ type: 'success', message: t('profile.ziweiReady') });
     } catch (error) {
-      setZiweiStatus({ type: 'error', message: error.message || 'Failed to calculate Zi Wei chart.' });
+      setZiweiStatus({ type: 'error', message: error.message || t('ziwei.errors.calculateFailed') });
     } finally {
       setZiweiLoading(false);
     }
@@ -451,12 +456,13 @@ export default function Profile() {
             >
               <option value="en-US" className="bg-slate-900 text-white">English (US)</option>
               <option value="zh-CN" className="bg-slate-900 text-white">中文（简体）</option>
+              <option value="zh-TW" className="bg-slate-900 text-white">中文（繁體）</option>
             </select>
           </label>
 
           <div>
             <label htmlFor="profile-name" className="block text-sm text-white/70">
-              {t('profile.displayName')} ({t('bazi.genderPlaceholder').toLowerCase().includes('select') ? 'optional' : '可选'})
+              {t('profile.displayName')} ({t('profile.optional')})
             </label>
             <input
               id="profile-name"
@@ -532,7 +538,7 @@ export default function Profile() {
             <p className="mt-2 text-xs text-white/60">
               {hasAiProviders
                 ? t('profile.aiProviderDesc')
-                : t('profile.aiProviderDesc').includes('available') ? 'AI providers are not available right now.' : 'AI 提供商目前不可用。'}
+                : t('profile.unavailable')}
             </p>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="block text-sm text-white/70">
@@ -553,14 +559,14 @@ export default function Profile() {
                       className="bg-slate-900 text-white"
                       disabled={!provider.enabled}
                     >
-                      {provider.name.toUpperCase()} {provider.enabled ? '' : '(Unavailable)'}
+                      {provider.name.toUpperCase()} {provider.enabled ? '' : `(${t('profile.unavailable')})`}
                     </option>
                   ))}
                 </select>
               </label>
               <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-xs text-white/60">
                 <p className="text-white/70">{t('profile.activeServerProvider')}</p>
-                <p className="mt-2 text-sm text-white">{activeProvider ? activeProvider.toUpperCase() : 'Unknown'}</p>
+                <p className="mt-2 text-sm text-white">{activeProvider ? activeProvider.toUpperCase() : t('profile.unknown')}</p>
                 <p className="mt-2">
                   {enabledProviders.length
                     ? t('profile.providersEnabled', { count: enabledProviders.length })
@@ -577,9 +583,8 @@ export default function Profile() {
             <p
               role={status.type === 'error' ? 'alert' : 'status'}
               aria-live={status.type === 'error' ? 'assertive' : 'polite'}
-              className={`text-sm ${
-                status.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
-              }`}
+              className={`text-sm ${status.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
+                }`}
             >
               {status.message || (status.type === 'saving' ? t('profile.saving') : '')}
             </p>
@@ -661,19 +666,19 @@ export default function Profile() {
                     <p>
                       <span className="text-white/50">{t('bazi.birthLocation')}:</span>{' '}
                       <span data-testid="profile-history-location">
-                        {record.birthLocation || 'Unknown'}
+                        {record.birthLocation || t('profile.unknown')}
                       </span>
                     </p>
                     <p>
                       <span className="text-white/50">{t('bazi.timezone')}:</span>{' '}
                       <span data-testid="profile-history-timezone">
-                        {record.timezone || 'Unknown'}
+                        {record.timezone || t('profile.unknown')}
                       </span>
                     </p>
                     <p>
                       <span className="text-white/50">{t('bazi.gender')}:</span>{' '}
                       <span data-testid="profile-history-gender">
-                        {record.gender || 'Unknown'}
+                        {record.gender || t('profile.unknown')}
                       </span>
                     </p>
                   </div>
@@ -726,9 +731,8 @@ export default function Profile() {
             data-testid="profile-ziwei-status"
             role={ziweiStatus.type === 'error' ? 'alert' : 'status'}
             aria-live={ziweiStatus.type === 'error' ? 'assertive' : 'polite'}
-            className={`mt-4 text-sm ${
-              ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
-            }`}
+            className={`mt-4 text-sm ${ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
+              }`}
           >
             {ziweiStatus.message || (ziweiStatus.type === 'loading' ? t('profile.calculating') : '')}
           </p>
@@ -738,20 +742,20 @@ export default function Profile() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <h3 className="text-xs uppercase text-gold-400/80">{t('bazi.year')}</h3>
               <p className="mt-2 text-white">
-                {ziweiResult?.lunar?.year}年 {ziweiResult?.lunar?.month}月 {ziweiResult?.lunar?.day}日
-                {ziweiResult?.lunar?.isLeap ? ' (Leap)' : ''}
+                {ziweiResult?.lunar?.year}{t('common.year')} {ziweiResult?.lunar?.month}{t('common.month')} {ziweiResult?.lunar?.day}{t('common.day')}
+                {ziweiResult?.lunar?.isLeap ? ` (${t('ziwei.leap')})` : ''}
               </p>
               <p className="mt-1 text-xs text-white/60">
-                {ziweiResult?.lunar?.yearStem}{ziweiResult?.lunar?.yearBranch}年 · {ziweiResult?.lunar?.monthStem}{ziweiResult?.lunar?.monthBranch}月
+                {ziweiResult?.lunar?.yearStem}{ziweiResult?.lunar?.yearBranch}{t('common.year')} · {ziweiResult?.lunar?.monthStem}{ziweiResult?.lunar?.monthBranch}{t('common.month')}
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <h3 className="text-xs uppercase text-gold-400/80">{t('bazi.fourPillars')}</h3>
               <p className="mt-2 text-white">
-                命宫: {ziweiResult?.mingPalace?.palace?.cn} · {ziweiResult?.mingPalace?.branch?.name}
+                {t('ziwei.mingPalace')}: {ziweiResult?.mingPalace?.palace?.cn} · {ziweiResult?.mingPalace?.branch?.name}
               </p>
               <p className="mt-1 text-white">
-                身宫: {ziweiResult?.shenPalace?.palace?.cn} · {ziweiResult?.shenPalace?.branch?.name}
+                {t('ziwei.shenPalace')}: {ziweiResult?.shenPalace?.palace?.cn} · {ziweiResult?.shenPalace?.branch?.name}
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -759,7 +763,7 @@ export default function Profile() {
               <p className="mt-2 text-white">{ziweiResult?.birthIso || '—'}</p>
               <p className="mt-1 text-xs text-white/60">
                 UTC offset: {Number.isFinite(ziweiResult?.timezoneOffsetMinutes)
-                  ? `${ziweiResult.timezoneOffsetMinutes} mins`
+                  ? `${ziweiResult.timezoneOffsetMinutes} ${t('profile.mins')}`
                   : '—'}
               </p>
             </div>
@@ -783,45 +787,47 @@ export default function Profile() {
         </div>
       </section>
 
-      {confirmDeleteOpen && (
-        <div
-          role="presentation"
-          onClick={() => setConfirmDeleteOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6"
-        >
+      {
+        confirmDeleteOpen && (
           <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-account-title"
-            onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-md rounded-3xl border border-rose-500/20 bg-slate-950/95 p-6 text-white shadow-2xl backdrop-blur"
+            role="presentation"
+            onClick={() => setConfirmDeleteOpen(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6"
           >
-            <h2 id="delete-account-title" className="text-lg font-semibold text-rose-300">
-              {t('profile.deleteAccountTitle')}
-            </h2>
-            <p className="mt-2 text-sm text-white/70">
-              {t('profile.deleteAccountDesc')}
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3 sm:justify-end">
-              <button
-                ref={confirmDeleteCancelRef}
-                type="button"
-                onClick={() => setConfirmDeleteOpen(false)}
-                className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white"
-              >
-                {t('profile.cancel')}
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteAccount}
-                className="rounded-full bg-rose-600 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white shadow-lg shadow-rose-900/40 transition hover:bg-rose-500"
-              >
-                {t('profile.confirmDelete')}
-              </button>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-account-title"
+              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-md rounded-3xl border border-rose-500/20 bg-slate-950/95 p-6 text-white shadow-2xl backdrop-blur"
+            >
+              <h2 id="delete-account-title" className="text-lg font-semibold text-rose-300">
+                {t('profile.deleteAccountTitle')}
+              </h2>
+              <p className="mt-2 text-sm text-white/70">
+                {t('profile.deleteAccountDesc')}
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3 sm:justify-end">
+                <button
+                  ref={confirmDeleteCancelRef}
+                  type="button"
+                  onClick={() => setConfirmDeleteOpen(false)}
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white"
+                >
+                  {t('profile.cancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  className="rounded-full bg-rose-600 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white shadow-lg shadow-rose-900/40 transition hover:bg-rose-500"
+                >
+                  {t('profile.confirmDelete')}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </main>
+        )
+      }
+    </main >
   );
 }

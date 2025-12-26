@@ -26,6 +26,10 @@ export default function Header() {
   const currentLocale = i18n.resolvedLanguage || i18n.language;
   const NAV_CLICK_DELAY = 400;
 
+  const nextLocale = currentLocale === 'zh-CN' ? 'en-US' : 'zh-CN';
+  const nextLocaleAriaLabel = nextLocale === 'en-US' ? 'Switch to English' : 'Switch to Chinese';
+  const nextLocaleShortLabel = nextLocale === 'en-US' ? 'EN' : '中文';
+
   const primaryLinks = [
     { path: '/', label: t('nav.home') },
     { path: '/bazi', label: t('nav.bazi', { defaultValue: 'BaZi' }) },
@@ -37,8 +41,7 @@ export default function Header() {
   const visiblePrimaryLinks = primaryLinks.filter((link) => !link.requiresAuth || !isGuest);
 
   const toggleLocale = () => {
-    const next = currentLocale === 'zh-CN' ? 'en-US' : 'zh-CN';
-    i18n.changeLanguage(next);
+    i18n.changeLanguage(nextLocale);
     setIsMenuOpen(false);
   };
 
@@ -99,9 +102,8 @@ export default function Header() {
           key={link.path}
           to={link.path}
           onClick={handleSafeNavClick}
-          className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
-            isActive(link.path) ? 'text-gold-400' : 'text-white/80'
-          }`}
+          className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive(link.path) ? 'text-gold-400' : 'text-white/80'
+            }`}
         >
           {link.label}
         </Link>
@@ -111,27 +113,24 @@ export default function Header() {
           <Link
             to="/profile"
             onClick={handleSafeNavClick}
-            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
-              isActive('/profile') ? 'text-gold-400' : 'text-white/80'
-            }`}
+            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive('/profile') ? 'text-gold-400' : 'text-white/80'
+              }`}
           >
             {t('nav.profile')}
           </Link>
           <Link
             to="/history"
             onClick={handleSafeNavClick}
-            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
-              isActive('/history') ? 'text-gold-400' : 'text-white/80'
-            }`}
+            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive('/history') ? 'text-gold-400' : 'text-white/80'
+              }`}
           >
             {t('nav.history')}
           </Link>
           <Link
             to="/favorites"
             onClick={handleSafeNavClick}
-            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
-              isActive('/favorites') ? 'text-gold-400' : 'text-white/80'
-            }`}
+            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive('/favorites') ? 'text-gold-400' : 'text-white/80'
+              }`}
           >
             {t('nav.favorites')}
           </Link>
@@ -150,7 +149,7 @@ export default function Header() {
         className="font-display text-xl tracking-widest text-gold-400 z-50 relative"
         onClick={handleSafeNavClick}
       >
-        BaZi Master
+        {t('home.title')}
       </Link>
 
       {/* Desktop Navigation */}
@@ -187,9 +186,9 @@ export default function Header() {
           type="button"
           onClick={toggleLocale}
           className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 hover:text-white"
-          aria-label={currentLocale === 'zh-CN' ? 'Switch to English' : 'Switch to Chinese'}
+          aria-label={nextLocaleAriaLabel}
         >
-          {currentLocale === 'zh-CN' ? 'EN' : '中文'}
+          {nextLocaleShortLabel}
         </button>
       </nav>
 
@@ -231,7 +230,7 @@ export default function Header() {
               onClick={toggleLocale}
               className="text-center rounded-full border border-white/20 px-4 py-3 text-white/70 hover:text-white"
             >
-              {currentLocale === 'zh-CN' ? 'Switch to English' : '切换到中文'}
+              {nextLocaleAriaLabel}
             </button>
           </div>
         </nav>

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { readApiErrorMessage } from '../utils/apiError.js';
 
 const AuthContext = createContext(null);
@@ -28,6 +29,7 @@ const safeParseUser = (raw) => {
 };
 
 export function AuthProvider({ children }) {
+  const { t } = useTranslation();
   const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState(() => {
     const raw = localStorage.getItem(USER_KEY);
@@ -209,7 +211,7 @@ export function AuthProvider({ children }) {
       console.error('Failed to refresh profile name', error);
     }
     return null;
-  }, [expireSession, setProfileName, token]);
+  }, [setProfileName, token]);
 
   const login = async (email, password = 'password') => {
     // Determine if we are in "demo" mode or real mode. 
@@ -224,7 +226,7 @@ export function AuthProvider({ children }) {
       });
 
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Login failed');
+        const message = await readApiErrorMessage(res, t('login.errors.loginFailed'));
         throw new Error(message);
       }
 
@@ -244,7 +246,7 @@ export function AuthProvider({ children }) {
       const message =
         error instanceof Error && error.message
           ? error.message
-          : 'Network error. Please check your connection and try again.';
+          : t('errors.network');
       throw new Error(message);
     }
   };

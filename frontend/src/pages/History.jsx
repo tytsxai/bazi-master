@@ -212,12 +212,12 @@ export default function History() {
         body: JSON.stringify({ method: 'time' }),
       });
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to reveal the time hexagram.');
+        const message = await readErrorMessage(res, t('history.timeHexagramError'));
         throw new Error(message);
       }
       const data = await res.json();
       setIchingTimeResult(data);
-      setIchingTimeStatus({ type: 'success', message: 'Time divination complete.' });
+      setIchingTimeStatus({ type: 'success', message: t('iching.timeRevealed') });
     } catch (error) {
       setIchingTimeStatus({ type: 'error', message: error.message });
     } finally {
@@ -290,30 +290,30 @@ export default function History() {
     const timezone = typeof draft?.timezone === 'string' ? draft.timezone.trim() : '';
 
     if (!Number.isInteger(birthYear) || birthYear < 1 || birthYear > 9999) {
-      errors.birthYear = 'Enter a valid year.';
+      errors.birthYear = t('bazi.errors.yearInvalid');
     }
     if (!Number.isInteger(birthMonth) || birthMonth < 1 || birthMonth > 12) {
-      errors.birthMonth = 'Enter a valid month.';
+      errors.birthMonth = t('bazi.errors.monthInvalid');
     }
     if (!Number.isInteger(birthDay) || birthDay < 1 || birthDay > 31) {
-      errors.birthDay = 'Enter a valid day.';
+      errors.birthDay = t('bazi.errors.dayInvalid');
     }
     if (!Number.isInteger(birthHour) || birthHour < 0 || birthHour > 23) {
-      errors.birthHour = 'Enter a valid hour.';
+      errors.birthHour = t('bazi.errors.hourInvalid');
     }
     if (!errors.birthYear && !errors.birthMonth && !errors.birthDay) {
       if (!isValidCalendarDate(birthYear, birthMonth, birthDay)) {
-        errors.birthDay = 'Date is not valid.';
+        errors.birthDay = t('bazi.errors.dateInvalid');
       }
     }
     if (!gender) {
-      errors.gender = 'Select a gender.';
+      errors.gender = t('bazi.errors.genderRequired');
     }
     if (isWhitespaceOnly(draft?.birthLocation)) {
-      errors.birthLocation = 'Birth location cannot be only whitespace.';
+      errors.birthLocation = t('bazi.errors.locationWhitespace');
     }
     if (isWhitespaceOnly(draft?.timezone)) {
-      errors.timezone = 'Timezone cannot be only whitespace.';
+      errors.timezone = t('bazi.errors.timezoneWhitespace');
     }
 
     return {
@@ -403,7 +403,7 @@ export default function History() {
         return;
       }
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to load history.');
+        const message = await readErrorMessage(res, t('history.loadError'));
         showStatus({ type: 'error', message });
         return;
       }
@@ -460,7 +460,7 @@ export default function History() {
       setFilteredCount(typeof data.filteredCount === 'number' ? data.filteredCount : nextRecords.length);
     } catch (error) {
       if (error.name !== 'AbortError') {
-        showStatus({ type: 'error', message: 'Unable to load history.' });
+        showStatus({ type: 'error', message: t('history.loadError') });
       }
     }
   };
@@ -475,14 +475,14 @@ export default function History() {
       });
       if (res.status === 401) return;
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to load tarot history.');
+        const message = await readErrorMessage(res, t('history.tarotLoadError'));
         throw new Error(message);
       }
       const data = await res.json();
       setTarotHistory(Array.isArray(data.records) ? data.records : []);
     } catch (error) {
       console.error(error);
-      setTarotHistoryError(error.message || 'Unable to load tarot history.');
+      setTarotHistoryError(error.message || t('history.tarotLoadError'));
     } finally {
       setTarotHistoryLoading(false);
     }
@@ -508,7 +508,7 @@ export default function History() {
         return;
       }
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to load deleted records.');
+        const message = await readErrorMessage(res, t('history.deletedLoadError'));
         setDeletedRecords([]);
         showStatus({ type: 'error', message });
         return;
@@ -822,11 +822,11 @@ export default function History() {
         if (deepLinkState.status === 'found' && deepLinkState.id === record.id) {
           setDeepLinkState({ status: 'missing', record: null, id: record.id });
         }
-        showStatus({ type: 'success', message: 'Record already deleted.' });
+        showStatus({ type: 'success', message: t('history.alreadyDeleted') });
         return;
       }
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to delete record. It has been restored.');
+        const message = await readErrorMessage(res, t('history.deleteRestoredError'));
         setRecords((prev) => [record, ...prev]);
         setTotalCount((prev) => clampCount(prev + 1));
         setFilteredCount((prev) => clampCount(prev + 1));
@@ -841,7 +841,7 @@ export default function History() {
         const merged = exists ? prev : [record, ...prev];
         return sortDeletedRecordsForDisplay(merged, record.id);
       });
-      showStatus({ type: 'success', message: 'Record deleted.' });
+      showStatus({ type: 'success', message: t('history.recordDeleted') });
       await Promise.all([loadRecords({ page }), loadDeletedRecords(record)]);
     } finally {
       deletingIdsRef.current.delete(record.id);
@@ -872,11 +872,11 @@ export default function History() {
       }
       if (res.status === 404) {
         await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
-        showStatus({ type: 'error', message: 'Record is no longer available to restore.' });
+        showStatus({ type: 'error', message: t('history.restoreUnavailable') });
         return;
       }
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to restore record.');
+        const message = await readErrorMessage(res, t('history.restoreError'));
         showStatus({ type: 'error', message });
         return;
       }
@@ -891,7 +891,7 @@ export default function History() {
       setLastDeletedId((prev) => (prev === recordId ? null : prev));
       setLastDeletedRecord((prev) => (prev?.id === recordId ? null : prev));
       await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
-      showStatus({ type: 'success', message: 'Record restored.' });
+      showStatus({ type: 'success', message: t('history.recordRestored') });
     } finally {
       deletingIdsRef.current.delete(recordId);
     }
@@ -921,11 +921,11 @@ export default function History() {
       }
       if (res.status === 404) {
         setDeletedRecords((prev) => prev.filter((record) => record.id !== recordId));
-        showStatus({ type: 'success', message: 'Record already removed.' });
+        showStatus({ type: 'success', message: t('history.alreadyRemoved') });
         return;
       }
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to permanently delete record.');
+        const message = await readErrorMessage(res, t('history.deletePermanentError'));
         showStatus({ type: 'error', message });
         return;
       }
@@ -937,7 +937,7 @@ export default function History() {
       if (lastDeletedRecordRef.current?.record?.id === recordId) {
         lastDeletedRecordRef.current = null;
       }
-      showStatus({ type: 'success', message: 'Record permanently deleted.' });
+      showStatus({ type: 'success', message: t('history.recordHardDeleted') });
       await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
     } finally {
       deletingIdsRef.current.delete(recordId);
@@ -946,7 +946,7 @@ export default function History() {
 
   const handleExport = async () => {
     if (!records.length) {
-      showStatus({ type: 'error', message: 'No records available to export.' });
+      showStatus({ type: 'error', message: t('history.noRecordsToExport') });
       return;
     }
     clearStatus();
@@ -968,13 +968,13 @@ export default function History() {
         return;
       }
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to export history.');
+        const message = await readErrorMessage(res, t('history.exportError'));
         throw new Error(message);
       }
       const data = await res.json();
       const exportedRecords = Array.isArray(data) ? data : data?.records;
       if (!Array.isArray(exportedRecords) || exportedRecords.length === 0) {
-        showStatus({ type: 'error', message: 'No records matched your export filters.' });
+        showStatus({ type: 'error', message: t('history.exportNoMatches') });
         return;
       }
       const payload = JSON.stringify(data, null, 2);
@@ -984,10 +984,10 @@ export default function History() {
       anchor.href = downloadUrl;
       anchor.download = `bazi-history-${new Date().toISOString().slice(0, 10)}.json`;
       anchor.click();
-      showStatus({ type: 'success', message: 'History exported.' });
+      showStatus({ type: 'success', message: t('history.exportSuccess') });
     } catch (error) {
       console.error(error);
-      showStatus({ type: 'error', message: error.message || 'Unable to export history.' });
+      showStatus({ type: 'error', message: error.message || t('history.exportError') });
     } finally {
       if (downloadUrl) URL.revokeObjectURL(downloadUrl);
       setIsExporting(false);
@@ -1015,13 +1015,13 @@ export default function History() {
         return;
       }
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to export history.');
+        const message = await readErrorMessage(res, t('history.exportError'));
         throw new Error(message);
       }
       const data = await res.json();
       const exportedRecords = Array.isArray(data) ? data : data?.records;
       if (!Array.isArray(exportedRecords) || exportedRecords.length === 0) {
-        showStatus({ type: 'error', message: 'No records available to export.' });
+        showStatus({ type: 'error', message: t('history.noRecordsToExport') });
         return;
       }
       const payload = JSON.stringify(data, null, 2);
@@ -1031,10 +1031,10 @@ export default function History() {
       anchor.href = downloadUrl;
       anchor.download = `bazi-history-full-${new Date().toISOString().slice(0, 10)}.json`;
       anchor.click();
-      showStatus({ type: 'success', message: 'Full history exported.' });
+      showStatus({ type: 'success', message: t('history.exportAllSuccess') });
     } catch (error) {
       console.error(error);
-      showStatus({ type: 'error', message: error.message || 'Unable to export history.' });
+      showStatus({ type: 'error', message: error.message || t('history.exportError') });
     } finally {
       if (downloadUrl) URL.revokeObjectURL(downloadUrl);
       setIsExportingAll(false);
@@ -1051,7 +1051,7 @@ export default function History() {
       const parsed = JSON.parse(text);
       const recordsToImport = Array.isArray(parsed) ? parsed : parsed?.records;
       if (!Array.isArray(recordsToImport) || !recordsToImport.length) {
-        throw new Error('No records found in file.');
+        throw new Error(t('history.importNoRecords'));
       }
       const res = await authFetch('/api/bazi/records/import', {
         method: 'POST',
@@ -1069,18 +1069,18 @@ export default function History() {
         return;
       }
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to import history.');
+        const message = await readErrorMessage(res, t('history.importError'));
         throw new Error(message);
       }
       const data = await res.json();
       showStatus({
         type: 'success',
-        message: `Imported ${data.created ?? 0} record${data.created === 1 ? '' : 's'}.`,
+        message: t('history.importSuccess', { count: data.created ?? 0 }),
       });
       await Promise.all([loadRecords({ page: 1 }), loadDeletedRecords()]);
     } catch (error) {
       console.error(error);
-      showStatus({ type: 'error', message: error.message || 'Unable to import history.' });
+      showStatus({ type: 'error', message: error.message || t('history.importError') });
     } finally {
       setIsImporting(false);
       event.target.value = '';
@@ -1141,7 +1141,7 @@ export default function History() {
     const { errors, payload } = validateEditDraft(editDraft);
     setEditErrors(errors);
     if (Object.keys(errors).length) {
-      setEditStatus('Fix the highlighted fields to continue.');
+      setEditStatus(t('history.fixFields'));
       return;
     }
     setEditSaving(true);
@@ -1159,7 +1159,7 @@ export default function History() {
         return;
       }
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to update record.');
+        const message = await readErrorMessage(res, t('history.updateError'));
         setEditStatus(message);
         return;
       }
@@ -1174,7 +1174,7 @@ export default function History() {
       }
       cancelEdit();
     } catch (error) {
-      setEditStatus('Unable to update record.');
+      setEditStatus(t('history.updateError'));
     } finally {
       setEditSaving(false);
     }
@@ -1214,13 +1214,13 @@ export default function History() {
     if (!res.ok) {
       if (res.status === 404) {
         await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
-        showStatus({ type: 'success', message: 'Selected records already deleted.' });
+        showStatus({ type: 'success', message: t('history.bulkAlreadyDeleted') });
         return;
       }
       setRecords(previousRecords);
       setTotalCount(previousTotalCount);
       setFilteredCount(previousFilteredCount);
-      const message = await readErrorMessage(res, 'Unable to delete selected records. They have been restored.');
+      const message = await readErrorMessage(res, t('history.bulkDeleteRestoredError'));
       showStatus({ type: 'error', message });
       return;
     }
@@ -1228,7 +1228,7 @@ export default function History() {
     await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
     showStatus({
       type: 'success',
-      message: `Deleted ${idsToDelete.length} record${idsToDelete.length === 1 ? '' : 's'}.`,
+      message: t('history.bulkDeleted', { count: idsToDelete.length }),
     });
   };
 
@@ -1236,9 +1236,9 @@ export default function History() {
     setConfirmState({
       type: 'single',
       record,
-      title: 'Delete this record?',
-      description: 'This removes the record from your history. You can restore it later.',
-      confirmLabel: 'Delete',
+      title: t('history.deleteConfirmTitle'),
+      description: t('history.deleteConfirmDesc'),
+      confirmLabel: t('common.delete'),
     });
   };
 
@@ -1246,9 +1246,9 @@ export default function History() {
     setConfirmState({
       type: 'hard',
       record,
-      title: 'Delete permanently?',
-      description: 'This removes the record from your account forever. This cannot be undone.',
-      confirmLabel: 'Delete permanently',
+      title: t('history.hardDeleteConfirmTitle'),
+      description: t('history.hardDeleteConfirmDesc'),
+      confirmLabel: t('history.deletePermanently'),
     });
   };
 
@@ -1257,9 +1257,9 @@ export default function History() {
     setConfirmState({
       type: 'bulk',
       ids: [...selectedIds],
-      title: `Delete ${selectedIds.length} selected record${selectedIds.length === 1 ? '' : 's'}?`,
-      description: 'This removes the selected records from your history. You can restore them later.',
-      confirmLabel: 'Delete selected',
+      title: t('history.bulkDeleteTitle', { count: selectedIds.length }),
+      description: t('history.bulkDeleteDesc'),
+      confirmLabel: t('history.deleteSelected'),
     });
   };
 
@@ -1353,11 +1353,10 @@ export default function History() {
           <div
             role={status.type === 'error' ? 'alert' : 'status'}
             aria-live={status.type === 'error' ? 'assertive' : 'polite'}
-            className={`pointer-events-auto rounded-2xl border px-4 py-3 text-sm shadow-lg backdrop-blur ${
-              status.type === 'error'
-                ? 'border-rose-400/40 bg-rose-500/10 text-rose-100'
-                : 'border-emerald-300/40 bg-emerald-500/10 text-emerald-100'
-            }`}
+            className={`pointer-events-auto rounded-2xl border px-4 py-3 text-sm shadow-lg backdrop-blur ${status.type === 'error'
+              ? 'border-rose-400/40 bg-rose-500/10 text-rose-100'
+              : 'border-emerald-300/40 bg-emerald-500/10 text-emerald-100'
+              }`}
           >
             {status.message}
           </div>
@@ -1397,7 +1396,7 @@ export default function History() {
                 onClick={() => setConfirmState(null)}
                 className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -1412,13 +1411,13 @@ export default function History() {
       )}
       <section className="glass-card rounded-3xl border border-white/10 p-8 shadow-glass [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto sm:[&_table]:table sm:[&_table]:max-w-none sm:[&_table]:overflow-visible">
         <h1 className="font-display text-3xl text-gold-400">{t('nav.history')}</h1>
-        <p className="mt-3 text-white/70">Your saved readings will appear here.</p>
+        <p className="mt-3 text-white/70">{t('history.subtitle')}</p>
         <section className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="font-display text-xl text-white">I Ching Time Oracle</h2>
+              <h2 className="font-display text-xl text-white">{t('zodiac.timeOracleTitle')}</h2>
               <p className="text-sm text-white/60">
-                Draw a hexagram using the current moment to reveal hidden currents.
+                {t('zodiac.timeOracleSubtitle')}
               </p>
             </div>
             <button
@@ -1427,7 +1426,7 @@ export default function History() {
               disabled={ichingTimeLoading}
               className="rounded-full bg-gold-400 px-6 py-2 text-sm font-semibold text-mystic-900 shadow-lg transition hover:scale-105 disabled:opacity-50"
             >
-              {ichingTimeLoading ? 'Consulting time...' : 'Reveal Time Hexagram'}
+              {ichingTimeLoading ? t('zodiac.consultingTime') : t('zodiac.revealTimeHexagram')}
             </button>
           </div>
 
@@ -1444,7 +1443,7 @@ export default function History() {
           {ichingTimeResult?.hexagram && (
             <div className="mt-6 grid gap-6 md:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/40">Primary Hexagram</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-white/50">{t('iching.primaryHexagram')}</div>
                 <div
                   data-testid="iching-time-hexagram-name"
                   className="mt-2 text-2xl text-gold-300"
@@ -1453,17 +1452,17 @@ export default function History() {
                 </div>
                 <div className="text-sm text-white/60">{ichingTimeResult.hexagram.title}</div>
                 <div className="mt-4 text-xs text-white/50">
-                  Changing lines:{' '}
+                  {t('iching.changingLines')}:{' '}
                   <span data-testid="iching-time-changing-lines">
                     {ichingTimeResult.changingLines?.length
                       ? ichingTimeResult.changingLines.join(', ')
-                      : 'None'}
+                      : t('iching.none')}
                   </span>
                 </div>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/40">Resulting Hexagram</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-white/40">{t('iching.resultingHexagram')}</div>
                 <div
                   data-testid="iching-time-resulting-name"
                   className="mt-2 text-2xl text-indigo-200"
@@ -1472,7 +1471,7 @@ export default function History() {
                 </div>
                 <div className="text-sm text-white/60">{ichingTimeResult.resultingHexagram?.title}</div>
                 <div className="mt-4 text-xs text-white/50">
-                  Time context:{' '}
+                  {t('bazi.timeContext')}:{' '}
                   <span data-testid="iching-time-iso">
                     {ichingTimeResult.timeContext?.iso || '—'}
                   </span>
@@ -1483,21 +1482,21 @@ export default function History() {
         </section>
         {deepLinkState.status === 'loading' && (
           <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/70">
-            Looking for the shared record…
+            {t('history.recordLoading')}
           </div>
         )}
         {deepLinkState.status === 'missing' && (
           <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
-            <p className="font-semibold text-rose-100">Record not found</p>
+            <p className="font-semibold text-rose-100">{t('history.recordMissing')}</p>
             <p className="mt-1 text-rose-100/80">
-              This link points to a record that no longer exists or you no longer have access.
+              {t('history.sharedMissingDesc')}
             </p>
           </div>
         )}
         {deepLinkState.status === 'error' && (
           <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
-            <p className="font-semibold text-rose-100">Unable to load shared record</p>
-            <p className="mt-1 text-rose-100/80">Please try again or remove the record link from the URL.</p>
+            <p className="font-semibold text-rose-100">{t('history.errorLoadingShared')}</p>
+            <p className="mt-1 text-rose-100/80">{t('history.sharedErrorDesc')}</p>
           </div>
         )}
         {deepLinkState.status === 'found' && deepLinkState.record && (
@@ -1507,9 +1506,9 @@ export default function History() {
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="font-semibold text-gold-100">Shared record loaded</p>
+                <p className="font-semibold text-gold-100">{t('history.sharedLoaded')}</p>
                 <p className="mt-1 text-gold-100/80">
-                  This link points to a specific record. You can keep browsing or clear the link.
+                  {t('history.detailsSubtitle')}
                 </p>
               </div>
               <button
@@ -1517,18 +1516,18 @@ export default function History() {
                 onClick={clearDeepLink}
                 className="rounded-full border border-gold-300/40 px-3 py-1 text-[0.7rem] uppercase tracking-[0.2em] text-gold-100 transition hover:border-gold-200 hover:text-white"
               >
-                Clear link
+                {t('history.clearLink')}
               </button>
             </div>
             <div className="mt-3 grid gap-2 text-xs text-gold-100/80 sm:grid-cols-2">
               <div>
-                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold-100/60">Birth</p>
+                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold-100/60">{t('history.birth')}</p>
                 <p className="text-sm text-gold-100">
                   {deepLinkState.record.birthYear}-{deepLinkState.record.birthMonth}-{deepLinkState.record.birthDay} · {deepLinkState.record.birthHour}:00
                 </p>
               </div>
               <div>
-                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold-100/60">Profile</p>
+                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold-100/60">{t('history.profile')}</p>
                 <p className="text-sm text-gold-100">
                   {deepLinkState.record.gender} · {deepLinkState.record.birthLocation || '—'} · {deepLinkState.record.timezone || 'UTC'}
                 </p>
@@ -1543,7 +1542,7 @@ export default function History() {
             disabled={!records.length || isExporting}
             className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isExporting ? 'Exporting…' : 'Export filtered'}
+            {isExporting ? t('history.exporting') : t('history.exportFiltered')}
           </button>
           <button
             type="button"
@@ -1551,7 +1550,7 @@ export default function History() {
             disabled={isExportingAll}
             className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isExportingAll ? 'Exporting…' : 'Export all'}
+            {isExportingAll ? t('history.exporting') : t('history.exportAll')}
           </button>
           <button
             type="button"
@@ -1559,7 +1558,7 @@ export default function History() {
             disabled={isImporting}
             className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isImporting ? 'Importing…' : 'Import file'}
+            {isImporting ? t('history.importing') : t('history.importFile')}
           </button>
           <input
             ref={fileInputRef}
@@ -1572,14 +1571,14 @@ export default function History() {
         <div className="mt-6 grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/70 md:grid-cols-4">
           <label className="grid gap-2">
             <div className="flex items-center justify-between text-[0.7rem] uppercase tracking-[0.2em] text-white/50">
-              <span>Search</span>
+              <span>{t('history.searchPlaceholder')}</span>
               {isQueryActive && (
                 <button
                   type="button"
                   onClick={() => handleClearFilter('query')}
                   className="rounded-full border border-white/10 px-2 py-0.5 text-[0.55rem] uppercase tracking-[0.2em] text-white/50 transition hover:border-white/40 hover:text-white"
                 >
-                  Clear
+                  {t('history.clear')}
                 </button>
               )}
             </div>
@@ -1591,20 +1590,20 @@ export default function History() {
                 setQuery(nextValue);
                 scheduleQueryDebounce(nextValue);
               }}
-              placeholder="Location, timezone, pillar"
+              placeholder={t('history.searchPlaceholder')}
               className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/30"
             />
           </label>
           <label className="grid gap-2">
             <div className="flex items-center justify-between text-[0.7rem] uppercase tracking-[0.2em] text-white/50">
-              <span>Gender</span>
+              <span>{t('bazi.gender')}</span>
               {isGenderActive && (
                 <button
                   type="button"
                   onClick={() => handleClearFilter('gender')}
                   className="rounded-full border border-white/10 px-2 py-0.5 text-[0.55rem] uppercase tracking-[0.2em] text-white/50 transition hover:border-white/40 hover:text-white"
                 >
-                  Clear
+                  {t('history.clear')}
                 </button>
               )}
             </div>
@@ -1616,21 +1615,21 @@ export default function History() {
               }}
               className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
             >
-              <option value="all">All</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
+              <option value="all">{t('history.allGenders')}</option>
+              <option value="male">{t('bazi.genderMale')}</option>
+              <option value="female">{t('bazi.genderFemale')}</option>
             </select>
           </label>
           <label className="grid gap-2">
             <div className="flex items-center justify-between text-[0.7rem] uppercase tracking-[0.2em] text-white/50">
-              <span>Created</span>
+              <span>{t('history.birth')}</span>
               {isRangeActive && (
                 <button
                   type="button"
                   onClick={() => handleClearFilter('range')}
                   className="rounded-full border border-white/10 px-2 py-0.5 text-[0.55rem] uppercase tracking-[0.2em] text-white/50 transition hover:border-white/40 hover:text-white"
                 >
-                  Clear
+                  {t('history.clear')}
                 </button>
               )}
             </div>
@@ -1642,24 +1641,24 @@ export default function History() {
               }}
               className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
             >
-              <option value="all">All time</option>
-              <option value="today">Today</option>
-              <option value="week">This week</option>
-              <option value="7">Last 7 days</option>
-              <option value="30">Last 30 days</option>
-              <option value="90">Last 90 days</option>
+              <option value="all">{t('history.allTime')}</option>
+              <option value="today">{t('history.today')}</option>
+              <option value="week">{t('history.thisWeek')}</option>
+              <option value="7">{t('history.last7Days')}</option>
+              <option value="30">{t('history.last30Days')}</option>
+              <option value="90">{t('history.last90Days')}</option>
             </select>
           </label>
           <label className="grid gap-2">
             <div className="flex items-center justify-between text-[0.7rem] uppercase tracking-[0.2em] text-white/50">
-              <span>Sort</span>
+              <span>{t('history.sortOption')}</span>
               {isSortActive && (
                 <button
                   type="button"
                   onClick={() => handleClearFilter('sort')}
                   className="rounded-full border border-white/10 px-2 py-0.5 text-[0.55rem] uppercase tracking-[0.2em] text-white/50 transition hover:border-white/40 hover:text-white"
                 >
-                  Clear
+                  {t('history.clear')}
                 </button>
               )}
             </div>
@@ -1668,10 +1667,10 @@ export default function History() {
               onChange={(event) => setSortOption(event.target.value)}
               className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
             >
-              <option value="created-desc">Newest saved</option>
-              <option value="created-asc">Oldest saved</option>
-              <option value="birth-desc">Newest birthdate</option>
-              <option value="birth-asc">Oldest birthdate</option>
+              <option value="created-desc">{t('history.newestSaved')}</option>
+              <option value="created-asc">{t('history.oldestSaved')}</option>
+              <option value="birth-desc">{t('history.newestBirth')}</option>
+              <option value="birth-asc">{t('history.oldestBirth')}</option>
             </select>
           </label>
         </div>
@@ -1681,17 +1680,17 @@ export default function History() {
             onClick={handleResetFilters}
             className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-gold-400/60 hover:text-white"
           >
-            {t('profile.confirmDelete').includes('Confirm') ? 'Reset filters' : '重置筛选'}
+            {t('history.resetFilters')}
           </button>
         </div>
         {!!orderedDeletedRecords.length && (
           <div className="mt-6 rounded-2xl border border-amber-300/20 bg-amber-500/10 p-4 text-xs text-amber-100">
-            <p className="font-semibold text-amber-100">Deleted records</p>
-            <p className="mt-1 text-amber-100/80">Restore any record you removed from history.</p>
+            <p className="font-semibold text-amber-100">{t('history.deletedRecords')}</p>
+            <p className="mt-1 text-amber-100/80">{t('history.deletedRecordsDesc')}</p>
             <ul className="mt-3 grid gap-2 sm:grid-cols-2" role="list">
               {orderedDeletedRecords.map((record) => {
                 const isPrimaryRestore = primaryRestoreId === record.id;
-                const label = isPrimaryRestore ? 'Restore' : 'Recover';
+                const label = isPrimaryRestore ? t('history.restore') : t('history.recover');
                 return (
                   <li key={record.id} className="list-none">
                     <div
@@ -1715,7 +1714,7 @@ export default function History() {
                           onClick={() => requestHardDelete(record)}
                           className="rounded-full border border-rose-300/40 px-3 py-1 text-[0.7rem] uppercase tracking-[0.18em] text-rose-100 transition hover:border-rose-300 hover:text-rose-200"
                         >
-                          Delete permanently
+                          {t('history.deletePermanently')}
                         </button>
                       </div>
                     </div>
@@ -1734,13 +1733,13 @@ export default function History() {
                   type="checkbox"
                   checked={allFilteredSelected}
                   onChange={toggleSelectAll}
-                  aria-label="Select all"
+                  aria-label={t('history.selectAll')}
                   className="h-4 w-4 rounded border-white/30 bg-black/40 text-gold-400"
                 />
-                <span className="uppercase tracking-[0.18em] text-white/60">Select all</span>
+                <span className="uppercase tracking-[0.18em] text-white/60">{t('history.selectAll')}</span>
                 {selectedIds.length > 0 && (
                   <span className="rounded-full border border-white/10 px-2 py-0.5 text-[0.65rem] text-white/60">
-                    {selectedIds.length} selected
+                    {t('history.selectedCount', { count: selectedIds.length })}
                   </span>
                 )}
               </label>
@@ -1751,7 +1750,7 @@ export default function History() {
                   className="rounded-full border border-white/10 px-3 py-1 text-[0.7rem] uppercase tracking-[0.2em] text-white/50 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:border-white/10 disabled:text-white/40"
                   disabled={!selectedIds.length}
                 >
-                  Clear
+                  {t('history.clear')}
                 </button>
                 <button
                   type="button"
@@ -1759,7 +1758,7 @@ export default function History() {
                   className="rounded-full border border-rose-400/40 px-4 py-1 text-[0.7rem] uppercase tracking-[0.2em] text-rose-100 transition hover:border-rose-300 hover:text-rose-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:text-white/40"
                   disabled={!selectedIds.length}
                 >
-                  Delete selected
+                  {t('history.deleteSelected')}
                 </button>
               </div>
             </div>
@@ -1768,11 +1767,10 @@ export default function History() {
                 key={record.id}
                 data-testid="history-record-card"
                 data-record-id={record.id}
-                className={`rounded-2xl border p-4 ${
-                  highlightRecordId === record.id
-                    ? 'border-gold-400/60 bg-gold-500/10'
-                    : 'border-white/10 bg-white/5'
-                }`}
+                className={`rounded-2xl border p-4 ${highlightRecordId === record.id
+                  ? 'border-gold-400/60 bg-gold-500/10'
+                  : 'border-white/10 bg-white/5'
+                  }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
@@ -1791,7 +1789,7 @@ export default function History() {
                         {record.gender} · {record.birthLocation || '—'} · {record.timezone || 'UTC'}
                       </p>
                       <p className="mt-2 text-[0.7rem] uppercase tracking-[0.22em] text-white/40">
-                        Saved {new Date(record.createdAt).toLocaleDateString()}
+                        {t('iching.savedAt', { date: new Date(record.createdAt).toLocaleDateString() })}
                       </p>
                     </div>
                   </div>
@@ -1800,7 +1798,7 @@ export default function History() {
                       to={`/history/${record.id}`}
                       className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-white/50 hover:text-white"
                     >
-                      {t('history.viewDetails', { defaultValue: 'View details' })}
+                      {t('history.viewDetails')}
                     </Link>
                     <button
                       type="button"
@@ -1808,24 +1806,24 @@ export default function History() {
                       disabled={editSaving && editRecordId === record.id}
                       className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-gold-400/60 hover:text-gold-100 disabled:cursor-not-allowed disabled:border-white/10 disabled:text-white/40"
                     >
-                      {editRecordId === record.id ? 'Editing' : 'Edit'}
+                      {editRecordId === record.id ? t('history.editing') : t('history.edit')}
                     </button>
                     <button
                       type="button"
                       onClick={() => requestDelete(record)}
                       className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-rose-400/60 hover:text-rose-200"
                     >
-                      {t('profile.confirmDelete').includes('Confirm') ? 'Delete' : '删除'}
+                      {t('common.delete')}
                     </button>
                   </div>
                 </div>
                 <div className="mt-3 grid gap-3 text-xs text-white/70 sm:grid-cols-2">
                   <div>
-                    <p className="text-white/50">Year Pillar</p>
+                    <p className="text-white/50">{t('history.yearPillar')}</p>
                     <p>{record.pillars.year.stem} · {record.pillars.year.branch}</p>
                   </div>
                   <div>
-                    <p className="text-white/50">Day Pillar</p>
+                    <p className="text-white/50">{t('history.dayPillar')}</p>
                     <p>{record.pillars.day.stem} · {record.pillars.day.branch}</p>
                   </div>
                 </div>
@@ -1833,7 +1831,7 @@ export default function History() {
                   <div className="mt-4 rounded-2xl border border-white/10 bg-black/40 p-4 text-xs text-white/70">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="grid gap-1">
-                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">Birth year</span>
+                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.birthYear')}</span>
                         <input
                           type="number"
                           min="1"
@@ -1847,7 +1845,7 @@ export default function History() {
                         )}
                       </label>
                       <label className="grid gap-1">
-                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">Birth month</span>
+                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.birthMonth')}</span>
                         <input
                           type="number"
                           min="1"
@@ -1861,7 +1859,7 @@ export default function History() {
                         )}
                       </label>
                       <label className="grid gap-1">
-                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">Birth day</span>
+                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.birthDay')}</span>
                         <input
                           type="number"
                           min="1"
@@ -1875,7 +1873,7 @@ export default function History() {
                         )}
                       </label>
                       <label className="grid gap-1">
-                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">Birth hour</span>
+                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.birthHour')}</span>
                         <input
                           type="number"
                           min="0"
@@ -1889,22 +1887,22 @@ export default function History() {
                         )}
                       </label>
                       <label className="grid gap-1">
-                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">Gender</span>
+                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.gender')}</span>
                         <select
                           value={editDraft.gender}
                           onChange={(event) => updateEditDraft('gender', event.target.value)}
                           className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
                         >
-                          <option value="">Select</option>
-                          <option value="female">Female</option>
-                          <option value="male">Male</option>
+                          <option value="">{t('history.select')}</option>
+                          <option value="female">{t('bazi.genderFemale')}</option>
+                          <option value="male">{t('bazi.genderMale')}</option>
                         </select>
                         {editErrors.gender && (
                           <span className="text-[0.65rem] text-rose-200">{editErrors.gender}</span>
                         )}
                       </label>
                       <label className="grid gap-1">
-                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">Birth location</span>
+                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.birthLocation')}</span>
                         <input
                           type="text"
                           value={editDraft.birthLocation}
@@ -1916,7 +1914,7 @@ export default function History() {
                         )}
                       </label>
                       <label className="grid gap-1">
-                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">Timezone</span>
+                        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.timezone')}</span>
                         <input
                           type="text"
                           value={editDraft.timezone}
@@ -1940,7 +1938,7 @@ export default function History() {
                         disabled={editSaving}
                         className="rounded-full border border-emerald-400/50 px-4 py-1 text-xs uppercase tracking-[0.18em] text-emerald-100 transition hover:border-emerald-300 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:text-white/40"
                       >
-                        {editSaving ? 'Saving...' : 'Save changes'}
+                        {editSaving ? t('profile.saving') : t('history.saveChanges')}
                       </button>
                       <button
                         type="button"
@@ -1948,7 +1946,7 @@ export default function History() {
                         disabled={editSaving}
                         className="rounded-full border border-white/20 px-4 py-1 text-xs uppercase tracking-[0.18em] text-white/60 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:border-white/10 disabled:text-white/40"
                       >
-                        Cancel
+                        {t('common.cancel')}
                       </button>
                     </div>
                   </div>
@@ -1958,30 +1956,28 @@ export default function History() {
             {totalPages > 1 && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/60">
                 <span>
-                  Page {page} of {totalPages}
+                  {t('history.pageOf', { current: page, total: totalPages })}
                 </span>
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
                     to={buildPageHref(page - 1)}
                     aria-disabled={!canGoPrev}
-                    className={`rounded-full border px-3 py-1 text-[0.7rem] uppercase tracking-[0.2em] transition ${
-                      canGoPrev
-                        ? 'border-white/20 text-white/70 hover:border-white/50 hover:text-white'
-                        : 'pointer-events-none border-white/10 text-white/30'
-                    }`}
+                    className={`rounded-full border px-3 py-1 text-[0.7rem] uppercase tracking-[0.2em] transition ${canGoPrev
+                      ? 'border-white/20 text-white/70 hover:border-white/50 hover:text-white'
+                      : 'pointer-events-none border-white/10 text-white/30'
+                      }`}
                   >
-                    Prev
+                    {t('common.prev')}
                   </Link>
                   <Link
                     to={buildPageHref(page + 1)}
                     aria-disabled={!canGoNext}
-                    className={`rounded-full border px-3 py-1 text-[0.7rem] uppercase tracking-[0.2em] transition ${
-                      canGoNext
-                        ? 'border-white/20 text-white/70 hover:border-white/50 hover:text-white'
-                        : 'pointer-events-none border-white/10 text-white/30'
-                    }`}
+                    className={`rounded-full border px-3 py-1 text-[0.7rem] uppercase tracking-[0.2em] transition ${canGoNext
+                      ? 'border-white/20 text-white/70 hover:border-white/50 hover:text-white'
+                      : 'pointer-events-none border-white/10 text-white/30'
+                      }`}
                   >
-                    Next
+                    {t('common.next')}
                   </Link>
                 </div>
               </div>
@@ -1991,17 +1987,17 @@ export default function History() {
           <div className="mt-6 rounded-2xl border border-dashed border-white/20 bg-white/5 p-6 text-sm text-white/60">
             {hasAnyRecords ? (
               <div className="grid gap-2">
-                <p className="text-sm font-semibold text-white">No results found</p>
+                <p className="text-sm font-semibold text-white">{t('history.noResults')}</p>
                 <p className="text-white/60">
                   {hasActiveFilters
-                    ? 'Try clearing a filter or searching a different location or pillar.'
-                    : 'No records match your current view yet.'}
+                    ? t('history.noResultsDesc')
+                    : t('history.noRecordsYet')}
                 </p>
               </div>
             ) : (
               <div className="grid gap-2">
-                <p className="text-sm font-semibold text-white">No history yet</p>
-                <p className="text-white/60">Complete a reading to see it saved here.</p>
+                <p className="text-sm font-semibold text-white">{t('history.noHistoryYet')}</p>
+                <p className="text-white/60">{t('history.noHistoryYetDesc')}</p>
               </div>
             )}
           </div>
@@ -2010,9 +2006,9 @@ export default function History() {
       <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-2xl text-gold-300">Tarot Archive</h2>
+            <h2 className="font-display text-2xl text-gold-300">{t('history.tarotArchive')}</h2>
             <p className="mt-1 text-sm text-white/60">
-              Review saved tarot spreads pulled directly from your backend history.
+              {t('history.tarotSubtitle')}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -2020,7 +2016,7 @@ export default function History() {
               to="/tarot?spread=ThreeCard"
               className="rounded-full border border-gold-400/60 px-4 py-2 text-xs uppercase tracking-[0.2em] text-gold-200 transition hover:bg-gold-400/10"
             >
-              Start three-card
+              {t('history.startThreeCard')}
             </Link>
             <button
               type="button"
@@ -2028,7 +2024,7 @@ export default function History() {
               disabled={tarotHistoryLoading}
               className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {tarotHistoryLoading ? 'Refreshing…' : 'Refresh'}
+              {tarotHistoryLoading ? t('history.refreshing') : t('history.refresh')}
             </button>
           </div>
         </div>
@@ -2039,7 +2035,7 @@ export default function History() {
         )}
         {!tarotHistoryError && tarotHistory.length === 0 && !tarotHistoryLoading && (
           <div className="mt-4 rounded-2xl border border-dashed border-white/20 bg-white/5 p-4 text-sm text-white/60">
-            No tarot readings saved yet. Complete a three-card interpretation to see it here.
+            {t('history.noTarotYet')}
           </div>
         )}
         <div className="mt-5 space-y-4">
@@ -2053,7 +2049,7 @@ export default function History() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-white/40">{record.spreadType}</p>
                   <h3 className="text-lg font-semibold text-white">
-                    {record.userQuestion || 'General Reading'}
+                    {record.userQuestion || t('history.generalReading')}
                   </h3>
                 </div>
                 <span className="text-xs text-white/50">

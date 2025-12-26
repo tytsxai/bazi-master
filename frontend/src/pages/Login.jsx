@@ -359,7 +359,7 @@ export default function Login() {
         }),
       });
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to register.');
+        const message = await readErrorMessage(res, t('login.errors.registerFailed'));
         setRegisterStatus(message);
         return;
       }
@@ -368,7 +368,7 @@ export default function Login() {
       const next = resolveRedirectPath(location.state?.from, location.search);
       navigate(next, { replace: true });
     } catch (error) {
-      setRegisterStatus(error?.message || 'Unable to register.');
+      setRegisterStatus(error?.message || t('login.errors.registerFailed'));
     } finally {
       setIsRegisterSubmitting(false);
     }
@@ -401,7 +401,7 @@ export default function Login() {
         body: JSON.stringify({ email: resetEmail }),
       });
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to request reset.');
+        const message = await readErrorMessage(res, t('login.errors.resetRequestFailed'));
         setResetStatus({ type: 'error', message });
         return;
       }
@@ -413,7 +413,7 @@ export default function Login() {
     } catch (error) {
       setResetStatus({
         type: 'error',
-        message: 'Network error. Please try again.',
+        message: t('errors.network'),
       });
     } finally {
       setIsResetSubmitting(false);
@@ -433,7 +433,7 @@ export default function Login() {
         body: JSON.stringify({ token: resetToken.trim(), password: resetPassword }),
       });
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to reset password.');
+        const message = await readErrorMessage(res, t('login.errors.resetPasswordFailed'));
         setResetStatus({ type: 'error', message });
         return;
       }
@@ -446,7 +446,7 @@ export default function Login() {
     } catch (error) {
       setResetStatus({
         type: 'error',
-        message: 'Network error. Please try again.',
+        message: t('errors.network'),
       });
     } finally {
       setIsResetSubmitting(false);
@@ -563,14 +563,14 @@ export default function Login() {
               onClick={handleGoogleLogin}
               className="mt-3 w-full rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:border-gold-400 hover:text-gold-300"
             >
-              Continue with Google
+              {t('login.ui.continueWithGoogle')}
             </button>
             <button
               type="button"
               onClick={handleWeChatLogin}
               className="mt-3 w-full rounded-full border border-emerald-300/60 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-lg shadow-emerald-500/20 hover:border-emerald-300"
             >
-              Continue with WeChat
+              {t('login.ui.continueWithWeChat')}
             </button>
             {oauthError && (
               <p className="mt-3 text-xs text-rose-200" role="alert">
@@ -612,7 +612,7 @@ export default function Login() {
               </button>
             </div>
             <p className="mt-4 text-xs text-white/60">
-              Demo access only: use any email and password to continue.
+              {t('login.ui.demoAccess')}
             </p>
           </>
         )}
@@ -809,10 +809,10 @@ export default function Login() {
               className="mt-6 w-full rounded-full bg-gold-400 px-4 py-2 text-sm font-semibold text-mystic-900 shadow-lg shadow-gold-400/30 disabled:cursor-not-allowed disabled:opacity-70"
               disabled={isResetSubmitting}
             >
-              {isResetSubmitting ? 'Sending...' : t('login.ui.sendResetLink')}
+              {isResetSubmitting ? t('login.ui.sending') : t('login.ui.sendResetLink')}
             </button>
             <p className="mt-4 text-xs text-white/60">
-              For this demo, reset codes are logged on the server.
+              {t('login.ui.resetDemoHint')}
             </p>
             <div className="mt-4 flex items-center justify-between text-xs text-white/70">
               <button
@@ -934,7 +934,7 @@ export default function Login() {
                 className="underline decoration-white/40 underline-offset-4"
                 onClick={() => switchMode('request')}
               >
-                Resend reset link
+                {t('login.ui.resendReset')}
               </button>
             </div>
           </>

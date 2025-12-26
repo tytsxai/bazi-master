@@ -6,24 +6,24 @@ import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import { readApiErrorMessage } from '../utils/apiError.js';
 
 const SIGNS = [
-  { value: 'aries', label: 'Aries', range: 'Mar 21 - Apr 19' },
-  { value: 'taurus', label: 'Taurus', range: 'Apr 20 - May 20' },
-  { value: 'gemini', label: 'Gemini', range: 'May 21 - Jun 20' },
-  { value: 'cancer', label: 'Cancer', range: 'Jun 21 - Jul 22' },
-  { value: 'leo', label: 'Leo', range: 'Jul 23 - Aug 22' },
-  { value: 'virgo', label: 'Virgo', range: 'Aug 23 - Sep 22' },
-  { value: 'libra', label: 'Libra', range: 'Sep 23 - Oct 22' },
-  { value: 'scorpio', label: 'Scorpio', range: 'Oct 23 - Nov 21' },
-  { value: 'sagittarius', label: 'Sagittarius', range: 'Nov 22 - Dec 21' },
-  { value: 'capricorn', label: 'Capricorn', range: 'Dec 22 - Jan 19' },
-  { value: 'aquarius', label: 'Aquarius', range: 'Jan 20 - Feb 18' },
-  { value: 'pisces', label: 'Pisces', range: 'Feb 19 - Mar 20' }
+  { value: 'aries' },
+  { value: 'taurus' },
+  { value: 'gemini' },
+  { value: 'cancer' },
+  { value: 'leo' },
+  { value: 'virgo' },
+  { value: 'libra' },
+  { value: 'scorpio' },
+  { value: 'sagittarius' },
+  { value: 'capricorn' },
+  { value: 'aquarius' },
+  { value: 'pisces' }
 ];
 
 const PERIODS = [
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' }
+  { value: 'daily' },
+  { value: 'weekly' },
+  { value: 'monthly' }
 ];
 const PREFILL_STORAGE_KEY = 'bazi_prefill_request_v1';
 
@@ -100,7 +100,7 @@ export default function Zodiac() {
     fetch(`/api/zodiac/${selectedSign}`, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) {
-          const message = await readApiErrorMessage(res, 'Unable to load sign info.');
+          const message = await readApiErrorMessage(res, t('zodiac.errors.signInfoFailed'));
           throw new Error(message);
         }
         return res.json();
@@ -114,7 +114,7 @@ export default function Zodiac() {
       .finally(() => setLoadingSign(false));
 
     return () => controller.abort();
-  }, [selectedSign]);
+  }, [selectedSign, t]);
 
   const handleFetchHoroscope = useCallback(async () => {
     if (!selectedSign) return;
@@ -124,7 +124,7 @@ export default function Zodiac() {
     try {
       const res = await fetch(`/api/zodiac/${selectedSign}/horoscope?period=${selectedPeriod}`);
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Unable to fetch horoscope.');
+        const message = await readApiErrorMessage(res, t('zodiac.errors.horoscopeFailed'));
         throw new Error(message);
       }
       const data = await res.json();
@@ -134,7 +134,7 @@ export default function Zodiac() {
     } finally {
       setLoadingHoroscope(false);
     }
-  }, [selectedPeriod, selectedSign]);
+  }, [selectedPeriod, selectedSign, t]);
 
   useEffect(() => {
     if (urlHydratedRef.current) return;
@@ -144,10 +144,10 @@ export default function Zodiac() {
     const hasPeriodParam = searchParams.has('period');
 
     if (hasSignParam && !signParam) {
-      setStatus({ type: 'error', message: 'Unknown zodiac sign in URL.' });
+      setStatus({ type: 'error', message: t('zodiac.errors.unknownSign') });
     }
     if (hasPeriodParam && !periodParam) {
-      setStatus({ type: 'error', message: 'Unknown horoscope period in URL.' });
+      setStatus({ type: 'error', message: t('zodiac.errors.unknownPeriod') });
     }
 
     if (signParam) setSelectedSign(signParam);
@@ -158,7 +158,7 @@ export default function Zodiac() {
     }
 
     urlHydratedRef.current = true;
-  }, [normalizePeriodParam, normalizeSignParam, searchParams]);
+  }, [normalizePeriodParam, normalizeSignParam, searchParams, t]);
 
   useEffect(() => {
     if (!autoFetchRef.current) return;
@@ -172,7 +172,7 @@ export default function Zodiac() {
     const { birthDate, birthTime, timezoneOffset, latitude, longitude } = form;
 
     if (!birthDate) {
-      nextErrors.birthDate = t('bazi.errors.dayRequired'); // Reuse date/day required
+      nextErrors.birthDate = t('bazi.errors.dayRequired');
     } else {
       const [year, month, day] = birthDate.split('-').map(Number);
       const date = new Date(Date.UTC(year, month - 1, day));
@@ -242,7 +242,7 @@ export default function Zodiac() {
 
   const getFirstErrorMessage = (nextErrors) => {
     const firstMessage = Object.values(nextErrors).find((value) => typeof value === 'string' && value.trim());
-    return firstMessage || 'Please correct the highlighted fields.';
+    return firstMessage || t('iching.errors.correctFields');
   };
 
   const risingErrorAnnouncement =
@@ -303,7 +303,7 @@ export default function Zodiac() {
         signal: controller.signal
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Unable to calculate rising sign.');
+        const message = await readApiErrorMessage(res, t('zodiac.errors.risingFailed'));
         throw new Error(message);
       }
       const data = await res.json();
@@ -339,7 +339,7 @@ export default function Zodiac() {
         { signal: controller.signal }
       );
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Unable to calculate compatibility.');
+        const message = await readApiErrorMessage(res, t('zodiac.errors.compatibilityFailed'));
         throw new Error(message);
       }
       const data = await res.json();
@@ -375,12 +375,12 @@ export default function Zodiac() {
         body: JSON.stringify({ method: 'time' })
       });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'Unable to reveal the time hexagram.');
+        const message = await readApiErrorMessage(res, t('iching.saveFailed'));
         throw new Error(message);
       }
       const data = await res.json();
       setIchingTimeResult(data);
-      setIchingTimeStatus({ type: 'success', message: 'Time divination complete.' });
+      setIchingTimeStatus({ type: 'success', message: t('iching.saveSuccess') });
     } catch (error) {
       setIchingTimeStatus({ type: 'error', message: error.message });
     } finally {
@@ -422,15 +422,15 @@ export default function Zodiac() {
     [selectedSign]
   );
   const displaySignInfo = signInfo || (signDisplay && {
-    name: signDisplay.label,
-    dateRange: signDisplay.range
+    name: t('zodiac.signs.' + signDisplay.value),
+    dateRange: t('zodiac.ranges.' + signDisplay.value)
   });
   const compatibilityPrimary = compatibilityResult?.primary || displaySignInfo;
   const compatibilitySecondary = useMemo(() => {
     if (compatibilityResult?.secondary) return compatibilityResult.secondary;
     const fallback = SIGNS.find((sign) => sign.value === compatibilitySign);
-    return fallback ? { name: fallback.label, dateRange: fallback.range } : null;
-  }, [compatibilityResult, compatibilitySign]);
+    return fallback ? { name: t('zodiac.signs.' + fallback.value), dateRange: t('zodiac.ranges.' + fallback.value) } : null;
+  }, [compatibilityResult, compatibilitySign, t]);
   const primaryLabel = compatibilityPrimary?.name || '';
   const primaryRange = compatibilityPrimary?.dateRange || '';
   const secondaryLabel = compatibilitySecondary?.name || '';
@@ -443,29 +443,29 @@ export default function Zodiac() {
       <Breadcrumbs />
       <div className="glass-card mx-auto rounded-3xl border border-white/10 p-8 shadow-glass">
         <div className="flex flex-col gap-2">
-          <h1 className="font-display text-4xl text-gold-400">Zodiac Chronicles</h1>
+          <h1 className="font-display text-4xl text-gold-400">{t('zodiac.title')}</h1>
           <p className="text-white/60">
-            Select your sign and tap into daily, weekly, or monthly guidance.
+            {t('zodiac.subtitle')}
           </p>
         </div>
 
         <section className="mt-6 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-display text-white">Zi Wei</h2>
+            <h2 className="text-lg font-display text-white">{t('nav.ziwei')}</h2>
             <p className="text-sm text-white/60">
-              Jump into the V2 palace chart flow (login required).
+              {t('profile.ziweiQuickChartDesc')}
             </p>
           </div>
           <Link
             to="/ziwei"
             className="inline-flex items-center justify-center rounded-full border border-gold-400/60 px-5 py-2 text-sm font-semibold text-gold-200 transition hover:bg-gold-400/10"
           >
-            Zi Wei
+            {t('nav.ziwei')}
           </Link>
         </section>
 
         <section className="mt-8">
-          <h2 className="font-display text-xl text-white">Choose your sign</h2>
+          <h2 className="font-display text-xl text-white">{t('zodiac.chooseSign')}</h2>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {SIGNS.map((sign) => {
               const active = sign.value === selectedSign;
@@ -474,14 +474,13 @@ export default function Zodiac() {
                   key={sign.value}
                   type="button"
                   onClick={() => setSelectedSign(sign.value)}
-                  className={`rounded-2xl border px-4 py-3 text-left transition ${
-                    active
-                      ? 'border-gold-400/70 bg-gold-400/10 text-gold-200'
-                      : 'border-white/10 bg-white/5 text-white/70 hover:border-white/30 hover:text-white'
-                  }`}
+                  className={`rounded-2xl border px-4 py-3 text-left transition ${active
+                    ? 'border-gold-400/70 bg-gold-400/10 text-gold-200'
+                    : 'border-white/10 bg-white/5 text-white/70 hover:border-white/30 hover:text-white'
+                    }`}
                 >
-                  <div className="font-semibold">{sign.label}</div>
-                  <div className="text-xs text-white/50">{sign.range}</div>
+                  <div className="font-semibold">{t('zodiac.signs.' + sign.value)}</div>
+                  <div className="text-xs text-white/50">{t('zodiac.ranges.' + sign.value)}</div>
                 </button>
               );
             })}
@@ -490,9 +489,9 @@ export default function Zodiac() {
 
         <section className="mt-8 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-sm uppercase tracking-[0.2em] text-white/40">Focus</div>
+            <div className="text-sm uppercase tracking-[0.2em] text-white/40">{t('zodiac.focus')}</div>
             <div className="mt-1 text-lg text-white">
-              {focusLabel} {focusRange ? '•' : ''} {focusRange}
+              {t('zodiac.signs.' + selectedSign)} {focusRange ? '•' : ''} {focusRange}
             </div>
           </div>
 
@@ -504,13 +503,12 @@ export default function Zodiac() {
                   key={period.value}
                   type="button"
                   onClick={() => setSelectedPeriod(period.value)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                    active
-                      ? 'bg-indigo-600 text-white'
-                      : 'border border-white/10 bg-white/5 text-white/60 hover:text-white'
-                  }`}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${active
+                    ? 'bg-indigo-600 text-white'
+                    : 'border border-white/10 bg-white/5 text-white/60 hover:text-white'
+                    }`}
                 >
-                  {period.label}
+                  {t('zodiac.periods.' + period.value)}
                 </button>
               );
             })}
@@ -522,7 +520,7 @@ export default function Zodiac() {
             disabled={loadingHoroscope || loadingSign}
             className="rounded-full bg-gold-400 px-6 py-2 font-semibold text-mystic-900 shadow-lg transition hover:scale-105 disabled:opacity-50"
           >
-            {loadingHoroscope ? 'Reading the stars...' : 'Get Horoscope'}
+            {loadingHoroscope ? t('zodiac.readingStars') : t('zodiac.getHoroscope')}
           </button>
         </section>
 
@@ -538,34 +536,34 @@ export default function Zodiac() {
 
         {loadingSign && (
           <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-white/60">
-            Loading sign details...
+            {t('zodiac.loadingSign')}
           </div>
         )}
 
         {signInfo && (
           <section className="mt-8 grid gap-6 md:grid-cols-2">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h3 className="font-display text-2xl text-white">Sign Profile</h3>
+              <h3 className="font-display text-2xl text-white">{t('zodiac.profileTitle')}</h3>
               <dl className="mt-4 grid grid-cols-2 gap-4 text-sm text-white/70">
                 <div>
-                  <dt className="uppercase text-white/40">Element</dt>
+                  <dt className="uppercase text-white/40">{t('zodiac.element')}</dt>
                   <dd className="mt-1 text-white">{signInfo.element}</dd>
                 </div>
                 <div>
-                  <dt className="uppercase text-white/40">Modality</dt>
+                  <dt className="uppercase text-white/40">{t('zodiac.modality')}</dt>
                   <dd className="mt-1 text-white">{signInfo.modality}</dd>
                 </div>
                 <div>
-                  <dt className="uppercase text-white/40">Ruling Planet</dt>
+                  <dt className="uppercase text-white/40">{t('zodiac.rulingPlanet')}</dt>
                   <dd className="mt-1 text-white">{signInfo.rulingPlanet}</dd>
                 </div>
                 <div>
-                  <dt className="uppercase text-white/40">Symbol</dt>
+                  <dt className="uppercase text-white/40">{t('zodiac.symbol')}</dt>
                   <dd className="mt-1 text-white">{signInfo.symbol}</dd>
                 </div>
               </dl>
               <div className="mt-4 text-sm text-white/70">
-                <span className="uppercase text-white/40">Keywords</span>
+                <span className="uppercase text-white/40">{t('zodiac.keywords')}</span>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {signInfo.keywords.map((keyword) => (
                     <span key={keyword} className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80">
@@ -577,22 +575,22 @@ export default function Zodiac() {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h3 className="font-display text-2xl text-white">Cosmic Patterns</h3>
+              <h3 className="font-display text-2xl text-white">{t('zodiac.cosmicPatterns')}</h3>
               <div className="mt-4 grid gap-4 text-sm text-white/70">
                 <div>
-                  <div className="uppercase text-white/40">Strengths</div>
+                  <div className="uppercase text-white/40">{t('zodiac.strengths')}</div>
                   <div className="mt-1 text-white">{signInfo.strengths.join(', ')}</div>
                 </div>
                 <div>
-                  <div className="uppercase text-white/40">Challenges</div>
+                  <div className="uppercase text-white/40">{t('zodiac.challenges')}</div>
                   <div className="mt-1 text-white">{signInfo.challenges.join(', ')}</div>
                 </div>
                 <div>
-                  <div className="uppercase text-white/40">Compatibility</div>
+                  <div className="uppercase text-white/40">{t('zodiac.compatibility')}</div>
                   <div className="mt-1 text-white">{signInfo.compatibility.join(', ')}</div>
                 </div>
                 <div>
-                  <div className="uppercase text-white/40">Lucky Colors</div>
+                  <div className="uppercase text-white/40">{t('zodiac.luckyColors')}</div>
                   <div className="mt-1 text-white">{signInfo.luckyColors.join(', ')}</div>
                 </div>
               </div>
@@ -603,9 +601,9 @@ export default function Zodiac() {
         <section id="compatibility" className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-6">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h3 className="font-display text-2xl text-white">Compatibility Compass</h3>
+              <h3 className="font-display text-2xl text-white">{t('zodiac.compatibilityTitle')}</h3>
               <p className="text-sm text-white/60">
-                Compare your sign with another to reveal the cosmic chemistry.
+                {t('zodiac.compatibilitySubtitle')}
               </p>
             </div>
             <button
@@ -614,19 +612,19 @@ export default function Zodiac() {
               disabled={loadingCompatibility || loadingSign}
               className="rounded-full bg-indigo-600 px-6 py-2 text-sm font-semibold text-white shadow-lg transition hover:scale-105 disabled:opacity-50"
             >
-              {loadingCompatibility ? 'Calculating...' : 'Check Compatibility'}
+              {loadingCompatibility ? t('zodiac.calculating') : t('zodiac.checkCompatibility')}
             </button>
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-white/40">Primary</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-white/40">{t('zodiac.primary')}</div>
               <div className="mt-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white">
-                {primaryLabel} {primaryRange ? '•' : ''} {primaryRange}
+                {t('zodiac.signs.' + selectedSign)} {primaryRange ? '•' : ''} {primaryRange}
               </div>
             </div>
             <label className="flex flex-col gap-2 text-sm text-white/70">
-              <span className="text-xs uppercase tracking-[0.2em] text-white/40">Match with</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-white/40">{t('zodiac.matchWith')}</span>
               <select
                 value={compatibilitySign}
                 onChange={(event) => setCompatibilitySign(event.target.value)}
@@ -634,7 +632,7 @@ export default function Zodiac() {
               >
                 {SIGNS.map((sign) => (
                   <option key={sign.value} value={sign.value} className="bg-slate-900 text-white">
-                    {sign.label} • {sign.range}
+                    {t('zodiac.signs.' + sign.value)} • {t('zodiac.ranges.' + sign.value)}
                   </option>
                 ))}
               </select>
@@ -663,7 +661,7 @@ export default function Zodiac() {
           {compatibilityResult && (
             <div className="mt-6 grid gap-6 md:grid-cols-3">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/40">Score</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-white/40">{t('zodiac.score')}</div>
                 <div className="mt-2 text-4xl font-semibold text-gold-300">
                   {compatibilityResult.score}
                   <span className="text-lg text-white/50">/100</span>
@@ -678,7 +676,7 @@ export default function Zodiac() {
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 md:col-span-2">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/40">Summary</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-white/40">{t('zodiac.summary')}</div>
                 <p className="mt-2 text-sm text-white/70">{compatibilityResult.summary}</p>
                 <div className="mt-4 grid gap-3 text-sm text-white/70 sm:grid-cols-2">
                   {compatibilityResult.highlights.map((item) => (
@@ -699,41 +697,41 @@ export default function Zodiac() {
           <section className="mt-10 rounded-3xl border border-indigo-500/30 bg-indigo-900/20 p-8">
             <div className="flex flex-col gap-2">
               <h3 className="font-display text-2xl text-indigo-200">
-                {horoscope.sign.name} {horoscope.period.charAt(0).toUpperCase() + horoscope.period.slice(1)} Horoscope
+                {t('zodiac.horoscopeTitle', { sign: t('zodiac.signs.' + (horoscope.sign.key || horoscope.sign.value)), period: t('zodiac.periods.' + horoscope.period) })}
               </h3>
               <div className="text-sm text-white/60">
-                {horoscope.range} • Generated {new Date(horoscope.generatedAt).toLocaleString()}
+                {horoscope.range} • {t('zodiac.generatedAt', { date: new Date(horoscope.generatedAt).toLocaleString() })}
               </div>
             </div>
 
             <div className="mt-6 grid gap-6 md:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-                <div className="text-sm uppercase text-white/40">Overview</div>
+                <div className="text-sm uppercase text-white/40">{t('zodiac.overview')}</div>
                 <p className="mt-2 text-sm text-white/80">{horoscope.horoscope.overview}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-                <div className="text-sm uppercase text-white/40">Love</div>
+                <div className="text-sm uppercase text-white/40">{t('zodiac.love')}</div>
                 <p className="mt-2 text-sm text-white/80">{horoscope.horoscope.love}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-                <div className="text-sm uppercase text-white/40">Career</div>
+                <div className="text-sm uppercase text-white/40">{t('zodiac.career')}</div>
                 <p className="mt-2 text-sm text-white/80">{horoscope.horoscope.career}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-                <div className="text-sm uppercase text-white/40">Wellness</div>
+                <div className="text-sm uppercase text-white/40">{t('zodiac.wellness')}</div>
                 <p className="mt-2 text-sm text-white/80">{horoscope.horoscope.wellness}</p>
               </div>
             </div>
 
             <div className="mt-6 flex flex-wrap gap-4">
               <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80">
-                Lucky colors: {horoscope.horoscope.lucky.colors.join(', ')}
+                {t('zodiac.luckyColors')}: {horoscope.horoscope.lucky.colors.join(', ')}
               </div>
               <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80">
-                Lucky numbers: {horoscope.horoscope.lucky.numbers.join(', ')}
+                {t('zodiac.luckyNumbers')}: {horoscope.horoscope.lucky.numbers.join(', ')}
               </div>
               <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80">
-                Mantra: {horoscope.horoscope.mantra}
+                {t('zodiac.mantra')}: {horoscope.horoscope.mantra}
               </div>
             </div>
           </section>
@@ -742,9 +740,9 @@ export default function Zodiac() {
         <section id="rising" className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-8">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h3 className="font-display text-2xl text-white">I Ching Time Oracle</h3>
+              <h3 className="font-display text-2xl text-white">{t('zodiac.timeOracleTitle')}</h3>
               <p className="text-sm text-white/60">
-                Draw a hexagram using the current moment to reveal hidden currents.
+                {t('zodiac.timeOracleSubtitle')}
               </p>
             </div>
             <button
@@ -753,7 +751,7 @@ export default function Zodiac() {
               disabled={ichingTimeLoading}
               className="rounded-full bg-gold-400 px-6 py-2 text-sm font-semibold text-mystic-900 shadow-lg transition hover:scale-105 disabled:opacity-50"
             >
-              {ichingTimeLoading ? 'Consulting time...' : 'Reveal Time Hexagram'}
+              {ichingTimeLoading ? t('zodiac.consultingTime') : t('zodiac.revealTimeHexagram')}
             </button>
           </div>
 
@@ -770,7 +768,7 @@ export default function Zodiac() {
           {ichingTimeResult?.hexagram && (
             <div className="mt-6 grid gap-6 md:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/40">Primary Hexagram</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-white/40">{t('iching.primaryHexagram')}</div>
                 <div
                   data-testid="iching-time-hexagram-name"
                   className="mt-2 text-2xl text-gold-300"
@@ -779,17 +777,17 @@ export default function Zodiac() {
                 </div>
                 <div className="text-sm text-white/60">{ichingTimeResult.hexagram.title}</div>
                 <div className="mt-4 text-xs text-white/50">
-                  Changing lines:{' '}
+                  {t('iching.changingLines')}:{' '}
                   <span data-testid="iching-time-changing-lines">
                     {ichingTimeResult.changingLines?.length
                       ? ichingTimeResult.changingLines.join(', ')
-                      : 'None'}
+                      : t('iching.none')}
                   </span>
                 </div>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/40">Resulting Hexagram</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-white/40">{t('iching.resultingHexagram')}</div>
                 <div
                   data-testid="iching-time-resulting-name"
                   className="mt-2 text-2xl text-indigo-200"
@@ -798,7 +796,7 @@ export default function Zodiac() {
                 </div>
                 <div className="text-sm text-white/60">{ichingTimeResult.resultingHexagram?.title}</div>
                 <div className="mt-4 text-xs text-white/50">
-                  Time context:{' '}
+                  {t('zodiac.timeContext')}:{' '}
                   <span data-testid="iching-time-iso">
                     {ichingTimeResult.timeContext?.iso || '—'}
                   </span>
@@ -810,9 +808,9 @@ export default function Zodiac() {
 
         <section className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-8">
           <div className="flex flex-col gap-2">
-            <h3 className="font-display text-2xl text-white">Calculate Your Rising Sign</h3>
+            <h3 className="font-display text-2xl text-white">{t('zodiac.risingTitle')}</h3>
             <p className="text-sm text-white/60">
-              Enter your birth date, time, and location to reveal your ascendant.
+              {t('zodiac.risingSubtitle')}
             </p>
           </div>
           <div className="sr-only" role="alert" aria-live="assertive">
@@ -821,7 +819,7 @@ export default function Zodiac() {
 
           <form onSubmit={handleRisingSubmit} className="mt-6 grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2 text-sm text-white/70">
-              Birth date
+              {t('bazi.birthDay')}
               <input
                 type="date"
                 name="birthDate"
@@ -839,7 +837,7 @@ export default function Zodiac() {
               )}
             </label>
             <label className="flex flex-col gap-2 text-sm text-white/70">
-              Birth time
+              {t('bazi.birthHour')}
               <input
                 type="time"
                 name="birthTime"
@@ -857,7 +855,7 @@ export default function Zodiac() {
               )}
             </label>
             <label className="flex flex-col gap-2 text-sm text-white/70">
-              Timezone offset (UTC hours)
+              {t('bazi.timezone')}
               <input
                 type="number"
                 step="0.5"
@@ -877,7 +875,7 @@ export default function Zodiac() {
               )}
             </label>
             <label className="flex flex-col gap-2 text-sm text-white/70">
-              Latitude
+              {t('zodiac.latitude')}
               <input
                 type="number"
                 step="0.0001"
@@ -897,7 +895,7 @@ export default function Zodiac() {
               )}
             </label>
             <label className="flex flex-col gap-2 text-sm text-white/70">
-              Longitude
+              {t('zodiac.longitude')}
               <input
                 type="number"
                 step="0.0001"
@@ -922,7 +920,7 @@ export default function Zodiac() {
                 disabled={risingLoading}
                 className="w-full rounded-full bg-indigo-600 px-6 py-3 font-semibold text-white shadow-lg transition hover:scale-105 disabled:opacity-50"
               >
-                {risingLoading ? 'Calculating...' : 'Reveal Rising Sign'}
+                {risingLoading ? t('zodiac.calculating') : t('zodiac.revealRising')}
               </button>
             </div>
           </form>
@@ -940,9 +938,9 @@ export default function Zodiac() {
           {risingResult && (
             <div className="mt-6 grid gap-4 rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80 md:grid-cols-2">
               <div>
-                <div className="text-sm uppercase text-white/40">Rising Sign</div>
+                <div className="text-sm uppercase text-white/40">{t('zodiac.risingSign')}</div>
                 <div data-testid="rising-sign-name" className="mt-2 text-2xl text-gold-300">
-                  {risingResult.rising.name}
+                  {t('zodiac.signs.' + risingResult.rising.value)}
                 </div>
                 <div data-testid="rising-sign-range" className="mt-1 text-sm text-white/60">
                   {risingResult.rising.dateRange}
@@ -950,13 +948,13 @@ export default function Zodiac() {
               </div>
               <div className="grid gap-2 text-sm text-white/70">
                 <div>
-                  <span className="uppercase text-white/40">Ascendant Longitude</span>
+                  <span className="uppercase text-white/40">{t('zodiac.ascendantLongitude')}</span>
                   <div data-testid="rising-ascendant-longitude" className="mt-1 text-white">
                     {risingResult.ascendant.longitude}°
                   </div>
                 </div>
                 <div>
-                  <span className="uppercase text-white/40">Local Sidereal Time</span>
+                  <span className="uppercase text-white/40">{t('zodiac.localSiderealTime')}</span>
                   <div data-testid="rising-local-sidereal-time" className="mt-1 text-white">
                     {risingResult.ascendant.localSiderealTime}h
                   </div>

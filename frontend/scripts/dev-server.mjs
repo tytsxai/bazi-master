@@ -319,6 +319,7 @@ let frontendProcess = null;
 let keepAliveTimer = null;
 let shuttingDown = false;
 let backendRestarting = false;
+let frontendRestarting = false;
 let postgresStartedByScript = false;
 const postgresDataDir = path.join(rootDir, 'prisma', '.pgdata-e2e');
 
@@ -366,6 +367,55 @@ const restartBackend = async (reason) => {
     }
   } finally {
     backendRestarting = false;
+  }
+};
+
+const wireFrontendExitHandler = () => {
+  if (!frontendProcess) return;
+  frontendProcess.on('exit', (code, signal) => {
+    if (shuttingDown) return;
+    const codeLabel = typeof code === 'number' ? String(code) : 'null';
+    const signalLabel = signal || 'null';
+    console.error(`[dev-server] Frontend exited (code=${codeLabel}, signal=${signalLabel})`);
+    void restartFrontend(`exit code=${codeLabel}, signal=${signalLabel}`);
+  });
+};
+
+const restartFrontend = async (reason) => {
+  if (shuttingDown || frontendRestarting) return;
+  frontendRestarting = true;
+  try {
+    console.warn(`[dev-server] Restarting frontend (${reason})...`);
+    let attempt = 0;
+    while (!shuttingDown) {
+      attempt += 1;
+      if (attempt > 1) {
+        const delayMs = Math.min(5000, 250 * 2 ** Math.min(5, attempt - 2));
+        console.warn(`[dev-server] Frontend restart attempt ${attempt} in ${delayMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
+      if (killPort(frontendPort)) {
+        console.warn(`[dev-server] Force-restarting frontend on port ${frontendPort}.`);
+      }
+      const closed = await waitForPortClosed(frontendPort, 10_000);
+      if (!closed) {
+        console.error(`[dev-server] Unable to stop existing frontend on port ${frontendPort}.`);
+        continue;
+      }
+
+      frontendProcess = await startFrontend();
+      const frontendListening = await waitForPort(frontendPort, 30_000);
+      if (!frontendListening) {
+        console.error(`[dev-server] Frontend did not start listening on port ${frontendPort} in time.`);
+        continue;
+      }
+
+      wireFrontendExitHandler();
+      return;
+    }
+  } finally {
+    frontendRestarting = false;
   }
 };
 
@@ -502,11 +552,5 @@ if (backendProcess) {
 }
 
 if (frontendProcess) {
-  frontendProcess.on('exit', (code) => {
-    if (code && code !== 0) {
-      console.error(`[dev-server] Frontend exited with code ${code}`);
-    }
-    shutdown();
-    process.exit(code ?? 0);
-  });
+  wireFrontendExitHandler();
 }

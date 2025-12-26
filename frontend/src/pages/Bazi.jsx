@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -61,7 +62,6 @@ const buildDefaultFormData = () => {
   };
 };
 const DEFAULT_FORM_KEYS = Object.keys(buildDefaultFormData());
-const UNSAVED_WARNING_MESSAGE = 'You have unsaved changes. Are you sure you want to leave this page?';
 const isWhitespaceOnly = (value) =>
   typeof value === 'string' && value.length > 0 && value.trim().length === 0;
 const normalizeOptionalText = (value) => (typeof value === 'string' ? value.trim() : value);
@@ -369,7 +369,7 @@ export default function Bazi() {
     if (error instanceof Error && error.message) {
       return error.message;
     }
-    return 'Network error. Please check your connection and try again.';
+    return t('errors.network');
   };
 
   useEffect(() => {
@@ -377,7 +377,7 @@ export default function Bazi() {
     const loadLocations = async () => {
       try {
         const res = await fetch('/api/locations', { signal: controller.signal });
-        if (!res.ok) throw new Error('Unable to load locations.');
+        if (!res.ok) throw new Error(t('errors.loadLocations'));
         const data = await res.json();
         const locations = Array.isArray(data?.locations) ? data.locations : [];
         if (!controller.signal.aborted) {
@@ -396,17 +396,17 @@ export default function Bazi() {
   const getRetryLabel = (action) => {
     switch (action) {
       case 'bazi_calculate':
-        return 'Calculation';
+        return t('bazi.retry.bazi_calculate');
       case 'bazi_full_analysis':
-        return 'Full analysis';
+        return t('bazi.retry.bazi_full_analysis');
       case 'bazi_save':
-        return 'Save to history';
+        return t('bazi.retry.bazi_save');
       case 'bazi_favorite':
-        return 'Add to favorites';
+        return t('bazi.retry.bazi_favorite');
       case 'bazi_ziwei':
-        return 'Zi Wei chart';
+        return t('bazi.retry.bazi_ziwei');
       default:
-        return 'Action';
+        return t('common.action');
     }
   };
 
@@ -431,7 +431,7 @@ export default function Bazi() {
     const label = getRetryLabel(action);
     pushToast({
       type: 'error',
-      message: `${message} ${label} queued for retry.`,
+      message: t('errors.actionQueued', { label }),
     });
   };
 
@@ -446,7 +446,7 @@ export default function Bazi() {
     if (!retry || retry.reason !== 'network_error') return;
     if (retryHandledRef.current === retry.createdAt) return;
     if (!isOnline) {
-      pushToast({ type: 'error', message: 'You are offline. Reconnect to retry.' });
+      pushToast({ type: 'error', message: t('errors.offline') });
       return;
     }
     if (retry.action !== 'bazi_calculate' && !isAuthenticated) {
@@ -587,8 +587,8 @@ export default function Bazi() {
     hasInitializedRef.current && !isSameFormData(formData, lastCommittedFormRef.current);
   const shouldBlockNavigation = hasUnsavedChanges || isSaving;
   const navigationBlockMessage = isSaving
-    ? 'A save is in progress. Please wait for it to finish before leaving this page.'
-    : UNSAVED_WARNING_MESSAGE;
+    ? t('errors.saveInProgress')
+    : t('errors.unsavedChanges');
 
   useUnsavedChangesWarning(shouldBlockNavigation, navigationBlockMessage);
 
@@ -697,7 +697,7 @@ export default function Bazi() {
 
   const getFirstErrorMessage = (nextErrors) => {
     const firstMessage = Object.values(nextErrors).find((value) => typeof value === 'string' && value.trim());
-    return firstMessage || 'Please correct the highlighted fields.';
+    return firstMessage || t('iching.errors.correctFields');
   };
   const errorAnnouncement = Object.keys(errors).length ? getFirstErrorMessage(errors) : '';
 
@@ -746,7 +746,7 @@ export default function Bazi() {
       });
 
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Calculation failed.');
+        const message = await readErrorMessage(res, t('bazi.errors.calculateFailed'));
         runIfMounted(() => pushToast({ type: 'error', message }));
         return;
       }
@@ -788,7 +788,7 @@ export default function Bazi() {
     if (Object.keys(nextErrors).length > 0 && !overridePayload) return;
 
     setAiResult(null);
-    setIsFullLoading(true);
+    flushSync(() => setIsFullLoading(true));
     const payload = normalizeOverrideArg(overridePayload) || buildPayload();
 
     try {
@@ -810,7 +810,7 @@ export default function Bazi() {
       }
 
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Full analysis failed.');
+        const message = await readErrorMessage(res, t('bazi.errors.calculateFailed'));
         runIfMounted(() => pushToast({ type: 'error', message }));
         return;
       }
@@ -880,7 +880,7 @@ export default function Bazi() {
       return;
     }
     if (!baseResult && !overridePayload) {
-      pushToast({ type: 'error', message: 'Run a calculation before saving to history.' });
+      pushToast({ type: 'error', message: t('bazi.errors.saveBeforeFavorite') });
       return;
     }
     const payload =
@@ -903,7 +903,7 @@ export default function Bazi() {
       };
     const fingerprint = JSON.stringify(payload);
     if (lastSavedFingerprintRef.current === fingerprint) {
-      pushToast({ type: 'success', message: 'Record already saved.' });
+      pushToast({ type: 'success', message: t('bazi.errors.alreadySaved') });
       return;
     }
 
@@ -947,13 +947,13 @@ export default function Bazi() {
           if (data.record) {
             runIfMounted(() => {
               setSavedRecord(data.record);
-              pushToast({ type: 'success', message: 'Record already saved.' });
+              pushToast({ type: 'success', message: t('bazi.errors.alreadySaved') });
             });
             lastSavedFingerprintRef.current = fingerprint;
             return;
           }
         }
-        const message = await readErrorMessage(res, 'Save failed.');
+        const message = await readErrorMessage(res, t('ziwei.errors.saveFailed'));
         runIfMounted(() => pushToast({ type: 'error', message }));
         return;
       }
@@ -1014,7 +1014,7 @@ export default function Bazi() {
       }
 
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Favorite failed.');
+        const message = await readErrorMessage(res, t('favorites.addError'));
         runIfMounted(() => pushToast({ type: 'error', message }));
         return;
       }
@@ -1077,7 +1077,7 @@ export default function Bazi() {
       }
 
       if (!res.ok) {
-        const message = await readErrorMessage(res, 'Unable to calculate Zi Wei chart.');
+        const message = await readErrorMessage(res, t('ziwei.errors.calculateFailed'));
         runIfMounted(() => {
           pushToast({ type: 'error', message });
           setZiweiStatus({ type: 'error', message });
@@ -1088,7 +1088,7 @@ export default function Bazi() {
       const data = await res.json();
       runIfMounted(() => {
         setZiweiResult(data);
-        setZiweiStatus({ type: 'success', message: 'Zi Wei chart generated.' });
+        setZiweiStatus({ type: 'success', message: t('ziwei.chartReady') });
       });
     } catch (error) {
       const message = getNetworkErrorMessage(error);
@@ -1161,7 +1161,7 @@ export default function Bazi() {
     type === 'error'
       ? 'border-rose-400/40 bg-rose-500/10 text-rose-100'
       : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100';
-  const toastLabel = (type) => (type === 'error' ? 'Error' : 'Success');
+  const toastLabel = (type) => (type === 'error' ? t('common.error') : t('common.success'));
 
   const [aiResult, setAiResult] = useState(null);
   const displayAiResult = aiResult;
@@ -1298,7 +1298,7 @@ export default function Bazi() {
           wsStatusRef.current.errored = true;
           setIsAiLoading(false);
           clearAiToast();
-          pushToast({ type: 'error', message: message.message || 'AI Interpretation failed.' });
+          pushToast({ type: 'error', message: message.message || t('bazi.errors.calculateFailed') });
           closeAiSocket(1011, 'AI error');
         }
       };
@@ -1308,7 +1308,7 @@ export default function Bazi() {
         wsStatusRef.current.errored = true;
         setIsAiLoading(false);
         clearAiToast();
-        pushToast({ type: 'error', message: 'WebSocket connection error.' });
+        pushToast({ type: 'error', message: t('errors.network') });
       };
 
       ws.onclose = () => {
@@ -1316,7 +1316,7 @@ export default function Bazi() {
         const { done, errored } = wsStatusRef.current;
         if (!done && !errored) {
           clearAiToast();
-          pushToast({ type: 'error', message: 'Connection closed unexpectedly.' });
+          pushToast({ type: 'error', message: t('errors.network') });
         }
         setIsAiLoading(false);
         wsRef.current = null;
@@ -1387,10 +1387,10 @@ export default function Bazi() {
         >
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-amber-200">Network interruption</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-amber-200">{t('common.warning')}</p>
               <p className="mt-2 text-sm text-amber-50">
-                {getRetryLabel(pendingRetry.action)} is queued.{' '}
-                {isOnline ? 'Retry now or continue when ready.' : 'Waiting for connection...'}
+                {getRetryLabel(pendingRetry.action)} {t('errors.actionQueued', { label: '' }).replace('已加入重试队列。', '').replace('queued for retry.', '').trim()}.{' '}
+                {isOnline ? t('bazi.retryNow') : t('errors.offline')}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -1401,7 +1401,7 @@ export default function Bazi() {
                 disabled={!isOnline}
                 className="rounded-full border border-amber-200/60 bg-amber-200/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-amber-100 transition hover:border-amber-100 hover:text-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Retry now
+                {t('bazi.retryNow')}
               </button>
               <button
                 type="button"
@@ -1409,7 +1409,7 @@ export default function Bazi() {
                 onClick={clearPendingRetry}
                 className="rounded-full border border-amber-200/30 px-4 py-2 text-xs uppercase tracking-[0.2em] text-amber-100 transition hover:border-amber-200 hover:text-amber-50"
               >
-                Dismiss
+                {t('bazi.dismiss')}
               </button>
             </div>
           </div>
@@ -1448,10 +1448,10 @@ export default function Bazi() {
             className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/95 p-6 text-white shadow-2xl backdrop-blur"
           >
             <h2 id="bazi-reset-title" className="text-lg font-semibold text-white">
-              Reset this reading?
+              {t('bazi.reset')}?
             </h2>
             <p className="mt-2 text-sm text-white/70">
-              This clears the form and any calculated results. You can re-enter details afterward.
+              {t('errors.unsavedChanges')}
             </p>
             <div className="mt-6 flex flex-wrap gap-3 sm:justify-end">
               <button
@@ -1460,14 +1460,14 @@ export default function Bazi() {
                 onClick={() => setConfirmResetOpen(false)}
                 className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
                 onClick={handleConfirmReset}
                 className="rounded-full border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-rose-100 transition hover:border-rose-300 hover:text-rose-200"
               >
-                Reset
+                {t('bazi.reset')}
               </button>
             </div>
           </div>
@@ -1487,10 +1487,10 @@ export default function Bazi() {
             className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/95 p-6 text-white shadow-2xl backdrop-blur"
           >
             <h2 id="bazi-ai-title" className="text-lg font-semibold text-white">
-              Request AI interpretation?
+              {t('ziwei.aiConfirmTitle')}
             </h2>
             <p className="mt-2 text-sm text-white/70">
-              This sends your full analysis details for an AI summary. Continue when you are ready.
+              {t('ziwei.aiConfirmDesc')}
             </p>
             <div className="mt-6 flex flex-wrap gap-3 sm:justify-end">
               <button
@@ -1499,14 +1499,14 @@ export default function Bazi() {
                 onClick={() => setConfirmAiOpen(false)}
                 className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
                 onClick={handleConfirmAiRequest}
                 className="rounded-full border border-purple-400/40 bg-purple-500/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-purple-100 transition hover:border-purple-300 hover:text-purple-200"
               >
-                Request AI
+                {t('ziwei.aiInterpret')}
               </button>
             </div>
           </div>
@@ -1702,14 +1702,14 @@ export default function Bazi() {
                 className="rounded-full border border-white/30 px-4 py-2 text-sm font-semibold text-white/80 transition hover:border-gold-400/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
                 disabled={isCalculating}
               >
-                Reset
+                {t('bazi.reset')}
               </button>
               <button
                 type="button"
                 onClick={handleCancel}
                 className="rounded-full border border-white/30 px-4 py-2 text-sm font-semibold text-white/80 transition hover:border-gold-400/60 hover:text-white"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             </div>
           </form>
@@ -1836,9 +1836,9 @@ export default function Bazi() {
             )}
           </section>
           <section className="glass-card rounded-3xl border border-white/10 p-6 shadow-glass">
-            <h2 className="font-display text-2xl text-gold-400">Zi Wei (V2)</h2>
+            <h2 className="font-display text-2xl text-gold-400">{t('nav.ziwei')} (V2)</h2>
             <p className="mt-2 text-sm text-white/70">
-              Generate a Zi Wei chart using the current BaZi inputs.
+              {t('profile.ziweiQuickChartDesc')}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
@@ -1847,7 +1847,7 @@ export default function Bazi() {
                 className="rounded-full bg-gold-400 px-4 py-2 text-xs font-semibold text-mystic-900 shadow-lg shadow-gold-400/30 transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={ziweiLoading}
               >
-                {ziweiLoading ? 'Calculating…' : 'Generate Zi Wei Chart'}
+                {ziweiLoading ? `${t('profile.calculating')}...` : t('ziwei.generateChart')}
               </button>
             </div>
             {ziweiStatus.type !== 'idle' && (
@@ -1858,36 +1858,36 @@ export default function Bazi() {
                 className={`mt-4 text-sm ${ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
                   }`}
               >
-                {ziweiStatus.message || (ziweiStatus.type === 'loading' ? 'Calculating…' : '')}
+                {ziweiStatus.message || (ziweiStatus.type === 'loading' ? `${t('profile.calculating')}...` : '')}
               </p>
             )}
             {ziweiResult && (
               <div className="mt-6 grid gap-4 md:grid-cols-3" data-testid="bazi-ziwei-result">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <h3 className="text-xs uppercase text-gold-400/80">Lunar Date</h3>
+                  <h3 className="text-xs uppercase text-gold-400/80">{t('ziwei.lunarDate')}</h3>
                   <p className="mt-2 text-white">
-                    {ziweiResult?.lunar?.year}年 {ziweiResult?.lunar?.month}月 {ziweiResult?.lunar?.day}日
-                    {ziweiResult?.lunar?.isLeap ? ' (Leap)' : ''}
+                    {ziweiResult?.lunar?.year}{t('common.year')} {ziweiResult?.lunar?.month}{t('common.month')} {ziweiResult?.lunar?.day}{t('common.day')}
+                    {ziweiResult?.lunar?.isLeap ? ` (${t('ziwei.leap')})` : ''}
                   </p>
                   <p className="mt-1 text-xs text-white/60">
-                    {ziweiResult?.lunar?.yearStem}{ziweiResult?.lunar?.yearBranch}年 · {ziweiResult?.lunar?.monthStem}{ziweiResult?.lunar?.monthBranch}月
+                    {ziweiResult?.lunar?.yearStem}{ziweiResult?.lunar?.yearBranch}{t('common.year')} · {ziweiResult?.lunar?.monthStem}{ziweiResult?.lunar?.monthBranch}{t('common.month')}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <h3 className="text-xs uppercase text-gold-400/80">Key Palaces</h3>
+                  <h3 className="text-xs uppercase text-gold-400/80">{t('ziwei.keyPalaces')}</h3>
                   <p className="mt-2 text-white">
-                    命宫: {ziweiResult?.mingPalace?.palace?.cn} · {ziweiResult?.mingPalace?.branch?.name}
+                    {t('ziwei.mingPalace')}: {ziweiResult?.mingPalace?.palace?.cn} · {ziweiResult?.mingPalace?.branch?.name}
                   </p>
                   <p className="mt-1 text-white">
-                    身宫: {ziweiResult?.shenPalace?.palace?.cn} · {ziweiResult?.shenPalace?.branch?.name}
+                    {t('ziwei.shenPalace')}: {ziweiResult?.shenPalace?.palace?.cn} · {ziweiResult?.shenPalace?.branch?.name}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <h3 className="text-xs uppercase text-gold-400/80">Birth Time</h3>
+                  <h3 className="text-xs uppercase text-gold-400/80">{t('ziwei.birthTime')}</h3>
                   <p className="mt-2 text-white">{ziweiResult?.birthIso || '—'}</p>
                   <p className="mt-1 text-xs text-white/60">
-                    UTC offset: {Number.isFinite(ziweiResult?.timezoneOffsetMinutes)
-                      ? `${ziweiResult.timezoneOffsetMinutes} mins`
+                    {t('ziwei.utcOffset')}: {Number.isFinite(ziweiResult?.timezoneOffsetMinutes)
+                      ? `${ziweiResult.timezoneOffsetMinutes} ${t('profile.mins')}`
                       : '—'}
                   </p>
                 </div>
@@ -1923,7 +1923,7 @@ export default function Bazi() {
               {elements.length ? (
                 elements.map(({ element, count, percent }) => (
                   <div key={element} className="flex items-center gap-3">
-                    <span className="w-20 text-xs uppercase tracking-[0.2em] text-white/70">{element}</span>
+                    <span className="w-20 text-xs uppercase tracking-[0.2em] text-white/70">{t(`bazi.elements.${element}`)}</span>
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
                       <div className="h-full rounded-full bg-gold-400" style={{ width: `${percent}%` }} />
                     </div>
