@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import Button from '../ui/Button';
-import { ZODIAC_PERIODS, ZODIAC_SIGNS } from '../../data/zodiac.js';
+import { ZODIAC_PERIODS, ZODIAC_SIGNS } from '../../data/zodiac';
 
 export default function TarotZodiac({
     sign,

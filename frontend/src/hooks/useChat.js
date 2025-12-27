@@ -6,188 +6,189 @@ const RECONNECT_DELAY = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
 export const useChat = (options = {}) => {
-    const { token } = useAuth();
-    const { baziResult } = useBaziContext(); // Get latest Bazi result
-    const [status, setStatus] = useState('disconnected'); // disconnected, connecting, connected, error
-    const [messages, setMessages] = useState([]);
-    const [isTyping, setIsTyping] = useState(false);
-    const [error, setError] = useState(null);
-    const wsRef = useRef(null);
-    const reconnectAttempts = useRef(0);
-    const reconnectTimer = useRef(null);
-    const shouldReconnect = useRef(true);
+  const { token } = useAuth();
+  const { baziResult } = useBaziContext();
+  const [status, setStatus] = useState('disconnected');
+  const [messages, setMessages] = useState([]);
+  const messagesRef = useRef(messages);
+  const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState(null);
+  const wsRef = useRef(null);
+  const reconnectAttempts = useRef(0);
+  const reconnectTimer = useRef(null);
+  const shouldReconnect = useRef(true);
+  const connectRef = useRef(() => {});
 
-    // Resolve WebSocket URL based on current location
-    const resolveWsUrl = useCallback(() => {
-        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const host = window.location.host;
-        const hostname = window.location.hostname;
-        const configuredBackendPort = import.meta.env?.VITE_BACKEND_PORT;
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
-        if ((hostname === 'localhost' || hostname === '127.0.0.1') && configuredBackendPort) {
-            return `${protocol}://${hostname}:${configuredBackendPort}/ws/ai`;
-        }
+  const resolveWsUrl = useCallback(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const host = window.location.host;
+    const hostname = window.location.hostname;
+    const configuredBackendPort = import.meta.env?.VITE_BACKEND_PORT;
 
-        return `${protocol}://${host}/ws/ai`;
-    }, []);
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && configuredBackendPort) {
+      return `${protocol}://${hostname}:${configuredBackendPort}/ws/ai`;
+    }
 
-    const connect = useCallback(() => {
-        if (!token) return;
-        if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    return `${protocol}://${host}/ws/ai`;
+  }, []);
 
-        setStatus('connecting');
-        setError(null);
+  const attemptReconnect = useCallback(() => {
+    if (!shouldReconnect.current) return;
+    if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
+      setError('Unable to connect to chat server.');
+      return;
+    }
 
+    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+
+    const nextDelay = RECONNECT_DELAY * Math.min(reconnectAttempts.current + 1, 5);
+    reconnectTimer.current = setTimeout(() => {
+      reconnectAttempts.current++;
+      connectRef.current();
+    }, nextDelay);
+  }, []);
+
+  const handleMessage = (data) => {
+    switch (data.type) {
+      case 'start':
+        setIsTyping(true);
+        setMessages((prev) => [...prev, { role: 'assistant', content: '', timestamp: Date.now() }]);
+        break;
+      case 'chunk':
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'assistant') {
+            return [
+              ...prev.slice(0, -1),
+              { ...last, content: last.content + (data.content || '') },
+            ];
+          }
+          return prev;
+        });
+        break;
+      case 'done':
+        setIsTyping(false);
+        break;
+      case 'error':
+        setIsTyping(false);
+        setMessages((prev) => [...prev, { role: 'system', content: `Error: ${data.message}`, timestamp: Date.now() }]);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const connect = useCallback(() => {
+    if (!token) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    setStatus('connecting');
+    setError(null);
+    shouldReconnect.current = true;
+
+    try {
+      const url = resolveWsUrl();
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setStatus('connected');
+        reconnectAttempts.current = 0;
+      };
+
+      ws.onmessage = (event) => {
         try {
-            const url = resolveWsUrl();
-            // Append token to query params for initial handshake authentication if needed, 
-            // or we can send it as the first message. 
-            // Standard approach: Protocols often don't support custom headers in browser JS.
-            // We'll trust the verify logic on backend usually checks protocols or first message.
-            // Let's assume standard connection first.
-            const ws = new WebSocket(url);
-            wsRef.current = ws;
-
-            ws.onopen = () => {
-                setStatus('connected');
-                reconnectAttempts.current = 0;
-                // Optional: Send auth token immediately if backend expects it
-                // ws.send(JSON.stringify({ type: 'auth', token }));
-            };
-
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    handleMessage(data);
-                } catch (e) {
-                    console.error('WS parse error', e);
-                }
-            };
-
-            ws.onclose = (event) => {
-                // event.code 1000 is normal closure
-                setStatus('disconnected');
-                if (shouldReconnect.current && event.code !== 1000) {
-                    attemptReconnect();
-                }
-            };
-
-            ws.onerror = (err) => {
-                console.error('WS error', err);
-                setStatus('error');
-                setError('Connection error');
-            };
-
-        } catch (e) {
-            console.error('Connection failed', e);
-            setStatus('error');
-            setError(e.message);
-            attemptReconnect();
+          const data = JSON.parse(event.data);
+          handleMessage(data);
+        } catch (err) {
+          console.error('WS parse error', err);
         }
-    }, [token, resolveWsUrl]);
+      };
 
-    const attemptReconnect = useCallback(() => {
-        if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
-            setError('Unable to connect to chat server.');
-            return;
-        }
+      ws.onclose = (event) => {
+        setStatus('disconnected');
+        if (event.code !== 1000) attemptReconnect();
+      };
 
-        reconnectTimer.current = setTimeout(() => {
-            reconnectAttempts.current++;
-            connect();
-        }, RECONNECT_DELAY * Math.min(reconnectAttempts.current + 1, 5)); // Exponential backoff cap
-    }, [connect]);
+      ws.onerror = (err) => {
+        console.error('WS error', err);
+        setStatus('error');
+        setError('Connection error');
+      };
+    } catch (err) {
+      console.error('Connection failed', err);
+      setStatus('error');
+      setError(err?.message || 'Connection failed');
+      attemptReconnect();
+    }
+  }, [attemptReconnect, resolveWsUrl, token]);
 
-    const disconnect = useCallback(() => {
-        shouldReconnect.current = false;
-        if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-        if (wsRef.current) {
-            wsRef.current.close(1000, 'User initiated disconnect');
-            wsRef.current = null;
-        }
-    }, []);
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
-    const handleMessage = (data) => {
-        switch (data.type) {
-            case 'start':
-                setIsTyping(true);
-                setMessages(prev => [...prev, { role: 'assistant', content: '', timestamp: Date.now() }]);
-                break;
-            case 'chunk':
-                setMessages(prev => {
-                    const last = prev[prev.length - 1];
-                    if (last && last.role === 'assistant') {
-                        return [
-                            ...prev.slice(0, -1),
-                            { ...last, content: last.content + (data.content || '') }
-                        ];
-                    }
-                    return prev;
-                });
-                break;
-            case 'done':
-                setIsTyping(false);
-                break;
-            case 'error':
-                setIsTyping(false);
-                setMessages(prev => [...prev, { role: 'system', content: `Error: ${data.message}`, timestamp: Date.now() }]);
-                break;
-            default:
-                break;
-        }
+  const disconnect = useCallback(() => {
+    shouldReconnect.current = false;
+    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+    reconnectTimer.current = null;
+    if (wsRef.current) {
+      wsRef.current.close(1000, 'User initiated disconnect');
+      wsRef.current = null;
+    }
+  }, []);
+
+  const sendMessage = useCallback((text) => {
+    const normalized = typeof text === 'string' ? text.trim() : '';
+    if (!normalized || status !== 'connected') return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    const userMsg = { role: 'user', content: normalized, timestamp: Date.now() };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsTyping(true);
+
+    const history = messagesRef.current
+      .filter((message) => message.role !== 'system')
+      .map((message) => ({ role: message.role, content: message.content }));
+
+    const payload = {
+      type: 'chat_request',
+      token,
+      payload: {
+        messages: [...history, { role: 'user', content: normalized }],
+        context: baziResult ? {
+          pillars: baziResult.pillars,
+          fiveElements: baziResult.fiveElements,
+          tenGods: baziResult.tenGods,
+        } : null,
+      },
     };
 
-    const sendMessage = useCallback((text) => {
-        if (!text.trim() || status !== 'connected') return;
+    wsRef.current.send(JSON.stringify(payload));
+  }, [baziResult, status, token]);
 
-        const userMsg = { role: 'user', content: text.trim(), timestamp: Date.now() };
-        setMessages(prev => [...prev, userMsg]);
-        setIsTyping(true); // AI is "thinking"
-
-        const payload = {
-            type: 'chat_request',
-            token,
-            payload: {
-                messages: [
-                    ...messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })),
-                    { role: 'user', content: text.trim() }
-                ],
-                context: baziResult ? {
-                    pillars: baziResult.pillars,
-                    fiveElements: baziResult.fiveElements,
-                    tenGods: baziResult.tenGods,
-                    // heavy items like luckCycles can be included if prompt needs them
-                    // Keep payload size reasonable
-                } : null
-            }
-        };
-
-        wsRef.current.send(JSON.stringify(payload));
-    }, [status, messages, baziResult]);
-
-    useEffect(() => {
-        // Auto connect if token exists
-        if (token) {
-            shouldReconnect.current = true;
-            connect();
-        }
-        return () => {
-            disconnect();
-            // Ensure reconnect timer is cleared on unmount to prevent memory leaks
-            if (reconnectTimer.current) {
-                clearTimeout(reconnectTimer.current);
-                reconnectTimer.current = null;
-            }
-        };
-    }, [token, connect, disconnect]);
-
-    return {
-        status,
-        messages,
-        isTyping,
-        error,
-        sendMessage,
-        connect,
-        disconnect
+  useEffect(() => {
+    if (!token) return () => {};
+    connect();
+    return () => {
+      disconnect();
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
     };
+  }, [connect, disconnect, token]);
+
+  return {
+    status,
+    messages,
+    isTyping,
+    error,
+    sendMessage,
+    connect,
+    disconnect,
+  };
 };

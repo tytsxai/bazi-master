@@ -45,7 +45,10 @@
   "errors": {
     "network": "網路錯誤，請檢查連線後重試。",
     "unknown": "發生未預期的錯誤。",
-    "offline": "你目前處於離線狀態，請重新連線後再試。",
+    "offline": {
+      "title": "目前處於離線狀態",
+      "desc": "部分功能可能暫時無法使用"
+    },
     "unsavedChanges": "你有尚未儲存的變更，確定要離開此頁面嗎？",
     "saveInProgress": "正在儲存中，請等待完成後再離開此頁面。",
     "loadLocations": "無法載入地點資訊。",

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import Breadcrumbs from '../components/Breadcrumbs.jsx';
-import { useAuthFetch } from '../auth/useAuthFetch.js';
+import Breadcrumbs from '../components/Breadcrumbs';
+import { useAuthFetch } from '../auth/useAuthFetch';
 
 const formatOffsetLabel = (offsetMinutes) => {
   if (!Number.isFinite(offsetMinutes)) return null;

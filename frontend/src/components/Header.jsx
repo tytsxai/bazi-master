@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../auth/AuthContext.jsx';
-import ChatInterface from './chat/ChatInterface.jsx';
+import { useAuth } from '../auth/AuthContext';
+import ChatInterface from './chat/ChatInterface';
 
 export default function Header() {
   const { t, i18n } = useTranslation();

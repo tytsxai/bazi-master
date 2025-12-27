@@ -1,25 +1,31 @@
-import { useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from './auth/AuthContext.jsx';
-import Header from './components/Header.jsx';
+import { useAuth } from './auth/AuthContext';
+import Header from './components/Header';
+import OfflineNotice from './components/OfflineNotice';
 import SoulPortrait from './components/soul/SoulPortrait';
 import Synastry from './components/synastry/Synastry';
 import ProtectedRoute from './components/ProtectedRoute';
-import Home from './pages/Home.jsx';
-import Login from './pages/Login.jsx';
-import Profile from './pages/Profile.jsx';
-import History from './pages/History.jsx';
-import Favorites from './pages/Favorites.jsx';
-import BaziRecordDetails from './pages/BaziRecordDetails.jsx';
-import Bazi from './pages/Bazi.jsx';
-import Tarot from './pages/Tarot.jsx';
-import Iching from './pages/Iching.jsx';
-import Zodiac from './pages/Zodiac.jsx';
-import Ziwei from './pages/Ziwei.jsx';
-import NotFound from './pages/NotFound.jsx';
+import { BaziProvider } from './context/BaziContext';
+import Home from './pages/Home';
+import Login from './pages/Login';
+import Profile from './pages/Profile';
+import History from './pages/History';
+import Favorites from './pages/Favorites';
+import BaziRecordDetails from './pages/BaziRecordDetails';
+import Bazi from './pages/Bazi';
+import Tarot from './pages/Tarot';
+import Iching from './pages/Iching';
+import Zodiac from './pages/Zodiac';
+import Ziwei from './pages/Ziwei';
+import NotFound from './pages/NotFound';
 
-function AdminRoute({ children }) {
+interface AdminRouteProps {
+  children: ReactNode;
+}
+
+function AdminRoute({ children }: AdminRouteProps) {
   const { t } = useTranslation();
   const { isAuthenticated, user, token } = useAuth();
   const location = useLocation();
@@ -41,7 +47,7 @@ function AdminRoute({ children }) {
       setStatus('checking');
       try {
         const res = await fetch('/api/admin/health', {
-          headers: { Authorization: `Bearer ${token} ` },
+          headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
         if (!isActive) return;
@@ -54,7 +60,7 @@ function AdminRoute({ children }) {
           return;
         }
         setStatus(res.ok ? 'allowed' : 'forbidden');
-      } catch (error) {
+      } catch (error: any) {
         if (isActive && error?.name !== 'AbortError') {
           setStatus('forbidden');
         }
@@ -94,7 +100,7 @@ function AdminRoute({ children }) {
 
 function NotFoundRedirect() {
   const location = useLocation();
-  const missingPath = `${location.pathname}${location.search || ''}${location.hash || ''} `;
+  const missingPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
   return <Navigate to="/404" replace state={{ from: missingPath }} />;
 }
 
@@ -120,21 +126,13 @@ function AdminArea() {
   );
 }
 
-import { BaziProvider } from './context/BaziContext.jsx';
-
-// ... (existing imports)
-
 export default function App() {
-  const { i18n } = useTranslation();
-
-  // ... (existing effects)
-
   return (
     <BaziProvider>
       <section className="min-h-screen">
         <Header />
+        <OfflineNotice />
         <Routes>
-          {/* ... existing routes ... */}
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Login />} />
@@ -193,8 +191,15 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
-          <Route path="*" element={<NotFound />} />
+          <Route
+            path="/favorites"
+            element={(
+              <ProtectedRoute>
+                <Favorites />
+              </ProtectedRoute>
+            )}
+          />
+          <Route path="*" element={<NotFoundRedirect />} />
         </Routes>
       </section>
     </BaziProvider>

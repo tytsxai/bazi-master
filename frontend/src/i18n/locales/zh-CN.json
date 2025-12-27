@@ -51,7 +51,10 @@
   "errors": {
     "network": "网络错误，请检查您的连接并重试。",
     "unknown": "发生未知错误。",
-    "offline": "您目前处于离线状态，请重新连接以重试。",
+    "offline": {
+      "title": "当前处于离线状态",
+      "desc": "部分功能可能暂时不可用"
+    },
     "unsavedChanges": "您有未保存的更改，确定要离开此页面吗？",
     "saveInProgress": "正在保存中，请稍候再离开此页面。",
     "loadLocations": "无法加载地点信息。",

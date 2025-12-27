@@ -1,5 +1,5 @@
-import { isValidCalendarDate, getTodayParts } from './baziDateUtils.js';
-import { isWhitespaceOnly } from './baziFormUtils.js';
+import { isValidCalendarDate, getTodayParts } from './baziDateUtils';
+import { isWhitespaceOnly } from './baziFormUtils';
 
 // Validation utilities for Bazi forms
 

@@ -1,6 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import HistoryItem from './HistoryItem.jsx';
+import HistoryItem from './HistoryItem';
+import VirtualList from '../ui/VirtualList';
+
+const ITEM_HEIGHT = 160; // Estimated height of HistoryItem
 
 export default function HistoryList({
   orderedDeletedRecords,
@@ -119,25 +122,31 @@ export default function HistoryList({
               </button>
             </div>
           </div>
-          {filteredRecords.map((record) => (
-            <HistoryItem
-              key={record.id}
-              record={record}
-              highlightRecordId={highlightRecordId}
-              isSelected={selectedSet.has(record.id)}
-              onToggleSelection={() => onToggleSelection(record.id)}
-              onStartEdit={onStartEdit}
-              onRequestDelete={onRequestDelete}
-              editRecordId={editRecordId}
-              editDraft={editDraft}
-              editErrors={editErrors}
-              editStatus={editStatus}
-              editSaving={editSaving}
-              onUpdateEditDraft={onUpdateEditDraft}
-              onEditSave={onEditSave}
-              onCancelEdit={onCancelEdit}
+          <div className="min-h-[600px]">
+            <VirtualList
+              items={filteredRecords}
+              itemHeight={ITEM_HEIGHT}
+              renderItem={(record) => (
+                <HistoryItem
+                  key={record.id}
+                  record={record}
+                  highlightRecordId={highlightRecordId}
+                  isSelected={selectedSet.has(record.id)}
+                  onToggleSelection={() => onToggleSelection(record.id)}
+                  onStartEdit={onStartEdit}
+                  onRequestDelete={onRequestDelete}
+                  editRecordId={editRecordId}
+                  editDraft={editDraft}
+                  editErrors={editErrors}
+                  editStatus={editStatus}
+                  editSaving={editSaving}
+                  onUpdateEditDraft={onUpdateEditDraft}
+                  onEditSave={onEditSave}
+                  onCancelEdit={onCancelEdit}
+                />
+              )}
             />
-          ))}
+          </div>
           {totalPages > 1 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/60">
               <span>

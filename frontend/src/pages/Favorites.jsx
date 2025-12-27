@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../auth/AuthContext.jsx';
-import Breadcrumbs from '../components/Breadcrumbs.jsx';
-import { useAuthFetch } from '../auth/useAuthFetch.js';
-import { readApiErrorMessage } from '../utils/apiError.js';
+import { useAuth } from '../auth/AuthContext';
+import Breadcrumbs from '../components/Breadcrumbs';
+import { useAuthFetch } from '../auth/useAuthFetch';
+import { readApiErrorMessage } from '../utils/apiError';
 
 const buildShareUrl = (record) => {
   if (!record?.id) return '';

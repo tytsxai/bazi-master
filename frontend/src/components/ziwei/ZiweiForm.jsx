@@ -31,7 +31,7 @@ export default function ZiweiForm({
                     onChange={onChange('birthYear')}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white"
                 />
-                {errors.birthYear && <span className="mt-1 block text-xs text-rose-200">{errors.birthYear}</span>}
+                {errors.birthYear && <span className="mt-1 block text-xs text-rose-200" role="alert">{errors.birthYear}</span>}
             </label>
             <label className="text-sm text-white/70">
                 {t('bazi.birthMonth')}
@@ -41,7 +41,7 @@ export default function ZiweiForm({
                     onChange={onChange('birthMonth')}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white"
                 />
-                {errors.birthMonth && <span className="mt-1 block text-xs text-rose-200">{errors.birthMonth}</span>}
+                {errors.birthMonth && <span className="mt-1 block text-xs text-rose-200" role="alert">{errors.birthMonth}</span>}
             </label>
             <label className="text-sm text-white/70">
                 {t('bazi.birthDay')}
@@ -51,7 +51,7 @@ export default function ZiweiForm({
                     onChange={onChange('birthDay')}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white"
                 />
-                {errors.birthDay && <span className="mt-1 block text-xs text-rose-200">{errors.birthDay}</span>}
+                {errors.birthDay && <span className="mt-1 block text-xs text-rose-200" role="alert">{errors.birthDay}</span>}
             </label>
             <label className="text-sm text-white/70">
                 {t('bazi.birthHour')}
@@ -65,7 +65,7 @@ export default function ZiweiForm({
                         <option key={hour} value={hour}>{hour}</option>
                     ))}
                 </select>
-                {errors.birthHour && <span className="mt-1 block text-xs text-rose-200">{errors.birthHour}</span>}
+                {errors.birthHour && <span className="mt-1 block text-xs text-rose-200" role="alert">{errors.birthHour}</span>}
             </label>
             <label className="text-sm text-white/70">
                 {t('bazi.gender')}
@@ -81,7 +81,7 @@ export default function ZiweiForm({
                         </option>
                     ))}
                 </select>
-                {errors.gender && <span className="mt-1 block text-xs text-rose-200">{errors.gender}</span>}
+                {errors.gender && <span className="mt-1 block text-xs text-rose-200" role="alert">{errors.gender}</span>}
             </label>
             <div className="md:col-span-5 flex flex-col gap-3 sm:flex-row mt-2">
                 <Button

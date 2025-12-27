@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../auth/AuthContext.jsx';
-import { useAuthFetch } from '../../auth/useAuthFetch.js';
-import { useBaziContext } from '../../context/BaziContext.jsx';
-import { getPreferredAiProvider } from '../../utils/aiProvider.js';
-import { getClientId } from '../../utils/clientId.js';
-import { readApiErrorMessage } from '../../utils/apiError.js';
+import { useAuth } from '../../auth/AuthContext';
+import { useAuthFetch } from '../../auth/useAuthFetch';
+import { useBaziContext } from '../../context/BaziContext';
+import { getPreferredAiProvider } from '../../utils/aiProvider';
+import { getClientId } from '../../utils/clientId';
+import { readApiErrorMessage } from '../../utils/apiError';
 
 // Import utilities
 import {
@@ -18,12 +18,12 @@ import {
   PREFILL_STORAGE_KEY,
   UNSAVED_WARNING_MESSAGE,
   NUMERIC_FIELD_LIMITS,
-} from './baziConstants.js';
+} from './baziConstants';
 import {
   formatOffsetMinutes,
   parseTimezoneOffsetMinutes,
   getBrowserTimezoneLabel,
-} from './baziTimezoneUtils.js';
+} from './baziTimezoneUtils';
 import {
   buildDefaultFormData,
   isWhitespaceOnly,
@@ -35,18 +35,18 @@ import {
   coerceInt,
   safeJsonParse,
   isSameFormData,
-} from './baziFormUtils.js';
+} from './baziFormUtils';
 import {
   getTodayParts,
   getDaysInMonth,
   getDateInputLimits,
   isValidCalendarDate,
-} from './baziDateUtils.js';
+} from './baziDateUtils';
 import {
   computeFiveElementsPercent,
   normalizeBaziApiResponse,
-} from './baziApiUtils.js';
-import { getFieldErrors, hasValidationErrors } from './baziValidationUtils.js';
+} from './baziApiUtils';
+import { getFieldErrors, hasValidationErrors } from './baziValidationUtils';
 
 const useUnsavedChangesWarning = (shouldBlock, message = UNSAVED_WARNING_MESSAGE) => {
   useEffect(() => {

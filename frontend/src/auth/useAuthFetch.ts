@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from './AuthContext.jsx';
+import { useAuth, RetryAction } from './AuthContext';
 
 export const SESSION_EXPIRED_REASON = 'session_expired';
 export const SESSION_EXPIRED_KEY = 'bazi_session_expired';
@@ -9,14 +9,20 @@ export function useAuthFetch() {
   const { token, logout, setRetryAction } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const isBackendToken = (value) =>
+
+  const isBackendToken = (value: string | null): boolean =>
     typeof value === 'string' && /^token_\d+_\d+_[A-Za-z0-9]+$/.test(value);
 
   return useCallback(
-    async (input, init = {}, retryAction = null) => {
+    async (
+      input: string | URL | Request,
+      init: RequestInit = {},
+      retryAction: Partial<RetryAction> | null = null
+    ): Promise<Response> => {
       const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
       const params = new URLSearchParams({ reason: SESSION_EXPIRED_REASON, next: redirectPath });
       const target = `/login?${params.toString()}`;
+
       const redirectToLogin = () => {
         navigate(target, {
           replace: true,
@@ -29,6 +35,7 @@ export function useAuthFetch() {
           }
         }, 50);
       };
+
       let effectiveToken = token;
       try {
         const storedToken = localStorage.getItem('bazi_token');
@@ -46,20 +53,22 @@ export function useAuthFetch() {
       }
 
       const response = await fetch(input, { ...init, headers });
-      let tokenOrigin = null;
+
+      let tokenOrigin: string | null = null;
       try {
         tokenOrigin = localStorage.getItem('bazi_token_origin');
       } catch {
         tokenOrigin = null;
       }
+
       const shouldEnforceAuth = Boolean(effectiveToken)
         && (tokenOrigin === 'backend' || isBackendToken(effectiveToken));
+
       if ((response.headers.get('x-session-expired') === '1' || response.status === 401) && shouldEnforceAuth) {
         if (retryAction) {
           setRetryAction({
             ...retryAction,
-            redirectPath,
-            reason: retryAction.reason ?? 'session_expired',
+            createdAt: retryAction.createdAt ?? Date.now(),
           });
         }
         logout({ preserveRetry: Boolean(retryAction) });

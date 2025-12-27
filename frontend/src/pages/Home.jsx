@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import Breadcrumbs from '../components/Breadcrumbs.jsx';
-import { useAuth } from '../auth/AuthContext.jsx';
+import Breadcrumbs from '../components/Breadcrumbs';
+import { useAuth } from '../auth/AuthContext';
 import DailyFortuneWidget from '../components/dashboard/DailyFortuneWidget'; // Added import
 
 const modules = [

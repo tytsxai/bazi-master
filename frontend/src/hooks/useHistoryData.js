@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext.jsx';
-import { useAuthFetch } from '../auth/useAuthFetch.js';
-import { getClientId } from '../utils/clientId.js';
-import { readApiErrorMessage } from '../utils/apiError.js';
+import { useAuth } from '../auth/AuthContext';
+import { useAuthFetch } from '../auth/useAuthFetch';
+import { getClientId } from '../utils/clientId';
+import { readApiErrorMessage } from '../utils/apiError';
 import {
   SEARCH_DEBOUNCE_MS,
   PAGE_SIZE,
@@ -11,7 +11,7 @@ import {
   DEFAULT_FILTERS,
   PENDING_SAVE_KEY,
   RECENT_SAVE_KEY
-} from './historyConstants.js';
+} from './historyConstants';
 import {
   toTimestamp,
   isWhitespaceOnly,
@@ -19,7 +19,7 @@ import {
   getBirthTimestamp,
   sortRecordsForDisplay,
   sortDeletedRecordsForDisplay
-} from './historyUtils.js';
+} from './historyUtils';
 
 export default function useHistoryData({ t }) {
   const { token } = useAuth();

@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import Breadcrumbs from '../components/Breadcrumbs.jsx';
-import HistoryFilters from '../components/history/HistoryFilters.jsx';
-import HistoryList from '../components/history/HistoryList.jsx';
-import useHistoryData from '../hooks/useHistoryData.js';
+import Breadcrumbs from '../components/Breadcrumbs';
+import HistoryFilters from '../components/history/HistoryFilters';
+import HistoryList from '../components/history/HistoryList';
+import useHistoryData from '../hooks/useHistoryData';
 
 export default function History() {
   const { t } = useTranslation();

@@ -4,15 +4,19 @@ import { initReactI18next } from 'react-i18next';
 import en from './locales/en.json';
 import zhCN from './locales/zh-CN.json';
 import zhTW from './locales/zh-TW.json';
+import ja from './locales/ja.json';
+import ko from './locales/ko.json';
 
 const resources = {
   'en-US': { translation: en },
   'zh-CN': { translation: zhCN },
-  'zh-TW': { translation: zhTW }
+  'zh-TW': { translation: zhTW },
+  'ja': { translation: ja },
+  'ko': { translation: ko }
 };
 
 const STORAGE_KEY = 'locale';
-const SUPPORTED_LOCALES = new Set(['en-US', 'zh-CN', 'zh-TW']);
+const SUPPORTED_LOCALES = new Set(['en-US', 'zh-CN', 'zh-TW', 'ja', 'ko']);
 
 const normalizeLocale = (locale) => {
   if (!locale) return 'en-US';
@@ -21,6 +25,8 @@ const normalizeLocale = (locale) => {
     if (lowered.includes('hant') || lowered.endsWith('-tw') || lowered.includes('-tw')) return 'zh-TW';
     return 'zh-CN';
   }
+  if (lowered.startsWith('ja')) return 'ja';
+  if (lowered.startsWith('ko')) return 'ko';
   if (SUPPORTED_LOCALES.has(locale)) return locale;
   return 'en-US';
 };

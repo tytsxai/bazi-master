@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext.jsx';
-import Breadcrumbs from '../components/Breadcrumbs.jsx';
-import { getPreferredAiProvider } from '../utils/aiProvider.js';
-import { readApiErrorMessage } from '../utils/apiError.js';
+import { useAuth } from '../auth/AuthContext';
+import Breadcrumbs from '../components/Breadcrumbs';
+import { getPreferredAiProvider } from '../utils/aiProvider';
+import { readApiErrorMessage } from '../utils/apiError';
 
 import TarotZodiac from '../components/tarot/TarotZodiac';
 import TarotControls from '../components/tarot/TarotControls';

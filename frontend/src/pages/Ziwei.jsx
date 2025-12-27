@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../auth/AuthContext.jsx';
-import { useAuthFetch } from '../auth/useAuthFetch.js';
-import Breadcrumbs from '../components/Breadcrumbs.jsx';
-import { getPreferredAiProvider } from '../utils/aiProvider.js';
-import { readApiErrorMessage } from '../utils/apiError.js';
+import { useAuth } from '../auth/AuthContext';
+import { useAuthFetch } from '../auth/useAuthFetch';
+import Breadcrumbs from '../components/Breadcrumbs';
+import { getPreferredAiProvider } from '../utils/aiProvider';
+import { readApiErrorMessage } from '../utils/apiError';
 import ZiweiForm from '../components/ziwei/ZiweiForm';
 import ZiweiChart from '../components/ziwei/ZiweiChart';
 import ZiweiAiSection from '../components/ziwei/ZiweiAiSection';
@@ -110,7 +110,7 @@ export default function Ziwei() {
     const hour = Number(form.birthHour);
 
     if (!String(form.birthYear).trim()) nextErrors.birthYear = t('bazi.errors.yearRequired');
-    else if (!Number.isInteger(year)) nextErrors.birthYear = t('bazi.errors.yearInvalid');
+    else if (!Number.isInteger(year) || year < 1900 || year > 2030) nextErrors.birthYear = t('bazi.errors.yearInvalid');
     if (!String(form.birthMonth).trim()) nextErrors.birthMonth = t('bazi.errors.monthRequired');
     else if (!Number.isInteger(month) || month < 1 || month > 12) nextErrors.birthMonth = t('bazi.errors.monthInvalid');
     if (!String(form.birthDay).trim()) nextErrors.birthDay = t('bazi.errors.dayRequired');

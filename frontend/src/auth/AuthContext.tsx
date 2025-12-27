@@ -1,8 +1,40 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { readApiErrorMessage } from '../utils/apiError.js';
+import { readApiErrorMessage } from '../utils/apiError';
 
-const AuthContext = createContext(null);
+export interface User {
+  id: string | number;
+  email: string;
+  name?: string;
+  isAdmin?: boolean;
+  preferences?: Record<string, any>;
+}
+
+export interface RetryAction {
+  action: string;
+  params?: Record<string, any>;
+  payload?: any;
+  redirectPath?: string;
+  reason?: string;
+  createdAt: number;
+}
+
+export interface AuthContextValue {
+  token: string | null;
+  user: User | null;
+  profileName: string;
+  isAuthenticated: boolean;
+  login: (email: string, password?: string) => Promise<boolean>;
+  logout: (options?: { preserveRetry?: boolean }) => void;
+  refreshUser: () => Promise<User | null>;
+  refreshProfileName: () => Promise<string | null>;
+  setProfileName: (value: string) => void;
+  setRetryAction: (action: Partial<RetryAction>) => void;
+  getRetryAction: () => RetryAction | null;
+  clearRetryAction: () => void;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 const TOKEN_KEY = 'bazi_token';
 const USER_KEY = 'bazi_user';
@@ -12,7 +44,8 @@ const RETRY_ACTION_KEY = 'bazi_retry_action';
 const SESSION_EXPIRED_KEY = 'bazi_session_expired';
 const PROFILE_NAME_KEY = 'bazi_profile_name';
 const SESSION_IDLE_MS = 30 * 60 * 1000;
-const isBackendToken = (value) => {
+
+const isBackendToken = (value: string | null): boolean => {
   if (typeof value !== 'string') return false;
   return (
     /^token_\d+_[A-Za-z0-9_-]+\.[a-f0-9]+$/i.test(value)
@@ -20,7 +53,7 @@ const isBackendToken = (value) => {
   );
 };
 
-const readStoredValue = (key) => {
+const readStoredValue = (key: string): string | null => {
   try {
     const localValue = localStorage.getItem(key);
     if (localValue) return localValue;
@@ -41,7 +74,8 @@ const readStoredValue = (key) => {
     return null;
   }
 };
-const safeParseUser = (raw) => {
+
+const safeParseUser = (raw: string | null): User | null => {
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -55,36 +89,44 @@ const safeParseUser = (raw) => {
   }
 };
 
-export function AuthProvider({ children }) {
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
   const { t } = useTranslation();
-  const [token, setToken] = useState(() => readStoredValue(TOKEN_KEY));
-  const [user, setUser] = useState(() => {
+  const [token, setToken] = useState<string | null>(() => readStoredValue(TOKEN_KEY));
+  const [user, setUser] = useState<User | null>(() => {
     const raw = readStoredValue(USER_KEY);
     return safeParseUser(raw);
   });
-  const [profileName, setProfileNameState] = useState(() => {
+  const [profileName, setProfileNameState] = useState<string>(() => {
     const stored = localStorage.getItem(PROFILE_NAME_KEY);
     return stored ? stored.trim() : '';
   });
-  const idleTimeoutRef = useRef(null);
+  const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const setRetryAction = useCallback((action) => {
-    if (!action) return;
+  const setRetryAction = useCallback((action: Partial<RetryAction>) => {
+    if (!action || !action.action) return;
     try {
-      const payload = { ...action, createdAt: Date.now() };
+      const payload: RetryAction = {
+        action: action.action,
+        params: action.params,
+        createdAt: Date.now()
+      };
       localStorage.setItem(RETRY_ACTION_KEY, JSON.stringify(payload));
     } catch {
       // Ignore storage failures (private mode).
     }
   }, []);
 
-  const getRetryAction = useCallback(() => {
+  const getRetryAction = useCallback((): RetryAction | null => {
     try {
       const raw = localStorage.getItem(RETRY_ACTION_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed?.action) return null;
-      return parsed;
+      return parsed as RetryAction;
     } catch {
       return null;
     }
@@ -130,7 +172,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(TOKEN_ORIGIN_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(LAST_ACTIVITY_KEY);
-    localStorage.removeItem('bazi_session_expired');
+    localStorage.removeItem(SESSION_EXPIRED_KEY);
     localStorage.removeItem(PROFILE_NAME_KEY);
     sessionStorage.clear();
     if (!preserveRetry) {
@@ -139,7 +181,7 @@ export function AuthProvider({ children }) {
     clearSessionState();
   }, [clearRetryAction, clearSessionState]);
 
-  const setProfileName = useCallback((value) => {
+  const setProfileName = useCallback((value: string) => {
     const next = typeof value === 'string' ? value.trim() : '';
     if (next) {
       localStorage.setItem(PROFILE_NAME_KEY, next);
@@ -167,13 +209,13 @@ export function AuthProvider({ children }) {
   }, [logout]);
 
   const scheduleIdleTimeout = useCallback(
-    (remainingMs) => {
+    (remainingMs: number) => {
       clearIdleTimeout();
       idleTimeoutRef.current = setTimeout(() => {
         expireSession();
       }, remainingMs);
-      if (typeof idleTimeoutRef.current?.unref === 'function') {
-        idleTimeoutRef.current.unref();
+      if (idleTimeoutRef.current && typeof (idleTimeoutRef.current as any).unref === 'function') {
+        (idleTimeoutRef.current as any).unref();
       }
     },
     [clearIdleTimeout, expireSession]
@@ -188,7 +230,7 @@ export function AuthProvider({ children }) {
     [scheduleIdleTimeout]
   );
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (): Promise<User | null> => {
     const storedToken = token || localStorage.getItem(TOKEN_KEY);
     if (!storedToken) return null;
     const storedOrigin = localStorage.getItem(TOKEN_ORIGIN_KEY);
@@ -211,7 +253,7 @@ export function AuthProvider({ children }) {
       if (data?.user) {
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));
         setUser(data.user);
-        return data.user;
+        return data.user as User;
       }
     } catch (error) {
       const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
@@ -222,7 +264,7 @@ export function AuthProvider({ children }) {
     return null;
   }, [token, logout]);
 
-  const refreshProfileName = useCallback(async () => {
+  const refreshProfileName = useCallback(async (): Promise<string | null> => {
     if (!token) return null;
     try {
       const res = await fetch('/api/user/settings', {
@@ -253,11 +295,7 @@ export function AuthProvider({ children }) {
     return null;
   }, [setProfileName, token]);
 
-  const login = async (email, password = 'password') => {
-    // Determine if we are in "demo" mode or real mode. 
-    // For now, we try to hit the API. If the API fails (e.g. user not found), we fall back?
-    // No, let's Stick to the plan: Real API.
-
+  const login = async (email: string, password = 'password'): Promise<boolean> => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -281,8 +319,6 @@ export function AuthProvider({ children }) {
       return true;
     } catch (error) {
       console.error("Login error:", error);
-      // Optional: Revert to mock for resilience if backend is down? 
-      // For this task, we want to prove the backend works. So throw.
       const message =
         error instanceof Error && error.message
           ? error.message
@@ -318,7 +354,7 @@ export function AuthProvider({ children }) {
       events.forEach((eventName) => window.removeEventListener(eventName, handleActivity));
       clearIdleTimeout();
     };
-  }, [token, clearIdleTimeout, expireSession, recordActivity, scheduleIdleTimeout]);
+  }, [token, clearIdleTimeout, expireSession, recordActivity, scheduleIdleTimeout, setProfileName]);
 
   useEffect(() => {
     const syncFromStorage = () => {
@@ -353,7 +389,7 @@ export function AuthProvider({ children }) {
       scheduleIdleTimeout(SESSION_IDLE_MS - elapsed);
     };
 
-    const handleStorage = (event) => {
+    const handleStorage = (event: StorageEvent) => {
       if (event.storageArea !== localStorage) return;
       if (event.key && ![TOKEN_KEY, USER_KEY, LAST_ACTIVITY_KEY].includes(event.key)) return;
       syncFromStorage();
@@ -444,7 +480,7 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {
     throw new Error('useAuth must be used within AuthProvider');

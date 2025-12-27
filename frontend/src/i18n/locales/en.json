@@ -51,7 +51,10 @@
   "errors": {
     "network": "Network error. Please check your connection and try again.",
     "unknown": "An unexpected error occurred.",
-    "offline": "You are offline. Reconnect to retry.",
+    "offline": {
+      "title": "You are offline",
+      "desc": "Some features may be limited"
+    },
     "unsavedChanges": "You have unsaved changes. Are you sure you want to leave this page?",
     "saveInProgress": "A save is in progress. Please wait for it to finish before leaving this page.",
     "loadLocations": "Unable to load locations.",

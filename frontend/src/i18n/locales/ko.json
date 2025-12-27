@@ -1,0 +1,28 @@
+{
+    "nav": {
+        "home": "홈",
+        "bazi": "사주",
+        "tarot": "타로",
+        "iching": "역경",
+        "zodiac": "별자리",
+        "ziwei": "자미두수",
+        "history": "기록",
+        "favorites": "즐겨찾기",
+        "login": "로그인",
+        "logout": "로그아웃",
+        "profile": "프로필"
+    },
+    "common": {
+        "save": "저장",
+        "cancel": "취소",
+        "next": "다음",
+        "prev": "이전",
+        "ok": "확인",
+        "delete": "삭제",
+        "loading": "로딩 중...",
+        "calculating": "계산 중...",
+        "back": "뒤로",
+        "success": "성공",
+        "error": "오류"
+    }
+}

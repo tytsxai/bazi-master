@@ -1,7 +1,7 @@
-import Breadcrumbs from '../components/Breadcrumbs.jsx';
-import BaziForm from '../components/bazi/BaziForm.jsx';
-import BaziResult from '../components/bazi/BaziResult.jsx';
-import useBaziCalculation from '../components/bazi/useBaziCalculation.js';
+import Breadcrumbs from '../components/Breadcrumbs';
+import BaziForm from '../components/bazi/BaziForm';
+import BaziResult from '../components/bazi/BaziResult';
+import useBaziCalculation from '../components/bazi/useBaziCalculation';
 
 export default function Bazi() {
   const {

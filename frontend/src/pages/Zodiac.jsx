@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext.jsx';
-import Breadcrumbs from '../components/Breadcrumbs.jsx';
-import { readApiErrorMessage } from '../utils/apiError.js';
+import { useAuth } from '../auth/AuthContext';
+import Breadcrumbs from '../components/Breadcrumbs';
+import { readApiErrorMessage } from '../utils/apiError';
 
 const SIGNS = [
   { value: 'aries' },
@@ -26,6 +26,25 @@ const PERIODS = [
   { value: 'monthly' }
 ];
 const PREFILL_STORAGE_KEY = 'bazi_prefill_request_v1';
+
+const toStringArray = (value) => (Array.isArray(value)
+  ? value
+    .filter((entry) => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+  : []);
+
+const normalizeSignInfo = (sign) => {
+  const value = sign && typeof sign === 'object' ? sign : {};
+  return {
+    ...value,
+    keywords: toStringArray(value.keywords),
+    strengths: toStringArray(value.strengths),
+    challenges: toStringArray(value.challenges),
+    compatibility: toStringArray(value.compatibility),
+    luckyColors: toStringArray(value.luckyColors),
+  };
+};
 
 export default function Zodiac() {
   const { t } = useTranslation();
@@ -105,7 +124,7 @@ export default function Zodiac() {
         }
         return res.json();
       })
-      .then((data) => setSignInfo(data.sign))
+      .then((data) => setSignInfo(normalizeSignInfo(data.sign)))
       .catch((error) => {
         if (error.name !== 'AbortError') {
           setStatus({ type: 'error', message: error.message });

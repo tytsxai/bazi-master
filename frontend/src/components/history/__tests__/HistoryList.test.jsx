@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import HistoryList from '../HistoryList.jsx';
+import HistoryList from '../HistoryList';
 
 // Mock useTranslation
 vi.mock('react-i18next', () => ({
@@ -16,7 +16,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 // Mock HistoryItem component
-vi.mock('../HistoryItem.jsx', () => ({
+vi.mock('../HistoryItem', () => ({
   default: ({ record, onToggleSelection, onStartEdit, onRequestDelete }) => (
     <div data-testid={`history-item-${record.id}`}>
       <span>{record.birthYear}-{record.birthMonth}-{record.birthDay}</span>
