@@ -1,4 +1,4 @@
-import type { Dispatch, FormEvent, SetStateAction } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AuthMode } from '../../auth/authTypes';
 
@@ -13,7 +13,6 @@ interface LoginFormProps {
     setLoginError: (val: string) => void;
     isSubmitting: boolean;
     oauthError: string;
-    handleSubmit: (e: FormEvent) => void;
     handleGoogleLogin: () => void;
     handleWeChatLogin: () => void;
     onSwitchMode: (mode: AuthMode) => void;
@@ -31,13 +30,13 @@ export default function LoginForm({
     setLoginError,
     isSubmitting,
     oauthError,
-    handleSubmit,
     handleGoogleLogin,
     handleWeChatLogin,
     onSwitchMode,
     emailPattern,
 }: LoginFormProps) {
     const { t } = useTranslation();
+    const alertMessage = oauthError || loginError;
 
     return (
         <>
@@ -54,7 +53,7 @@ export default function LoginForm({
                         setEmail(value);
                         if (loginError) setLoginError('');
                         if (errors.email && emailPattern.test(value)) {
-                            setErrors((prev: any) => ({ ...prev, email: undefined }));
+                            setErrors((prev: Record<string, string | undefined>) => ({ ...prev, email: undefined }));
                         }
                     }}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
@@ -62,7 +61,7 @@ export default function LoginForm({
                     required
                 />
                 {errors.email && (
-                    <span className="mt-2 block text-xs text-rose-200">{errors.email}</span>
+                    <span id="login-email-error" className="mt-2 block text-xs text-rose-200">{errors.email}</span>
                 )}
             </div>
             <div className="mt-4">
@@ -78,7 +77,7 @@ export default function LoginForm({
                         setPassword(value);
                         if (loginError) setLoginError('');
                         if (errors.password && value) {
-                            setErrors((prev: any) => ({ ...prev, password: undefined }));
+                            setErrors((prev: Record<string, string | undefined>) => ({ ...prev, password: undefined }));
                         }
                     }}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
@@ -86,7 +85,7 @@ export default function LoginForm({
                     required
                 />
                 {errors.password && (
-                    <span className="mt-2 block text-xs text-rose-200">{errors.password}</span>
+                    <span id="login-password-error" className="mt-2 block text-xs text-rose-200">{errors.password}</span>
                 )}
             </div>
             <button
@@ -110,8 +109,7 @@ export default function LoginForm({
             >
                 {t('login.ui.continueWithWeChat')}
             </button>
-            {oauthError && <p className="mt-3 text-xs text-rose-200">{oauthError}</p>}
-            {loginError && <p className="mt-3 text-xs text-rose-200">{loginError}</p>}
+            {alertMessage && <p role="alert" className="mt-3 text-xs text-rose-200">{alertMessage}</p>}
 
             <div className="mt-4 flex items-center justify-between text-xs text-white/70">
                 <button
@@ -135,6 +133,7 @@ export default function LoginForm({
                     type="button"
                     className="underline decoration-white/40 underline-offset-4"
                     onClick={() => onSwitchMode('register')}
+                    aria-label="Create account"
                 >
                     {t('login.registerTitle', { defaultValue: 'Create an account' })}
                 </button>

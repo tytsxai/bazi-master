@@ -39,7 +39,7 @@ export default function ResetRequestForm({
                         const value = event.target.value;
                         setEmail(value);
                         if (errors.email && emailPattern.test(value)) {
-                            setErrors((prev: any) => ({ ...prev, email: undefined }));
+                            setErrors((prev: Record<string, string | undefined>) => ({ ...prev, email: undefined }));
                         }
                     }}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
@@ -49,7 +49,10 @@ export default function ResetRequestForm({
                 {errors.email && <span className="mt-2 block text-xs text-rose-200">{errors.email}</span>}
             </div>
             {status && (
-                <p className={`mt-3 text-xs ${status.type === 'error' ? 'text-rose-200' : 'text-emerald-200'}`}>
+                <p
+                    role="status"
+                    className={`mt-3 text-xs ${status.type === 'error' ? 'text-rose-200' : 'text-emerald-200'}`}
+                >
                     {status.message}
                 </p>
             )}

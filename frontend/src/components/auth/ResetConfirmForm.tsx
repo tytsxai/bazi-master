@@ -42,7 +42,7 @@ export default function ResetConfirmForm({
                         const value = event.target.value;
                         setToken(value);
                         if (errors.token && value.trim()) {
-                            setErrors((prev: any) => ({ ...prev, token: undefined }));
+                            setErrors((prev: Record<string, string | undefined>) => ({ ...prev, token: undefined }));
                         }
                     }}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
@@ -63,7 +63,7 @@ export default function ResetConfirmForm({
                         const value = event.target.value;
                         setPassword(value);
                         if (errors.password && !validatePasswordStrength(value, t)) {
-                            setErrors((prev: any) => ({ ...prev, password: undefined }));
+                            setErrors((prev: Record<string, string | undefined>) => ({ ...prev, password: undefined }));
                         }
                     }}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"

@@ -18,7 +18,7 @@ const SESSION_EXPIRED_KEY = 'bazi_session_expired';
 
 export default function Login() {
   const { t } = useTranslation();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, setSession } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -50,7 +50,7 @@ export default function Login() {
 
   const [sessionNotice, setSessionNotice] = useState('');
 
-  const sanitizeNextPath = (value: any): string | null => {
+  const sanitizeNextPath = (value: unknown): string | null => {
     if (!value || typeof value !== 'string') return null;
     if (!value.startsWith('/') || value.startsWith('//')) return null;
     return value;
@@ -76,11 +76,12 @@ export default function Login() {
     return params.toString();
   };
 
-  const resolveRedirectPath = (from: any, search = '') => {
+  const resolveRedirectPath = (from: unknown, search = '') => {
     if (from) {
       if (typeof from === 'string') return from;
-      if (from.pathname) {
-        return `${from.pathname}${from.search || ''}${from.hash || ''}`;
+      const f = from as { pathname?: string; search?: string; hash?: string };
+      if (f.pathname) {
+        return `${f.pathname}${f.search || ''}${f.hash || ''}`;
       }
     }
     if (search) {
@@ -113,9 +114,17 @@ export default function Login() {
     setRegisterErrors({});
     setRegisterStatus('');
     setIsRegisterSubmitting(false);
+
+    if (nextMode === 'register') {
+      const search = buildAuthSearch();
+      navigate(search ? `/register?${search}` : '/register');
+    } else if (nextMode === 'login') {
+      const search = buildAuthSearch();
+      navigate(search ? `/login?${search}` : '/login');
+    }
   };
 
-  const getLoginErrorMessage = (error: any) => {
+  const getLoginErrorMessage = (error: unknown) => {
     const message = error instanceof Error && error.message ? error.message : t('login.errors.loginFailed');
     return message.toLowerCase() === 'login failed' ? t('login.errors.loginFailed') : message;
   };
@@ -157,7 +166,14 @@ export default function Login() {
   }, [location.pathname]);
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
+    const searchParams = new URLSearchParams(location.search);
+    const hashParams = new URLSearchParams(
+      location.hash && location.hash.startsWith('#') ? location.hash.slice(1) : ''
+    );
+    const tokenParam = hashParams.get('token') || searchParams.get('token');
+    if (tokenParam) return;
+
+    const params = searchParams;
     let reason = params.get('reason');
     if (!reason) {
       try {
@@ -190,14 +206,11 @@ export default function Login() {
     if (!tokenParam) return;
 
     const userFromParam = decodeUserParam(userParam);
-    localStorage.setItem('bazi_token', tokenParam);
-    localStorage.setItem('bazi_token_origin', 'backend');
-    if (userFromParam) localStorage.setItem('bazi_user', JSON.stringify(userFromParam));
-    localStorage.setItem('bazi_last_activity', String(Date.now()));
+    setSession(tokenParam, userFromParam);
 
     const nextPath = sanitizeNextPath(nextParam) || resolveRedirectPath(location.state?.from, location.search);
-    window.location.replace(nextPath);
-  }, [location.search, location.hash, location.state]);
+    navigate(nextPath, { replace: true });
+  }, [location.search, location.hash, location.state, navigate, setSession]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -249,8 +262,8 @@ export default function Login() {
       }
       await res.json();
       await login(registerEmail.trim(), registerPassword);
-    } catch (error: any) {
-      setRegisterStatus(error?.message || t('login.errors.registerFailed'));
+    } catch (error: unknown) {
+      setRegisterStatus(error instanceof Error ? error.message : t('login.errors.registerFailed'));
     } finally {
       setIsRegisterSubmitting(false);
     }
@@ -337,7 +350,7 @@ export default function Login() {
           <LoginForm
             email={email} setEmail={setEmail} password={password} setPassword={setPassword}
             errors={errors} setErrors={setErrors} loginError={loginError} setLoginError={setLoginError}
-            isSubmitting={isSubmitting} oauthError={oauthError} handleSubmit={handleSubmit}
+            isSubmitting={isSubmitting} oauthError={oauthError}
             handleGoogleLogin={handleGoogleLogin} handleWeChatLogin={handleWeChatLogin}
             onSwitchMode={switchMode} emailPattern={emailPattern}
           />
@@ -348,11 +361,7 @@ export default function Login() {
             name={registerName} setName={setRegisterName} email={registerEmail} setEmail={setRegisterEmail}
             password={registerPassword} setPassword={setRegisterPassword} confirm={registerConfirm} setConfirm={setRegisterConfirm}
             errors={registerErrors} setErrors={setRegisterErrors} status={registerStatus} isSubmitting={isRegisterSubmitting}
-            onSwitchMode={(m) => {
-              const search = buildAuthSearch();
-              switchMode(m);
-              if (m === 'login') navigate(search ? `/login?${search}` : '/login');
-            }}
+            onSwitchMode={switchMode}
             emailPattern={emailPattern}
           />
         )}

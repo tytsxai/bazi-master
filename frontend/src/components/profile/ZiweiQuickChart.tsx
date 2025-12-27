@@ -20,7 +20,17 @@ interface ZiweiResult {
 }
 
 interface ZiweiQuickChartProps {
-    latestBaziRecord: any;
+    latestBaziRecord: {
+        id: string | number;
+        birthYear: number;
+        birthMonth: number;
+        birthDay: number;
+        birthHour: number;
+        gender: string;
+        birthLocation?: string;
+        timezone?: string;
+        createdAt: string;
+    } | null;
     latestBirthSummary: string;
     ziweiLoading: boolean;
     latestBaziStatus: { type: string; message: string };
@@ -73,7 +83,10 @@ export default function ZiweiQuickChart({
             </div>
 
             {ziweiStatus.type !== 'idle' && (
-                <p className={`mt-4 text-sm ${ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'}`}>
+                <p
+                    data-testid="profile-ziwei-status"
+                    className={`mt-4 text-sm ${ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'}`}
+                >
                     {ziweiStatus.message || (ziweiStatus.type === 'loading' ? t('profile.calculating') : '')}
                 </p>
             )}

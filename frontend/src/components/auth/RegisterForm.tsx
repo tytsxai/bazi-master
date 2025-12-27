@@ -52,13 +52,13 @@ export default function RegisterForm({
                         const value = event.target.value;
                         setName(value);
                         if (errors.name && value.trim().length >= 2) {
-                            setErrors((prev: any) => ({ ...prev, name: undefined }));
+                            setErrors((prev: Record<string, string | undefined>) => ({ ...prev, name: undefined }));
                         }
                     }}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
                     placeholder="Star Seeker"
                 />
-                {errors.name && <span className="mt-2 block text-xs text-rose-200">{errors.name}</span>}
+                {errors.name && <span id="register-name-error" className="mt-2 block text-xs text-rose-200">{errors.name}</span>}
             </div>
             <div className="mt-4">
                 <label htmlFor="register-email" className="block text-sm text-white/80">
@@ -72,14 +72,14 @@ export default function RegisterForm({
                         const value = event.target.value;
                         setEmail(value);
                         if (errors.email && emailPattern.test(value)) {
-                            setErrors((prev: any) => ({ ...prev, email: undefined }));
+                            setErrors((prev: Record<string, string | undefined>) => ({ ...prev, email: undefined }));
                         }
                     }}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
                     placeholder="seer@example.com"
                     required
                 />
-                {errors.email && <span className="mt-2 block text-xs text-rose-200">{errors.email}</span>}
+                {errors.email && <span id="register-email-error" className="mt-2 block text-xs text-rose-200">{errors.email}</span>}
             </div>
             <div className="mt-4">
                 <label htmlFor="register-password" className="block text-sm text-white/80">
@@ -93,14 +93,14 @@ export default function RegisterForm({
                         const value = event.target.value;
                         setPassword(value);
                         if (errors.password && !validatePasswordStrength(value, t)) {
-                            setErrors((prev: any) => ({ ...prev, password: undefined }));
+                            setErrors((prev: Record<string, string | undefined>) => ({ ...prev, password: undefined }));
                         }
                     }}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
                     placeholder="••••••••"
                     required
                 />
-                {errors.password && <span className="mt-2 block text-xs text-rose-200">{errors.password}</span>}
+                {errors.password && <span id="register-password-error" className="mt-2 block text-xs text-rose-200">{errors.password}</span>}
             </div>
             <div className="mt-4">
                 <label htmlFor="register-confirm" className="block text-sm text-white/80">
@@ -114,18 +114,19 @@ export default function RegisterForm({
                         const value = event.target.value;
                         setConfirm(value);
                         if (errors.confirm && value === password) {
-                            setErrors((prev: any) => ({ ...prev, confirm: undefined }));
+                            setErrors((prev: Record<string, string | undefined>) => ({ ...prev, confirm: undefined }));
                         }
                     }}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white outline-none focus:border-gold-400"
                     placeholder="••••••••"
                 />
-                {errors.confirm && <span className="mt-2 block text-xs text-rose-200">{errors.confirm}</span>}
+                {errors.confirm && <span id="register-confirm-error" className="mt-2 block text-xs text-rose-200">{errors.confirm}</span>}
             </div>
             <p className="mt-3 text-xs text-white/60">{t('login.errors.passwordStrength')}</p>
             {status && <p className="mt-3 text-xs text-rose-200">{status}</p>}
             <button
                 type="submit"
+                aria-label="Create account"
                 className="mt-6 w-full rounded-full bg-gold-400 px-4 py-2 text-sm font-semibold text-mystic-900 shadow-lg shadow-gold-400/30 disabled:cursor-not-allowed disabled:opacity-70"
                 disabled={isSubmitting}
             >
