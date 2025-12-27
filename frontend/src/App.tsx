@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from './auth/AuthContext';
@@ -29,22 +29,26 @@ function AdminRoute({ children }: AdminRouteProps) {
   const { t } = useTranslation();
   const { isAuthenticated, user, token } = useAuth();
   const location = useLocation();
-  const [status, setStatus] = useState('checking');
   const shouldVerify = Boolean(token && /^token_\d+_/.test(token));
 
+  // Compute initial status synchronously outside effect
+  // Compute derived status synchronously
+  const computedStatus = useMemo(() => {
+    if (!isAuthenticated || !user || !user.isAdmin) return 'checking';
+    if (!shouldVerify) return 'allowed';
+    return null; // Requires async verification
+  }, [isAuthenticated, shouldVerify, user]);
+
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+
   useEffect(() => {
-    if (!isAuthenticated || !user || !user.isAdmin) {
-      setStatus('checking');
-      return;
-    }
-    if (!shouldVerify) {
-      setStatus('allowed');
+    // Only run async verification when needed
+    if (computedStatus !== null) {
       return;
     }
     let isActive = true;
     const controller = new AbortController();
     const verifyAdmin = async () => {
-      setStatus('checking');
       try {
         const res = await fetch('/api/admin/health', {
           headers: { Authorization: `Bearer ${token}` },
@@ -52,17 +56,17 @@ function AdminRoute({ children }: AdminRouteProps) {
         });
         if (!isActive) return;
         if (res.status === 401) {
-          setStatus('unauthenticated');
+          setVerificationStatus('unauthenticated');
           return;
         }
         if (res.status === 403) {
-          setStatus('forbidden');
+          setVerificationStatus('forbidden');
           return;
         }
-        setStatus(res.ok ? 'allowed' : 'forbidden');
-      } catch (error: any) {
-        if (isActive && error?.name !== 'AbortError') {
-          setStatus('forbidden');
+        setVerificationStatus(res.ok ? 'allowed' : 'forbidden');
+      } catch (error: unknown) {
+        if (isActive && error instanceof Error && error.name !== 'AbortError') {
+          setVerificationStatus('forbidden');
         }
       }
     };
@@ -71,7 +75,9 @@ function AdminRoute({ children }: AdminRouteProps) {
       isActive = false;
       controller.abort();
     };
-  }, [isAuthenticated, shouldVerify, token, user]);
+  }, [computedStatus, token]);
+
+  const status = computedStatus ?? verificationStatus ?? 'checking';
 
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;

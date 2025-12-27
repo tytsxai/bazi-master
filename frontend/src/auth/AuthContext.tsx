@@ -7,13 +7,13 @@ export interface User {
   email: string;
   name?: string;
   isAdmin?: boolean;
-  preferences?: Record<string, any>;
+  preferences?: Record<string, unknown>;
 }
 
 export interface RetryAction {
   action: string;
-  params?: Record<string, any>;
-  payload?: any;
+  params?: Record<string, unknown>;
+  payload?: unknown;
   redirectPath?: string;
   reason?: string;
   createdAt: number;
@@ -25,6 +25,7 @@ export interface AuthContextValue {
   profileName: string;
   isAuthenticated: boolean;
   login: (email: string, password?: string) => Promise<boolean>;
+  setSession: (token: string, user?: User | null) => void;
   logout: (options?: { preserveRetry?: boolean }) => void;
   refreshUser: () => Promise<User | null>;
   refreshProfileName: () => Promise<string | null>;
@@ -214,8 +215,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       idleTimeoutRef.current = setTimeout(() => {
         expireSession();
       }, remainingMs);
-      if (idleTimeoutRef.current && typeof (idleTimeoutRef.current as any).unref === 'function') {
-        (idleTimeoutRef.current as any).unref();
+      if (idleTimeoutRef.current && typeof (idleTimeoutRef.current as unknown as { unref?: () => void }).unref === 'function') {
+        (idleTimeoutRef.current as unknown as { unref: () => void }).unref();
       }
     },
     [clearIdleTimeout, expireSession]
@@ -224,7 +225,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const recordActivity = useCallback(
     (remainingMs = SESSION_IDLE_MS) => {
       const now = Date.now();
-      localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+      try {
+        localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+      } catch {
+        // Ignore storage failures.
+      }
+      try {
+        sessionStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+      } catch {
+        // Ignore storage failures.
+      }
       scheduleIdleTimeout(remainingMs);
     },
     [scheduleIdleTimeout]
@@ -295,7 +305,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return null;
   }, [setProfileName, token]);
 
-  const login = async (email: string, password = 'password'): Promise<boolean> => {
+  const login = useCallback(async (email: string, password = 'password'): Promise<boolean> => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -313,6 +323,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       localStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
       localStorage.removeItem('bazi_session_expired');
+      try {
+        sessionStorage.setItem(TOKEN_KEY, data.token);
+        sessionStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
+        sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        sessionStorage.removeItem('bazi_session_expired');
+      } catch {
+        // Ignore storage failures.
+      }
       setToken(data.token);
       setUser(data.user);
       recordActivity();
@@ -325,7 +343,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
           : t('errors.network');
       throw new Error(message);
     }
-  };
+  }, [recordActivity, t]);
+
+  const setSession = useCallback((nextToken: string, nextUser?: User | null) => {
+    if (!nextToken) return;
+    try {
+      localStorage.setItem(TOKEN_KEY, nextToken);
+      localStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
+      localStorage.removeItem(SESSION_EXPIRED_KEY);
+      if (nextUser) {
+        localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+      } else {
+        localStorage.removeItem(USER_KEY);
+      }
+    } catch {
+      // Ignore storage failures.
+    }
+    try {
+      sessionStorage.setItem(TOKEN_KEY, nextToken);
+      sessionStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
+      sessionStorage.removeItem(SESSION_EXPIRED_KEY);
+      if (nextUser) {
+        sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+      } else {
+        sessionStorage.removeItem(USER_KEY);
+      }
+    } catch {
+      // Ignore storage failures.
+    }
+    setToken(nextToken);
+    setUser(nextUser ?? null);
+    recordActivity();
+  }, [recordActivity]);
 
   useEffect(() => {
     if (!token) {
@@ -354,7 +403,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       events.forEach((eventName) => window.removeEventListener(eventName, handleActivity));
       clearIdleTimeout();
     };
-  }, [token, clearIdleTimeout, expireSession, recordActivity, scheduleIdleTimeout, setProfileName]);
+  }, [token, clearIdleTimeout, expireSession, recordActivity, scheduleIdleTimeout]);
 
   useEffect(() => {
     const syncFromStorage = () => {
@@ -413,38 +462,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
       window.removeEventListener('focus', syncFromStorage);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [clearSessionState, expireSession, scheduleIdleTimeout, token, setProfileName]);
+  }, [clearSessionState, expireSession, scheduleIdleTimeout, token]);
 
   useEffect(() => {
     if (!token) return;
-    let isMounted = true;
     const loadProfileName = async () => {
       try {
         await refreshProfileName();
-      } finally {
-        if (!isMounted) return;
+      } catch {
+        // Ignore errors
       }
     };
     void loadProfileName();
-    return () => {
-      isMounted = false;
-    };
   }, [refreshProfileName, token]);
 
   useEffect(() => {
     if (!token || user) return;
-    let active = true;
     const loadUser = async () => {
       try {
         await refreshUser();
-      } finally {
-        if (!active) return;
+      } catch {
+        // Ignore errors
       }
     };
     void loadUser();
-    return () => {
-      active = false;
-    };
   }, [refreshUser, token, user]);
 
   const value = useMemo(
@@ -454,6 +495,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       profileName,
       isAuthenticated: Boolean(token),
       login,
+      setSession,
       logout,
       refreshUser,
       refreshProfileName,
@@ -467,6 +509,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       user,
       profileName,
       login,
+      setSession,
       logout,
       refreshUser,
       refreshProfileName,

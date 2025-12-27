@@ -25,7 +25,7 @@ const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');
 
 createRoot(rootElement).render(
-  <BrowserRouter>
+  <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
     <HelmetProvider>
       <AuthProvider>
         <Suspense fallback="Loading...">
