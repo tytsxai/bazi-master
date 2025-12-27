@@ -115,7 +115,7 @@ export const useChat = () => {
       };
 
       ws.onerror = (err) => {
-        console.error('WS error', err);
+        console.warn('WS error', err);
         setStatus('error');
         setError('Connection error');
       };
