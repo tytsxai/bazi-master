@@ -12,6 +12,8 @@ English summary: BaZi Master is a sample full‑stack divination app (React + Ex
 - 紫微斗数排盘与历史保存
 - 认证：邮箱注册/登录、会话 Token、注销、自助删除账号
 - 健康检查：`/health` 与 `/api/ready`
+- 管理端健康检查：`/api/admin/health`（管理员）
+- WebSocket AI 流式输出：`/ws/ai`
 
 ## 技术栈
 - 前端：React 18、Vite、React Router v6、react‑i18next、Tailwind CSS（配置在 `frontend/`）
@@ -75,6 +77,8 @@ npm test
 # 分析前端构建体积
 npm -C frontend run analyze
 ```
+
+> 前端包含一个 AssemblyScript WebAssembly 示例模块；`npm -C frontend run dev/build` 会自动执行 `asbuild` 并同步 `build/optimized.wasm` 到 `public/wasm/optimized.wasm`。
 
 ### 测试通过率
 - **后端测试**: 95/95 通过 (100%)，16个测试套件，涵盖认证、八字计算、缓存、API路由等核心功能
