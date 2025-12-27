@@ -12,6 +12,49 @@ import {
 
 const router = express.Router();
 
+const parseOptionalJson = (value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    try {
+        return JSON.parse(trimmed);
+    } catch {
+        return value;
+    }
+};
+
+const parseOptionalArray = (value) => {
+    const parsed = parseOptionalJson(value);
+    return Array.isArray(parsed) ? parsed : null;
+};
+
+const parseOptionalObject = (value) => {
+    const parsed = parseOptionalJson(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+};
+
+const parseHexagram = (value) => {
+    const parsed = parseOptionalJson(value);
+    if (!parsed) return null;
+    if (typeof parsed === 'string') return { name: parsed };
+    return parsed;
+};
+
+const serializeIchingRecord = (record) => ({
+    id: record.id,
+    userId: record.userId,
+    method: record.method,
+    numbers: parseOptionalArray(record.numbers),
+    hexagram: parseHexagram(record.hexagram),
+    resultingHexagram: record.resultingHexagram ? parseHexagram(record.resultingHexagram) : null,
+    changingLines: parseOptionalArray(record.changingLines),
+    timeContext: parseOptionalObject(record.timeContext),
+    userQuestion: record.userQuestion,
+    aiInterpretation: record.aiInterpretation,
+    createdAt: record.createdAt,
+});
+
 router.get('/hexagrams', (req, res) => {
     res.json({ hexagrams });
 });
@@ -108,13 +151,41 @@ Hexagram: ${hexagramName}
     }
 });
 
+router.post('/history', requireAuth, async (req, res) => {
+    const { method, numbers, hexagram, resultingHexagram, changingLines, timeContext, userQuestion, aiInterpretation } = req.body || {};
+    if (!hexagram) return res.status(400).json({ error: 'Hexagram data required' });
+
+    try {
+        const record = await prisma.ichingRecord.create({
+            data: {
+                userId: req.user.id,
+                method: typeof method === 'string' && method.trim() ? method.trim() : 'unknown',
+                numbers: numbers ? JSON.stringify(numbers) : null,
+                hexagram: typeof hexagram === 'string' ? hexagram : JSON.stringify(hexagram),
+                resultingHexagram: resultingHexagram
+                    ? (typeof resultingHexagram === 'string' ? resultingHexagram : JSON.stringify(resultingHexagram))
+                    : null,
+                changingLines: changingLines ? JSON.stringify(changingLines) : null,
+                timeContext: timeContext ? JSON.stringify(timeContext) : null,
+                userQuestion: typeof userQuestion === 'string' ? userQuestion : null,
+                aiInterpretation: typeof aiInterpretation === 'string' ? aiInterpretation : null,
+            }
+        });
+
+        return res.json({ record: serializeIchingRecord(record) });
+    } catch (error) {
+        console.error('Failed to save I Ching history:', error);
+        return res.status(500).json({ error: 'Failed to save history' });
+    }
+});
+
 router.get('/history', requireAuth, async (req, res) => {
     try {
         const records = await prisma.ichingRecord.findMany({
             where: { userId: req.user.id },
             orderBy: { createdAt: 'desc' }
         });
-        res.json({ records });
+        res.json({ records: records.map(serializeIchingRecord) });
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch history' });
     }
@@ -124,10 +195,13 @@ router.delete('/history/:id', requireAuth, async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid ID' });
     try {
-        await prisma.ichingRecord.delete({ where: { id, userId: req.user.id } });
-        res.json({ status: 'ok' });
+        const result = await prisma.ichingRecord.deleteMany({ where: { id, userId: req.user.id } });
+        if (!result.count) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+        return res.json({ status: 'ok' });
     } catch (error) {
-        res.status(500).json({ error: 'Failed to delete record' });
+        return res.status(500).json({ error: 'Failed to delete record' });
     }
 });
 

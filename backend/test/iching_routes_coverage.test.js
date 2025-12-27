@@ -69,6 +69,32 @@ describe('I Ching Routes Integration', () => {
             })
             .expect(200);
         assert.ok(res.body.content);
+    });
+
+    it('POST /api/iching/history persists a record and serializes fields', async () => {
+        const payload = {
+            method: 'number',
+            numbers: [12, 27, 44],
+            hexagram: { name: 'Qian', number: 1 },
+            resultingHexagram: { name: 'Kun', number: 2 },
+            changingLines: [1, 3],
+            timeContext: { iso: new Date().toISOString() },
+            userQuestion: 'What should I focus on?',
+            aiInterpretation: 'Mock interpretation',
+        };
+
+        const save = await request(app)
+            .post('/api/iching/history')
+            .set('Authorization', `Bearer ${validToken}`)
+            .send(payload)
+            .expect(200);
+
+        assert.ok(save.body.record);
+        assert.equal(save.body.record.method, 'number');
+        assert.deepEqual(save.body.record.numbers, payload.numbers);
+        assert.equal(save.body.record.hexagram.name, payload.hexagram.name);
+        assert.equal(save.body.record.resultingHexagram.name, payload.resultingHexagram.name);
+        assert.deepEqual(save.body.record.changingLines, payload.changingLines);
 
         // History
         const hist = await request(app)
@@ -76,6 +102,9 @@ describe('I Ching Routes Integration', () => {
             .set('Authorization', `Bearer ${validToken}`)
             .expect(200);
         assert.ok(hist.body.records.length > 0);
+
+        const savedIds = hist.body.records.map((record) => record.id);
+        assert.ok(savedIds.includes(save.body.record.id));
 
         // Delete
         const id = hist.body.records[0].id;

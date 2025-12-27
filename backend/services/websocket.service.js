@@ -4,6 +4,7 @@ import { generateAIContent, resolveAiProvider, buildBaziPrompt } from './ai.serv
 import { getChatSystemPrompt, buildZiweiPrompt } from './prompts.service.js';
 import { authorizeToken } from '../middleware/auth.js';
 import { createAiGuard } from '../lib/concurrency.js';
+import { prisma } from '../config/prisma.js';
 
 
 // Heartbeat interval
@@ -236,12 +237,26 @@ Interpret this spread, focusing on the question. connecting the cards together.
     try {
         ws.send(JSON.stringify({ type: 'start' }));
 
-        await generateAIContent({
+        const content = await generateAIContent({
             system,
             user, // Legacy generic user prompt
             provider: provider,
             onChunk: (chunk) => sendChunk(ws, chunk)
         });
+
+        try {
+            await prisma.tarotRecord.create({
+                data: {
+                    userId: ws.user?.id,
+                    spreadType: typeof spreadType === 'string' && spreadType.trim() ? spreadType.trim() : 'SingleCard',
+                    cards: JSON.stringify(cards),
+                    userQuestion: typeof userQuestion === 'string' ? userQuestion : null,
+                    aiInterpretation: content,
+                }
+            });
+        } catch (error) {
+            logger.error({ error }, '[ws] Failed to persist tarot history');
+        }
 
         sendDone(ws);
         closeSocket(ws, 1000, 'Tarot complete');
