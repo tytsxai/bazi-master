@@ -13,10 +13,8 @@ import {
   RECENT_SAVE_KEY
 } from './historyConstants';
 import {
-  toTimestamp,
   isWhitespaceOnly,
   isValidCalendarDate,
-  getBirthTimestamp,
   sortRecordsForDisplay,
   sortDeletedRecordsForDisplay
 } from './historyUtils';
@@ -507,7 +505,7 @@ export default function useHistoryData({ t }) {
     setRangeFilter((prev) => (prev !== nextRange ? nextRange : prev));
     setSortOption((prev) => (prev !== nextSort ? nextSort : prev));
     setPage((prev) => (prev !== nextPage ? nextPage : prev));
-  }, [scheduleQueryDebounce, searchParams, token]);
+  }, [debouncedQuery, effectivePageSize, genderFilter, rangeFilter, scheduleQueryDebounce, searchParams, sortOption, t, token]);
 
   useEffect(() => {
     if (!token) return;
@@ -610,7 +608,7 @@ export default function useHistoryData({ t }) {
     return () => {
       cancelled = true;
     };
-  }, [authFetch, token]);
+  }, [authFetch, recordMatchesPending, token]);
 
   useEffect(() => {
     if (!token || !pendingSaveChecked) return;
@@ -815,7 +813,6 @@ export default function useHistoryData({ t }) {
         lastDeletedRecordRef.current = null;
       }
       setLastDeletedId((prev) => (prev === recordId ? null : prev));
-      setLastDeletedRecord((prev) => (prev?.id === recordId ? null : prev));
       await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
       showStatus({ type: 'success', message: t('history.recordRestored') });
     } finally {

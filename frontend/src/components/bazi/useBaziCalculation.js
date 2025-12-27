@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -22,31 +22,21 @@ import {
 import {
   formatOffsetMinutes,
   parseTimezoneOffsetMinutes,
-  getBrowserTimezoneLabel,
 } from './baziTimezoneUtils';
 import {
   buildDefaultFormData,
-  isWhitespaceOnly,
   normalizeOptionalText,
   normalizeOverrideArg,
   normalizeNumericInput,
-  formatCoordinate,
   formatLocationLabel,
-  coerceInt,
   safeJsonParse,
   isSameFormData,
 } from './baziFormUtils';
+import { getDateInputLimits } from './baziDateUtils';
 import {
-  getTodayParts,
-  getDaysInMonth,
-  getDateInputLimits,
-  isValidCalendarDate,
-} from './baziDateUtils';
-import {
-  computeFiveElementsPercent,
   normalizeBaziApiResponse,
 } from './baziApiUtils';
-import { getFieldErrors, hasValidationErrors } from './baziValidationUtils';
+import { getFieldErrors } from './baziValidationUtils';
 
 const useUnsavedChangesWarning = (shouldBlock, message = UNSAVED_WARNING_MESSAGE) => {
   useEffect(() => {
@@ -118,12 +108,13 @@ export default function useBaziCalculation() {
   const toastIdRef = useRef(0);
   const toastTimeoutsRef = useRef(new Map());
   const aiToastIdRef = useRef(null);
-  const runIfMounted = (fn) => {
+
+  const runIfMounted = useCallback((fn) => {
     if (!isMountedRef.current) return;
     fn();
-  };
+  }, []);
 
-  const removeToast = (id) => {
+  const removeToast = useCallback((id) => {
     const timeoutId = toastTimeoutsRef.current.get(id);
     if (timeoutId) {
       clearTimeout(timeoutId);
@@ -134,9 +125,9 @@ export default function useBaziCalculation() {
     if (aiToastIdRef.current === id) {
       aiToastIdRef.current = null;
     }
-  };
+  }, []);
 
-  const pushToast = (toast) => {
+  const pushToast = useCallback((toast) => {
     if (!isMountedRef.current) return null;
     const id = toastIdRef.current + 1;
     toastIdRef.current = id;
@@ -151,30 +142,107 @@ export default function useBaziCalculation() {
       toastTimeoutsRef.current.set(id, timeoutId);
     }
     return id;
-  };
+  }, [removeToast]);
 
-  const clearToasts = () => {
+  const clearToasts = useCallback(() => {
     toastTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
     toastTimeoutsRef.current.clear();
     aiToastIdRef.current = null;
     if (!isMountedRef.current) return;
     setToasts([]);
-  };
-
-  const clearAiToast = () => {
+  }, []);
+  const clearAiToast = useCallback(() => {
     if (!aiToastIdRef.current) return;
     removeToast(aiToastIdRef.current);
     aiToastIdRef.current = null;
-  };
+  }, [removeToast]);
 
-  const readErrorMessage = (response, fallback) => readApiErrorMessage(response, fallback);
+  const readErrorMessage = useCallback((response, fallback) => readApiErrorMessage(response, fallback), []);
 
-  const getNetworkErrorMessage = (error) => {
+  const getNetworkErrorMessage = useCallback((error) => {
     if (error instanceof Error && error.message) {
       return error.message;
     }
     return t('errors.network');
-  };
+  }, [t]);
+
+  const getRetryLabel = useCallback((action) => {
+    switch (action) {
+      case 'bazi_calculate':
+        return t('bazi.retry.bazi_calculate');
+      case 'bazi_full_analysis':
+        return t('bazi.retry.bazi_full_analysis');
+      case 'bazi_save':
+        return t('bazi.retry.bazi_save');
+      case 'bazi_favorite':
+        return t('bazi.retry.bazi_favorite');
+      case 'bazi_ziwei':
+        return t('bazi.retry.bazi_ziwei');
+      default:
+        return t('common.action');
+    }
+  }, [t]);
+
+  const getCurrentPath = useCallback(() =>
+    `${location.pathname}${location.search || ''}${location.hash || ''}`, [location]);
+
+  const queueNetworkRetry = useCallback((action, payload) => {
+    const redirectPath = getCurrentPath();
+    const retryPayload = {
+      action,
+      payload,
+      redirectPath,
+      reason: 'network_error',
+    };
+    try {
+      setRetryAction(retryPayload);
+    } catch {
+      // Ignore retry persistence failures.
+    }
+    const stored = getRetryAction();
+    setPendingRetry(stored && stored.action ? stored : { ...retryPayload, createdAt: Date.now() });
+    const label = getRetryLabel(action);
+    pushToast({
+      type: 'error',
+      message: t('errors.actionQueued', { label }),
+    });
+  }, [getCurrentPath, getRetryAction, getRetryLabel, pushToast, setRetryAction, t]);
+
+  const clearPendingRetry = useCallback(() => {
+    clearRetryAction();
+    setPendingRetry(null);
+    retryAutoAttemptRef.current = null;
+  }, [clearRetryAction]);
+
+  const redirectForSessionExpired = useCallback((action, payload) => {
+    const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
+    try {
+      if (action) {
+        setRetryAction({ action, payload, redirectPath, reason: 'session_expired' });
+      }
+    } catch {
+      // Ignore retry persistence failures.
+    }
+    try {
+      logout({ preserveRetry: true });
+    } catch {
+      // Ignore logout failures.
+    }
+    try {
+      localStorage.setItem('bazi_session_expired', '1');
+    } catch {
+      // Ignore storage failures.
+    }
+    const params = new URLSearchParams({ reason: 'session_expired', next: redirectPath });
+    const target = `/login?${params.toString()}`;
+    navigate(target, { replace: true, state: { from: redirectPath } });
+    window.setTimeout(() => {
+      const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+      if (currentPath !== target) {
+        window.location.assign(target);
+      }
+    }, 50);
+  }, [location, logout, navigate, setRetryAction]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -195,91 +263,7 @@ export default function useBaziCalculation() {
     };
     loadLocations();
     return () => controller.abort();
-  }, []);
-
-  const getRetryLabel = (action) => {
-    switch (action) {
-      case 'bazi_calculate':
-        return t('bazi.retry.bazi_calculate');
-      case 'bazi_full_analysis':
-        return t('bazi.retry.bazi_full_analysis');
-      case 'bazi_save':
-        return t('bazi.retry.bazi_save');
-      case 'bazi_favorite':
-        return t('bazi.retry.bazi_favorite');
-      case 'bazi_ziwei':
-        return t('bazi.retry.bazi_ziwei');
-      default:
-        return t('common.action');
-    }
-  };
-
-  const getCurrentPath = () =>
-    `${location.pathname}${location.search || ''}${location.hash || ''}`;
-
-  const queueNetworkRetry = (action, payload, message) => {
-    const redirectPath = getCurrentPath();
-    const retryPayload = {
-      action,
-      payload,
-      redirectPath,
-      reason: 'network_error',
-    };
-    try {
-      setRetryAction(retryPayload);
-    } catch {
-      // Ignore retry persistence failures.
-    }
-    const stored = getRetryAction();
-    setPendingRetry(stored && stored.action ? stored : { ...retryPayload, createdAt: Date.now() });
-    const label = getRetryLabel(action);
-    pushToast({
-      type: 'error',
-      message: t('errors.actionQueued', { label }),
-    });
-  };
-
-  const clearPendingRetry = () => {
-    clearRetryAction();
-    setPendingRetry(null);
-    retryAutoAttemptRef.current = null;
-  };
-
-  const attemptRetry = (source = 'manual') => {
-    const retry = pendingRetry || getRetryAction();
-    if (!retry || retry.reason !== 'network_error') return;
-    if (retryHandledRef.current === retry.createdAt) return;
-    if (!isOnline) {
-      pushToast({ type: 'error', message: t('errors.offline') });
-      return;
-    }
-    if (retry.action !== 'bazi_calculate' && !isAuthenticated) {
-      pushToast({ type: 'error', message: t('bazi.loginRequired') });
-      clearPendingRetry();
-      return;
-    }
-    retryHandledRef.current = retry.createdAt;
-    clearPendingRetry();
-    if (retry.action === 'bazi_calculate') {
-      performCalculation(retry.payload, { skipValidation: true });
-      return;
-    }
-    if (retry.action === 'bazi_full_analysis') {
-      handleFullAnalysis(retry.payload || null);
-      return;
-    }
-    if (retry.action === 'bazi_save') {
-      handleSaveRecord(retry.payload || null);
-      return;
-    }
-    if (retry.action === 'bazi_favorite') {
-      handleAddFavorite(retry.payload?.recordId || null);
-      return;
-    }
-    if (retry.action === 'bazi_ziwei') {
-      handleZiweiGenerate(retry.payload || null);
-    }
-  };
+  }, [t]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -291,7 +275,7 @@ export default function useBaziCalculation() {
         wsRef.current = null;
       }
     };
-  }, []);
+  }, [clearToasts]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -338,7 +322,7 @@ export default function useBaziCalculation() {
     } catch (error) {
       localStorage.removeItem(GUEST_STORAGE_KEY);
     }
-  }, [isAuthenticated, t]);
+  }, [isAuthenticated, pushToast, t]);
 
   useEffect(() => {
     if (isAuthenticated) return;
@@ -493,27 +477,27 @@ export default function useBaziCalculation() {
     });
   };
 
-  const validate = () => {
+  const validate = useCallback(() => {
     return getFieldErrors(formData, t);
-  };
+  }, [formData, t]);
 
   const dateInputLimits = getDateInputLimits(formData);
 
-  const getFirstErrorMessage = (nextErrors) => {
+  const getFirstErrorMessage = useCallback((nextErrors) => {
     const firstMessage = Object.values(nextErrors).find((value) => typeof value === 'string' && value.trim());
     return firstMessage || t('iching.errors.correctFields');
-  };
+  }, [t]);
   const errorAnnouncement = Object.keys(errors).length ? getFirstErrorMessage(errors) : '';
 
-  const resolveTimezoneOffsetMinutesFor = (timezone) => {
+  const resolveTimezoneOffsetMinutesFor = useCallback((timezone) => {
     const parsed = parseTimezoneOffsetMinutes(timezone);
     if (Number.isFinite(parsed)) return parsed;
     const trimmed = typeof timezone === 'string' ? timezone.trim() : '';
     if (trimmed) return null;
     return -new Date().getTimezoneOffset();
-  };
+  }, []);
 
-  const buildPayloadFrom = (data) => ({
+  const buildPayloadFrom = useCallback((data) => ({
     ...data,
     birthYear: Number(data.birthYear),
     birthMonth: Number(data.birthMonth),
@@ -522,11 +506,11 @@ export default function useBaziCalculation() {
     birthLocation: normalizeOptionalText(data.birthLocation),
     timezone: normalizeOptionalText(data.timezone),
     timezoneOffsetMinutes: resolveTimezoneOffsetMinutesFor(data.timezone),
-  });
+  }), [resolveTimezoneOffsetMinutesFor]);
 
-  const buildPayload = () => buildPayloadFrom(formData);
+  const buildPayload = useCallback(() => buildPayloadFrom(formData), [buildPayloadFrom, formData]);
 
-  const performCalculation = async (payload, { skipValidation = false } = {}) => {
+  const performCalculation = useCallback(async (payload, { skipValidation = false } = {}) => {
     if (calculateInFlightRef.current || isCalculating) return;
     if (!skipValidation) {
       const nextErrors = validate();
@@ -569,7 +553,7 @@ export default function useBaziCalculation() {
       calculateInFlightRef.current = false;
       runIfMounted(() => setIsCalculating(false));
     }
-  };
+  }, [calculateInFlightRef, formData, getFirstErrorMessage, getNetworkErrorMessage, isCalculating, pushToast, queueNetworkRetry, readErrorMessage, runIfMounted, setGlobalBaziResult, t, validate]);
 
   const handleCalculate = async (event) => {
     event.preventDefault();
@@ -581,7 +565,7 @@ export default function useBaziCalculation() {
     await performCalculation(payload);
   };
 
-  const handleFullAnalysis = async (overridePayload = null) => {
+  const handleFullAnalysis = useCallback(async (overridePayload = null) => {
     if (!isAuthenticated) {
       pushToast({ type: 'error', message: t('bazi.loginRequired') });
       return;
@@ -635,7 +619,7 @@ export default function useBaziCalculation() {
     } finally {
       runIfMounted(() => setIsFullLoading(false));
     }
-  };
+  }, [authFetch, buildPayload, formData, getNetworkErrorMessage, isAuthenticated, isFullLoading, pushToast, queueNetworkRetry, readErrorMessage, redirectForSessionExpired, runIfMounted, setGlobalBaziResult, t]);
 
   useEffect(() => {
     if (prefillHandledRef.current) return;
@@ -680,7 +664,7 @@ export default function useBaziCalculation() {
     }
   }, [location.state, handleFullAnalysis, performCalculation, buildPayloadFrom]);
 
-  const handleSaveRecord = async (overridePayload = null) => {
+  const handleSaveRecord = useCallback(async (overridePayload = null) => {
     if (!isAuthenticated) {
       pushToast({ type: 'error', message: t('bazi.loginRequired') });
       return;
@@ -787,9 +771,9 @@ export default function useBaziCalculation() {
       saveInFlightRef.current = false;
       runIfMounted(() => setIsSaving(false));
     }
-  };
+  }, [authFetch, baseResult, buildPayload, fullResult, getNetworkErrorMessage, isAuthenticated, isSaving, pushToast, queueNetworkRetry, readErrorMessage, runIfMounted, t]);
 
-  const handleAddFavorite = async (overrideRecordId = null) => {
+  const handleAddFavorite = useCallback(async (overrideRecordId = null) => {
     if (!isAuthenticated) {
       pushToast({ type: 'error', message: t('bazi.loginRequired') });
       return;
@@ -836,9 +820,9 @@ export default function useBaziCalculation() {
     } finally {
       runIfMounted(() => setIsFavoriting(false));
     }
-  };
+  }, [authFetch, getNetworkErrorMessage, isAuthenticated, isFavoriting, pushToast, queueNetworkRetry, readErrorMessage, runIfMounted, savedRecord?.id, t]);
 
-  const handleZiweiGenerate = async (overridePayload = null) => {
+  const handleZiweiGenerate = useCallback(async (overridePayload = null) => {
     if (ziweiLoading) return;
     if (!isAuthenticated) {
       const message = t('bazi.loginRequired');
@@ -905,7 +889,43 @@ export default function useBaziCalculation() {
     } finally {
       runIfMounted(() => setZiweiLoading(false));
     }
-  };
+  }, [authFetch, buildPayload, getFirstErrorMessage, getNetworkErrorMessage, isAuthenticated, pushToast, queueNetworkRetry, readErrorMessage, runIfMounted, t, validate, ziweiLoading]);
+
+  const attemptRetry = useCallback(() => {
+    const retry = pendingRetry || getRetryAction();
+    if (!retry || retry.reason !== 'network_error') return;
+    if (retryHandledRef.current === retry.createdAt) return;
+    if (!isOnline) {
+      pushToast({ type: 'error', message: t('errors.offline') });
+      return;
+    }
+    if (retry.action !== 'bazi_calculate' && !isAuthenticated) {
+      pushToast({ type: 'error', message: t('bazi.loginRequired') });
+      clearPendingRetry();
+      return;
+    }
+    retryHandledRef.current = retry.createdAt;
+    clearPendingRetry();
+    if (retry.action === 'bazi_calculate') {
+      performCalculation(retry.payload, { skipValidation: true });
+      return;
+    }
+    if (retry.action === 'bazi_full_analysis') {
+      handleFullAnalysis(retry.payload || null);
+      return;
+    }
+    if (retry.action === 'bazi_save') {
+      handleSaveRecord(retry.payload || null);
+      return;
+    }
+    if (retry.action === 'bazi_favorite') {
+      handleAddFavorite(retry.payload?.recordId || null);
+      return;
+    }
+    if (retry.action === 'bazi_ziwei') {
+      handleZiweiGenerate(retry.payload || null);
+    }
+  }, [clearPendingRetry, getRetryAction, handleAddFavorite, handleFullAnalysis, handleSaveRecord, handleZiweiGenerate, isAuthenticated, isOnline, pendingRetry, performCalculation, pushToast, t]);
 
   const handleOpenHistory = () => {
     const recordId = savedRecord?.id;
@@ -952,6 +972,11 @@ export default function useBaziCalculation() {
     location.pathname,
     location.search,
     location.hash,
+    handleFullAnalysis,
+    handleSaveRecord,
+    handleAddFavorite,
+    handleZiweiGenerate,
+    getCurrentPath,
   ]);
 
   useEffect(() => {
@@ -961,7 +986,7 @@ export default function useBaziCalculation() {
     if (retryAutoAttemptRef.current === pendingRetry.createdAt) return;
     retryAutoAttemptRef.current = pendingRetry.createdAt;
     attemptRetry('online');
-  }, [pendingRetry, isOnline]);
+  }, [pendingRetry, isOnline, attemptRetry]);
 
   const statusStyle = (type) =>
     type === 'error'
@@ -971,35 +996,6 @@ export default function useBaziCalculation() {
 
   const [aiResult, setAiResult] = useState(null);
   const displayAiResult = aiResult;
-  const redirectForSessionExpired = (action, payload) => {
-    const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
-    try {
-      if (action) {
-        setRetryAction({ action, payload, redirectPath, reason: 'session_expired' });
-      }
-    } catch {
-      // Ignore retry persistence failures.
-    }
-    try {
-      logout({ preserveRetry: true });
-    } catch {
-      // Ignore logout failures.
-    }
-    try {
-      localStorage.setItem('bazi_session_expired', '1');
-    } catch {
-      // Ignore storage failures.
-    }
-    const params = new URLSearchParams({ reason: 'session_expired', next: redirectPath });
-    const target = `/login?${params.toString()}`;
-    navigate(target, { replace: true, state: { from: redirectPath } });
-    window.setTimeout(() => {
-      const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
-      if (currentPath !== target) {
-        window.location.assign(target);
-      }
-    }, 50);
-  };
 
   const resolveWsUrl = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';

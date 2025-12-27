@@ -1,4 +1,4 @@
-import { NUMERIC_FIELD_LIMITS, DEFAULT_FORM_KEYS } from './baziConstants';
+import { DEFAULT_FORM_KEYS } from './baziConstants';
 import { getBrowserTimezoneLabel } from './baziTimezoneUtils';
 
 // Form data utilities

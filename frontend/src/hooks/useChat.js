@@ -5,7 +5,7 @@ import { useBaziContext } from '../context/BaziContext';
 const RECONNECT_DELAY = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
-export const useChat = (options = {}) => {
+export const useChat = () => {
   const { token } = useAuth();
   const { baziResult } = useBaziContext();
   const [status, setStatus] = useState('disconnected');
@@ -17,7 +17,7 @@ export const useChat = (options = {}) => {
   const reconnectAttempts = useRef(0);
   const reconnectTimer = useRef(null);
   const shouldReconnect = useRef(true);
-  const connectRef = useRef(() => {});
+  const connectRef = useRef(() => { });
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -171,9 +171,12 @@ export const useChat = (options = {}) => {
   }, [baziResult, status, token]);
 
   useEffect(() => {
-    if (!token) return () => {};
-    connect();
+    if (!token) return () => { };
+    const timer = setTimeout(() => {
+      connect();
+    }, 0);
     return () => {
+      clearTimeout(timer);
       disconnect();
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current);

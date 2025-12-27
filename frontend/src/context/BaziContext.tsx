@@ -1,10 +1,10 @@
 import { ReactNode, createContext, useContext, useMemo, useState } from 'react';
 
 export interface BaziResult {
-  chart?: any;
+  chart?: Record<string, unknown>;
   analysis?: string;
-  lunar?: any;
-  record?: any;
+  lunar?: Record<string, unknown>;
+  record?: Record<string, unknown>;
 }
 
 interface BaziContextType {
