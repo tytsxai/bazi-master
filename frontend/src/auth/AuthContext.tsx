@@ -465,18 +465,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [clearSessionState, expireSession, scheduleIdleTimeout, token]);
 
   useEffect(() => {
-    if (!token) return;
-    const loadProfileName = async () => {
-      try {
-        await refreshProfileName();
-      } catch {
-        // Ignore errors
-      }
-    };
-    void loadProfileName();
-  }, [refreshProfileName, token]);
-
-  useEffect(() => {
     if (!token || user) return;
     const loadUser = async () => {
       try {
