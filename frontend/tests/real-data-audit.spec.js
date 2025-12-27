@@ -12,7 +12,12 @@ test('Real data audit flow with unique BaZi record and cleanup', async ({ page }
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));
   page.on('console', (msg) => {
-    if (msg.type() === 'error') consoleErrors.push(msg.text());
+    if (msg.type() === 'error') {
+      const text = msg.text();
+      // Filter out expected WebSocket connection errors in test environment
+      if (text.includes('WS error') || text.includes('WebSocket')) return;
+      consoleErrors.push(text);
+    }
   });
 
   await page.addInitScript(() => {
