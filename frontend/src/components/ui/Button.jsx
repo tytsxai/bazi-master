@@ -16,7 +16,7 @@ const SIZES = {
     xl: 'px-8 py-3 font-bold text-base',
 };
 
-export default function Button({
+const Button = React.forwardRef(function Button({
     children,
     variant = 'primary',
     size = 'md',
@@ -26,7 +26,7 @@ export default function Button({
     type = 'button',
     fullWidth = false,
     ...rest
-}) {
+}, ref) {
     const baseClass = 'inline-flex items-center justify-center rounded-full transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none';
     const variantClass = VARIANTS[variant] || VARIANTS.primary;
     const sizeClass = SIZES[size] || SIZES.md;
@@ -34,6 +34,7 @@ export default function Button({
 
     return (
         <button
+            ref={ref}
             type={type}
             disabled={disabled || isLoading}
             className={`${baseClass} ${variantClass} ${sizeClass} ${widthClass} ${className}`}
@@ -43,4 +44,8 @@ export default function Button({
             {children}
         </button>
     );
-}
+});
+
+Button.displayName = 'Button';
+
+export default Button;

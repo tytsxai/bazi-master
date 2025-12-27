@@ -320,13 +320,13 @@ export default function Profile() {
         throw new Error(message);
       }
       await res.json();
+      setStatus({ type: 'success', message: t('profile.settingsSaved') });
       if (locale !== i18n.language) {
         void i18n.changeLanguage(locale);
       }
       setPreferredAiProvider(nextPreferences.aiProvider || '');
       setProfileName(nextPreferences.profileName);
       savedSettingsRef.current = { locale, preferences: nextPreferences };
-      setStatus({ type: 'success', message: t('profile.settingsSaved') });
     } catch (error) {
       console.error('Failed to save settings', error);
       setStatus({ type: 'error', message: error.message || t('profile.loadError') });

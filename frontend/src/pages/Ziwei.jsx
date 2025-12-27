@@ -360,6 +360,11 @@ export default function Ziwei() {
     handleAiInterpret();
   };
 
+  const requestDeleteConfirm = (record) => {
+    if (!record) return;
+    setConfirmDeleteRecord(record);
+  };
+
   const handleConfirmDelete = async () => {
     if (!confirmDeleteRecord) return;
     const recordId = confirmDeleteRecord.id;
@@ -549,6 +554,55 @@ export default function Ziwei() {
               aiResult={aiResult}
             />
           </>
+        )}
+
+        {isAuthenticated && (
+          <section className="mt-8 rounded-3xl border border-white/10 bg-black/30 p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display text-2xl text-white">{t('history.title')}</h2>
+                <p className="text-sm text-white/60">{t('history.subtitle')}</p>
+              </div>
+              <div className="text-xs text-white/60">{t('history.count', { count: history.length })}</div>
+            </div>
+
+            {historyLoading ? (
+              <p className="mt-4 text-sm text-white/60">{t('history.recordLoading')}</p>
+            ) : history.length ? (
+              <div className="mt-4 grid gap-4">
+                {history.map((record) => {
+                  const birthKey = `${record.birthYear}-${record.birthMonth}-${record.birthDay}-${record.birthHour}`;
+                  return (
+                    <article
+                      key={record.id}
+                      data-testid="ziwei-history-card"
+                      data-record-id={record.id}
+                      data-birth={birthKey}
+                      data-gender={record.gender}
+                      className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm text-white">{birthKey} · {record.gender}</div>
+                          <div className="mt-1 text-xs text-white/60">{new Date(record.createdAt).toLocaleString()}</div>
+                        </div>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          data-testid="ziwei-history-delete"
+                          onClick={() => requestDeleteConfirm(record)}
+                        >
+                          {t('common.delete')}
+                        </Button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-white/60">{t('history.empty')}</p>
+            )}
+          </section>
         )}
       </div>
     </main>

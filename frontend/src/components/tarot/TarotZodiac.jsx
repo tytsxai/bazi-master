@@ -85,7 +85,7 @@ export default function TarotZodiac({
                             {t(`zodiac.signs.${horoscope.sign.name.toLowerCase()}`)} {t(`zodiac.periods.${horoscope.period}`)} {t('tarot.horoscope')}
                         </h3>
                         <p className="text-xs text-white/60">
-                            {t(`zodiac.ranges.${horoscope.sign.name.toLowerCase()}`)} • {t('zodiac.generatedAt', { date: new Date(horoscope.generatedAt).toLocaleString() })}
+                            {horoscope.range} • {t(`zodiac.ranges.${horoscope.sign.name.toLowerCase()}`)} • {t('zodiac.generatedAt', { date: new Date(horoscope.generatedAt).toLocaleString() })}
                         </p>
                     </div>
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
