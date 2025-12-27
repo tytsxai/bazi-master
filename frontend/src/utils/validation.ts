@@ -1,6 +1,6 @@
 export const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export const validateEmail = (email: string, t: any) => {
+export const validateEmail = (email: string, t: (key: string) => string) => {
   if (!email.trim()) {
     return t('login.errors.emailRequired');
   }
@@ -10,14 +10,14 @@ export const validateEmail = (email: string, t: any) => {
   return '';
 };
 
-export const validatePasswordStrength = (value: string, t: any) => {
+export const validatePasswordStrength = (value: string, t: (key: string) => string) => {
   const trimmed = value.trim();
   if (trimmed.length < 8) return t('login.errors.passwordStrength');
   if (!/[A-Za-z]/.test(trimmed) || !/\d/.test(trimmed)) return t('login.errors.passwordStrength');
   return '';
 };
 
-export const validateLogin = (email: string, password: string, t: any) => {
+export const validateLogin = (email: string, password: string, t: (key: string) => string) => {
   const errors: Record<string, string> = {};
   const emailError = validateEmail(email, t);
   if (emailError) errors.email = emailError;

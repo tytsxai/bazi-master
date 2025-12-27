@@ -6,7 +6,7 @@ interface ApiErrorPayload {
   errors?: (string | number)[];
 }
 
-export const getApiErrorMessage = (payload: any, fallback: string): string => {
+export const getApiErrorMessage = (payload: unknown, fallback: string): string => {
   if (!payload) return fallback;
   if (typeof payload === 'string' && payload.trim()) return payload;
 
