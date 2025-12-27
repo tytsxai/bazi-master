@@ -1022,13 +1022,35 @@ export default function useHistoryData({ t }) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const filteredRecords = useMemo(
     () => {
+      const normalizedQuery = normalizeText(query).toLowerCase();
       const normalizedGenderFilter = genderFilter === 'male' || genderFilter === 'female' ? genderFilter : null;
       const nextRecords = normalizedGenderFilter
         ? records.filter((record) => normalizeText(record?.gender).toLowerCase() === normalizedGenderFilter)
         : records;
-      return sortRecordsForDisplay(nextRecords, sortOption);
+
+      const queryFilteredRecords = normalizedQuery
+        ? nextRecords.filter((record) => {
+          const birthLocation = normalizeText(record?.birthLocation || '').toLowerCase();
+          const timezone = normalizeText(record?.timezone || '').toLowerCase();
+          const pillars = record?.pillars;
+          const pillarText = pillars
+            ? normalizeText(
+              `${pillars?.year?.stem || ''}${pillars?.year?.branch || ''}`
+              + ` ${pillars?.month?.stem || ''}${pillars?.month?.branch || ''}`
+              + ` ${pillars?.day?.stem || ''}${pillars?.day?.branch || ''}`
+              + ` ${pillars?.hour?.stem || ''}${pillars?.hour?.branch || ''}`
+            ).toLowerCase()
+            : '';
+
+          return birthLocation.includes(normalizedQuery)
+            || timezone.includes(normalizedQuery)
+            || pillarText.includes(normalizedQuery);
+        })
+        : nextRecords;
+
+      return sortRecordsForDisplay(queryFilteredRecords, sortOption);
     },
-    [records, sortOption, genderFilter],
+    [records, sortOption, genderFilter, query],
   );
   const filteredIds = useMemo(() => filteredRecords.map((record) => record.id), [filteredRecords]);
   const filteredIdSet = useMemo(() => new Set(filteredIds), [filteredIds]);
