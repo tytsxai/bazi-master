@@ -173,6 +173,11 @@ export const useChat = (options = {}) => {
         }
         return () => {
             disconnect();
+            // Ensure reconnect timer is cleared on unmount to prevent memory leaks
+            if (reconnectTimer.current) {
+                clearTimeout(reconnectTimer.current);
+                reconnectTimer.current = null;
+            }
         };
     }, [token, connect, disconnect]);
 

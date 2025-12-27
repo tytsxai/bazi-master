@@ -10,6 +10,7 @@ export default function ChatInterface({ isOpen, onClose }) {
     const [input, setInput] = useState('');
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+    const focusTimeoutRef = useRef(null);
 
     // Auto-scroll to bottom
     const scrollToBottom = () => {
@@ -26,8 +27,15 @@ export default function ChatInterface({ isOpen, onClose }) {
         }
         // Focus input when opening
         if (isOpen && status === 'connected') {
-            setTimeout(() => inputRef.current?.focus(), 100);
+            focusTimeoutRef.current = setTimeout(() => inputRef.current?.focus(), 100);
         }
+        return () => {
+            // Cleanup timeout to prevent memory leak on unmount
+            if (focusTimeoutRef.current) {
+                clearTimeout(focusTimeoutRef.current);
+                focusTimeoutRef.current = null;
+            }
+        };
     }, [isOpen, connect, status]);
 
     const handleSendMessage = () => {
