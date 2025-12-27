@@ -149,6 +149,7 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
                   status: { type: 'string' },
                   totalConnections: { type: 'integer' },
                   activeAiRequests: { type: 'integer' },
+                  timestamp: { type: 'string', format: 'date-time' },
                 },
               },
             },

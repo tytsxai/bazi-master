@@ -59,6 +59,7 @@ npm -C frontend run dev
 - `REDIS_URL`：可选；配置后会话与缓存使用 Redis。
 - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`：可选；未提供时 AI provider 默认为 `mock`。
 - `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX`：生产建议启用速率限制。
+- `SENTRY_DSN` / `VITE_SENTRY_DSN`：可选；后端/前端错误与性能监控上报。
 
 ## 测试
 ```bash

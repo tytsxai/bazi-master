@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "node server.js",
     "start": "NODE_ENV=production node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma && NODE_ENV=production node server.js",
-    "test": "NODE_ENV=test SESSION_TOKEN_SECRET=test-session-secret-for-auth-me-test DATABASE_URL=file:../prisma/dev.db node --test",
-    "test:coverage": "NODE_ENV=test SESSION_TOKEN_SECRET=test-session-secret-for-auth-me-test DATABASE_URL=file:../prisma/dev.db node --experimental-test-coverage --test",
+    "test": "NODE_ENV=test SESSION_TOKEN_SECRET=test-session-secret-for-auth-me-test DATABASE_URL=file:../prisma/dev.db node --test --test-concurrency=1",
+    "test:coverage": "NODE_ENV=test SESSION_TOKEN_SECRET=test-session-secret-for-auth-me-test DATABASE_URL=file:../prisma/dev.db node --experimental-test-coverage --test --test-concurrency=1",
     "postinstall": "node scripts/prisma.mjs generate --schema=../prisma/schema.prisma",
     "prisma:generate": "node scripts/prisma.mjs generate --schema=../prisma/schema.prisma",
     "prisma:push": "node scripts/prisma.mjs db push --schema=../prisma/schema.prisma",
