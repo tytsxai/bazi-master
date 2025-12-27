@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import useHistoryData from '../useHistoryData';
@@ -22,6 +22,10 @@ const wrapper = ({ children }) => <MemoryRouter>{children}</MemoryRouter>;
 
 describe('useHistoryData', () => {
   const t = (key) => key;
+
+  beforeEach(() => {
+    authFetchMock.mockReset();
+  });
 
   it('initializes filters and records', () => {
     const { result } = renderHook(() => useHistoryData({ t }), { wrapper });
