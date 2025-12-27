@@ -2,14 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-// Mock dependencies
+const authState = {
+  token: null,
+  isAuthenticated: false,
+  login: vi.fn(),
+  logout: vi.fn(),
+};
+
 vi.mock('../../auth/AuthContext', () => ({
-  useAuth: () => ({
-    token: null,
-    isAuthenticated: false,
-    login: vi.fn(),
-    logout: vi.fn(),
-  }),
+  useAuth: () => authState,
 }));
 
 vi.mock('../../auth/useAuthFetch', () => ({
@@ -43,6 +44,8 @@ const renderWithRouter = (component) => {
 describe('Ziwei', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authState.token = null;
+    authState.isAuthenticated = false;
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ records: [] }),
@@ -104,6 +107,8 @@ describe('Ziwei', () => {
 describe('Ziwei - Form Validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authState.token = 'test-token';
+    authState.isAuthenticated = true;
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({}),

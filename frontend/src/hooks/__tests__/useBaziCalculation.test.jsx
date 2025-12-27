@@ -32,6 +32,7 @@ vi.mock('../../context/BaziContext', () => ({
 }));
 
 const wrapper = ({ children }) => <MemoryRouter>{children}</MemoryRouter>;
+const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('useBaziCalculation', () => {
   beforeEach(() => {
@@ -46,8 +47,12 @@ describe('useBaziCalculation', () => {
     vi.clearAllMocks();
   });
 
-  it('initializes with default form data', () => {
+  it('initializes with default form data', async () => {
     const { result } = renderHook(() => useBaziCalculation(), { wrapper });
+
+    await act(async () => {
+      await flushPromises();
+    });
 
     expect(result.current.formData).toBeDefined();
     expect(result.current.formData.birthYear).toBeDefined();
@@ -55,15 +60,23 @@ describe('useBaziCalculation', () => {
     expect(result.current.formData.birthDay).toBeDefined();
   });
 
-  it('initializes with null results', () => {
+  it('initializes with null results', async () => {
     const { result } = renderHook(() => useBaziCalculation(), { wrapper });
+
+    await act(async () => {
+      await flushPromises();
+    });
 
     expect(result.current.baseResult).toBeNull();
     expect(result.current.fullResult).toBeNull();
   });
 
-  it('updates form data when updateField is called', () => {
+  it('updates form data when updateField is called', async () => {
     const { result } = renderHook(() => useBaziCalculation(), { wrapper });
+
+    await act(async () => {
+      await flushPromises();
+    });
 
     act(() => {
       const handler = result.current.updateField('birthYear');
@@ -76,6 +89,10 @@ describe('useBaziCalculation', () => {
   it('validates form before calculation', async () => {
     const { result } = renderHook(() => useBaziCalculation(), { wrapper });
 
+    await act(async () => {
+      await flushPromises();
+    });
+
     act(() => {
       result.current.updateField('birthYear')({ target: { value: '' } });
     });
@@ -87,8 +104,12 @@ describe('useBaziCalculation', () => {
     expect(Object.keys(result.current.errors).length).toBeGreaterThan(0);
   });
 
-  it('clears errors on reset confirmation', () => {
+  it('clears errors on reset confirmation', async () => {
     const { result } = renderHook(() => useBaziCalculation(), { wrapper });
+
+    await act(async () => {
+      await flushPromises();
+    });
 
     act(() => {
       result.current.updateField('birthYear')({ target: { value: '' } });
