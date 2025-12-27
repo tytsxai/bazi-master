@@ -265,6 +265,31 @@ router.post('/records', requireAuth, async (req, res) => {
     if (!validation.ok) return res.status(400).json({ error: 'Invalid input' });
 
     try {
+        const recentCutoff = new Date(Date.now() - 60 * 1000);
+        const recentDuplicate = await prisma.baziRecord.findFirst({
+            where: {
+                ...buildRecordData(validation.payload, req.user.id),
+                createdAt: { gte: recentCutoff },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        if (recentDuplicate) {
+            const trashed = await prisma.baziRecordTrash.findUnique({
+                where: {
+                    userId_recordId: {
+                        userId: req.user.id,
+                        recordId: recentDuplicate.id,
+                    },
+                },
+                select: { recordId: true },
+            });
+            if (!trashed) {
+                res.json({ record: serializeRecord(recentDuplicate) });
+                return;
+            }
+        }
+
         const calculation = await getBaziCalculation(validation.payload);
         const record = await prisma.baziRecord.create({
             data: {
