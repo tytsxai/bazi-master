@@ -15,6 +15,8 @@
   },
   "dependencies": {
     "@prisma/client": "^5.10.2",
+    "@sentry/node": "^10.32.1",
+    "@sentry/profiling-node": "^10.32.1",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "express": "^4.21.1",

@@ -3,6 +3,8 @@ import http from 'http';
 import compression from 'compression';
 import { pathToFileURL } from 'url';
 import swaggerUi from 'swagger-ui-express';
+import * as Sentry from '@sentry/node';
+import { nodeProfilingIntegration } from '@sentry/profiling-node';
 
 // Import configurations
 // Health Check imports
@@ -12,7 +14,7 @@ import { checkDatabase, checkRedis } from './services/health.service.js';
 import { logger } from './config/logger.js';
 import { ensureDatabaseUrl } from './config/database.js';
 import { getBaziCacheConfig, initAppConfig } from './config/app.js';
-import { prisma, initPrismaConfig } from './config/prisma.js';
+import { prisma } from './config/prisma.js';
 import { createRedisMirror, initRedis } from './config/redis.js';
 
 // Import middleware
@@ -21,8 +23,6 @@ import {
   createRateLimitMiddleware,
   helmetMiddleware,
   requestIdMiddleware,
-  requireAdmin,
-  requireAuth,
   urlLengthMiddleware,
   globalErrorHandler,
   notFoundHandler,
@@ -41,7 +41,6 @@ import apiRouter from './routes/api.js';
 // Initialize configurations
 ensureDatabaseUrl();
 const appConfig = initAppConfig();
-const prismaConfig = initPrismaConfig();
 const { ttlMs: BAZI_CACHE_TTL_MS } = getBaziCacheConfig();
 const SERVICE_NAME = 'bazi-master-backend';
 
@@ -49,7 +48,6 @@ const SERVICE_NAME = 'bazi-master-backend';
 const {
   PORT,
   JSON_BODY_LIMIT,
-  MAX_URL_LENGTH,
   RATE_LIMIT_ENABLED,
   RATE_LIMIT_MAX,
   RATE_LIMIT_WINDOW_MS,
@@ -60,10 +58,22 @@ const {
   NODE_ENV,
 } = appConfig;
 
-const { IS_SQLITE, IS_POSTGRES } = prismaConfig;
-
 // Initialize Express app
 const app = express();
+
+if (process.env.SENTRY_DSN && NODE_ENV === 'production') {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    integrations: [
+      nodeProfilingIntegration(),
+    ],
+    // Performance Monitoring
+    tracesSampleRate: 1.0, //  Capture 100% of the transactions
+    // Set sampling rate for profiling - this is relative to tracesSampleRate
+    profilesSampleRate: 1.0,
+  });
+}
+
 patchExpressAsync(app);
 
 // Trust proxy if configured
@@ -175,6 +185,9 @@ app.use('/api-docs', ...apiDocsGuards, swaggerUi.serve, swaggerUi.setup(openApiS
 app.use(notFoundHandler);
 
 // Global Error Handler
+if (process.env.SENTRY_DSN && NODE_ENV === 'production') {
+  Sentry.setupExpressErrorHandler(app);
+}
 app.use(globalErrorHandler);
 
 // Create HTTP server

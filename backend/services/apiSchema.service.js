@@ -28,7 +28,7 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
         bearerFormat: 'JWT',
       },
     },
-      schemas: {
+    schemas: {
       Error: {
         type: 'object',
         properties: {
@@ -130,6 +130,60 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
         required: ['recordId'],
         properties: {
           recordId: { type: 'integer', description: '要收藏的记录ID' },
+        },
+      },
+      AdminHealth: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['ok', 'degraded'] },
+          timestamp: { type: 'string', format: 'date-time' },
+          uptime: { type: 'number' },
+          checks: {
+            type: 'object',
+            properties: {
+              db: { type: 'object' },
+              redis: { type: 'object' },
+              websocket: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string' },
+                  totalConnections: { type: 'integer' },
+                  activeAiRequests: { type: 'integer' },
+                },
+              },
+            },
+          },
+          user: {
+            type: 'object',
+            properties: {
+              id: { type: 'integer' },
+              email: { type: 'string', format: 'email' },
+            },
+          },
+        },
+      },
+      IchingRecord: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          userId: { type: 'integer' },
+          hexagram: { type: 'object' },
+          resultingHexagram: { type: 'object' },
+          changingLines: { type: 'array', items: { type: 'integer' } },
+          userQuestion: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      TarotRecord: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          userId: { type: 'integer' },
+          spreadType: { type: 'string' },
+          cards: { type: 'string' },
+          userQuestion: { type: 'string' },
+          aiInterpretation: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' },
         },
       },
     },
@@ -556,6 +610,47 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
               },
             },
           },
+        },
+      },
+    },
+    '/api/admin/health': {
+      get: {
+        summary: '管理员健康检查',
+        description: '包含数据库、Redis和WebSocket监控连接数',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: '状态信息',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/AdminHealth' } } },
+          },
+          403: { description: '权限不足' },
+        },
+      },
+    },
+    '/api/iching/history': {
+      get: {
+        summary: '获取易经历史记录',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: '记录列表',
+            content: {
+              'application/json': {
+                schema: { type: 'array', items: { $ref: '#/components/schemas/IchingRecord' } },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        summary: '保存易经解卦',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/IchingRecord' } } },
+        },
+        responses: {
+          200: { description: '保存成功' },
         },
       },
     },
