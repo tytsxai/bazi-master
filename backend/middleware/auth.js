@@ -14,7 +14,7 @@ const sessionTokenSecret = isTest ? (envSecret || 'test-session-secret-for-auth-
 export const sessionStore = createSessionStore();
 export const isAdminUser = (user) => adminEmails.has(user.email);
 
-const authorizeToken = createAuthorizeToken({
+export const authorizeToken = createAuthorizeToken({
   prisma,
   sessionStore,
   isAdminUser,

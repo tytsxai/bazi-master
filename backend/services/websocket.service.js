@@ -1,16 +1,21 @@
 import { WebSocketServer } from 'ws';
 import { logger } from '../config/logger.js';
-import { generateAIContent } from './ai.service.js';
-import { getChatSystemPrompt } from './prompts.service.js';
+import { generateAIContent, resolveAiProvider, buildBaziPrompt } from './ai.service.js';
+import { getChatSystemPrompt, buildZiweiPrompt } from './prompts.service.js';
+import { authorizeToken } from '../middleware/auth.js';
+import { createAiGuard } from '../lib/concurrency.js';
 
 
 // Heartbeat interval
 
 // Heartbeat interval
 const PING_INTERVAL_MS = 30000;
+const MAX_MESSAGE_BYTES = 1_000_000;
+const wsAiGuard = createAiGuard();
+const AI_CONCURRENCY_ERROR = 'AI request already in progress. Please wait.';
 
 export const initWebsocketServer = (server) => {
-    const wss = new WebSocketServer({ noServer: true });
+    const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
 
     server.on('upgrade', (request, socket, head) => {
         // Basic path check if needed, e.g. /ws/ai
@@ -34,7 +39,17 @@ export const initWebsocketServer = (server) => {
 
         ws.on('message', async (message) => {
             try {
-                const data = JSON.parse(message);
+                const size = typeof message === 'string'
+                    ? Buffer.byteLength(message, 'utf8')
+                    : (message?.length || 0);
+                if (size > MAX_MESSAGE_BYTES) {
+                    sendError(ws, 'Message too large');
+                    closeSocket(ws, 1009, 'Message too large');
+                    return;
+                }
+
+                const raw = typeof message === 'string' ? message : message.toString('utf8');
+                const data = JSON.parse(raw);
                 await handleMessage(ws, data);
             } catch (error) {
                 logger.error({ error }, '[ws] Message handling error');
@@ -86,26 +101,91 @@ const sendDone = (ws) => {
     }
 };
 
-const handleMessage = async (ws, data) => {
-    const { type, payload } = data; // Added token/provider handling if needed
-
-    // Validate auth if necessary (omitted for brevity, assume relying on simple check or open for now as per plan/prototype)
-    // Ideally should verify token from data.token
-
-    if (type === 'chat_request') {
-        return handleChatRequest(ws, payload);
-    } else if (type === 'tarot_ai_request') {
-        return handleTarotRequest(ws, payload);
-    } else {
-        sendError(ws, `Unknown message type: ${type}`);
+const closeSocket = (ws, code = 1000, reason = 'Complete') => {
+    if (ws.readyState === ws.OPEN || ws.readyState === ws.CLOSING) {
+        try {
+            ws.close(code, reason);
+        } catch {
+            // ignore
+        }
     }
 };
 
-const handleChatRequest = async (ws, payload) => {
-    const { messages, provider, mode, context } = payload;
+const authorizeWebsocket = async (ws, token) => {
+    const normalized = typeof token === 'string' ? token.trim() : '';
+    if (!normalized) {
+        sendError(ws, 'Unauthorized');
+        closeSocket(ws, 1008, 'Unauthorized');
+        return null;
+    }
+    try {
+        const user = await authorizeToken(normalized);
+        ws.user = user;
+        return user;
+    } catch {
+        sendError(ws, 'Unauthorized');
+        closeSocket(ws, 1008, 'Unauthorized');
+        return null;
+    }
+};
+
+const handleMessage = async (ws, data) => {
+    const type = typeof data?.type === 'string' ? data.type : '';
+    const payload = data?.payload;
+    const provider = data?.provider ?? payload?.provider;
+    const token = data?.token ?? payload?.token;
+
+    if (!type) {
+        sendError(ws, 'Missing message type');
+        return;
+    }
+
+    const requiresAuth = [
+        'chat_request',
+        'tarot_ai_request',
+        'bazi_ai_request',
+        'ziwei_ai_request',
+        'iching_ai_request',
+    ].includes(type);
+
+    const user = requiresAuth
+        ? await authorizeWebsocket(ws, token)
+        : null;
+    if (requiresAuth && !user) return;
+
+    const release = requiresAuth ? wsAiGuard.acquire(user.id) : null;
+    if (requiresAuth && !release) {
+        sendError(ws, AI_CONCURRENCY_ERROR);
+        return;
+    }
+
+    try {
+        if (type === 'chat_request') {
+            return handleChatRequest(ws, payload, provider);
+        } else if (type === 'tarot_ai_request') {
+            return handleTarotRequest(ws, payload, provider);
+        } else if (type === 'bazi_ai_request') {
+            return handleBaziRequest(ws, payload, provider);
+        } else if (type === 'ziwei_ai_request') {
+            return handleZiweiRequest(ws, payload, provider);
+        } else if (type === 'iching_ai_request') {
+            return handleIchingRequest(ws, payload, provider);
+        }
+        sendError(ws, `Unknown message type: ${type}`);
+    } finally {
+        if (release) release();
+    }
+};
+
+const handleChatRequest = async (ws, payload, providerInput) => {
+    const { messages, mode, context } = payload || {};
+    const provider = providerInput ?? payload?.provider;
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return sendError(ws, 'Messages array is required');
+    }
+    if (messages.length > 50) {
+        return sendError(ws, 'Too many messages');
     }
 
     // System prompt for the assistant based on mode and context
@@ -128,8 +208,15 @@ const handleChatRequest = async (ws, payload) => {
     }
 };
 
-const handleTarotRequest = async (ws, payload) => {
-    const { spreadType, cards, userQuestion, provider } = payload;
+const handleTarotRequest = async (ws, payload, providerInput) => {
+    const { spreadType, cards, userQuestion } = payload || {};
+    const provider = providerInput ?? payload?.provider;
+
+    if (!Array.isArray(cards) || cards.length === 0) {
+        sendError(ws, 'Tarot cards required');
+        closeSocket(ws, 1008, 'Bad request');
+        return;
+    }
 
     // Construct prompt from tarot data
     const cardDescriptions = cards.map((c, i) =>
@@ -157,8 +244,136 @@ Interpret this spread, focusing on the question. connecting the cards together.
         });
 
         sendDone(ws);
+        closeSocket(ws, 1000, 'Tarot complete');
     } catch (error) {
         logger.error({ error }, '[ws] Tarot generation error');
         sendError(ws, 'Failed to generate interpretation');
+        closeSocket(ws, 1011, 'Tarot error');
+    }
+};
+
+const handleBaziRequest = async (ws, payload, providerInput) => {
+    if (!payload?.pillars) {
+        sendError(ws, 'BaZi data required');
+        closeSocket(ws, 1008, 'Bad request');
+        return;
+    }
+
+    let provider = null;
+    try {
+        provider = resolveAiProvider(providerInput);
+    } catch (error) {
+        sendError(ws, error.message || 'Invalid AI provider.');
+        closeSocket(ws, 1008, 'Bad provider');
+        return;
+    }
+
+    const { system, user, fallback } = buildBaziPrompt({
+        pillars: payload.pillars,
+        fiveElements: payload.fiveElements,
+        tenGods: payload.tenGods,
+        luckCycles: payload.luckCycles,
+        strength: payload.strength,
+    });
+
+    try {
+        ws.send(JSON.stringify({ type: 'start' }));
+        await generateAIContent({
+            system,
+            user,
+            fallback,
+            provider,
+            onChunk: (chunk) => sendChunk(ws, chunk),
+        });
+        sendDone(ws);
+        closeSocket(ws, 1000, 'BaZi complete');
+    } catch (error) {
+        logger.error({ error }, '[ws] BaZi generation error');
+        sendError(ws, 'Failed to generate BaZi interpretation');
+        closeSocket(ws, 1011, 'BaZi error');
+    }
+};
+
+const handleZiweiRequest = async (ws, payload, providerInput) => {
+    if (!payload?.chart) {
+        sendError(ws, 'Ziwei chart data required');
+        closeSocket(ws, 1008, 'Bad request');
+        return;
+    }
+
+    let provider = null;
+    try {
+        provider = resolveAiProvider(providerInput);
+    } catch (error) {
+        sendError(ws, error.message || 'Invalid AI provider.');
+        closeSocket(ws, 1008, 'Bad provider');
+        return;
+    }
+
+    const { system, user, fallback } = buildZiweiPrompt({ chart: payload.chart, birth: payload.birth || payload });
+
+    try {
+        ws.send(JSON.stringify({ type: 'start' }));
+        await generateAIContent({
+            system,
+            user,
+            fallback,
+            provider,
+            onChunk: (chunk) => sendChunk(ws, chunk),
+        });
+        sendDone(ws);
+        closeSocket(ws, 1000, 'Ziwei complete');
+    } catch (error) {
+        logger.error({ error }, '[ws] Ziwei generation error');
+        sendError(ws, 'Failed to generate Ziwei interpretation');
+        closeSocket(ws, 1011, 'Ziwei error');
+    }
+};
+
+const handleIchingRequest = async (ws, payload, providerInput) => {
+    if (!payload?.hexagram) {
+        sendError(ws, 'Hexagram data required');
+        closeSocket(ws, 1008, 'Bad request');
+        return;
+    }
+
+    let provider = null;
+    try {
+        provider = resolveAiProvider(providerInput);
+    } catch (error) {
+        sendError(ws, error.message || 'Invalid AI provider.');
+        closeSocket(ws, 1008, 'Bad provider');
+        return;
+    }
+
+    const system = 'You are an I Ching interpreter. Provide a concise reading in Markdown with sections: Overview, Changing Lines, Guidance. Keep under 220 words.';
+    const user = [
+        `Hexagram: ${payload.hexagram?.name || payload.hexagram?.number || 'Unknown'}`,
+        payload.resultingHexagram ? `Resulting: ${payload.resultingHexagram?.name || payload.resultingHexagram?.number}` : null,
+        Array.isArray(payload.changingLines) && payload.changingLines.length
+            ? `Changing Lines: ${payload.changingLines.join(', ')}`
+            : null,
+        payload.method ? `Method: ${payload.method}` : null,
+        payload.timeContext ? `Time Context: ${payload.timeContext}` : null,
+        payload.userQuestion ? `Question: ${payload.userQuestion}` : null,
+    ].filter(Boolean).join('\n');
+
+    const fallback = () => '## ☯️ I Ching Reading\n\n**Overview:** The hexagram advises steady progress with mindful timing.\n\n**Guidance:** Act with clarity, avoid forcing outcomes, and align with the changing conditions.';
+
+    try {
+        ws.send(JSON.stringify({ type: 'start' }));
+        await generateAIContent({
+            system,
+            user,
+            fallback,
+            provider,
+            onChunk: (chunk) => sendChunk(ws, chunk),
+        });
+        sendDone(ws);
+        closeSocket(ws, 1000, 'I Ching complete');
+    } catch (error) {
+        logger.error({ error }, '[ws] I Ching generation error');
+        sendError(ws, 'Failed to generate I Ching interpretation');
+        closeSocket(ws, 1011, 'I Ching error');
     }
 };

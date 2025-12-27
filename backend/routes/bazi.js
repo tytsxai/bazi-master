@@ -3,12 +3,16 @@ import { prisma } from '../config/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import {
     getBaziCalculation,
-    buildImportRecord
+    hasFullBaziResult
 } from '../services/calculations.service.js';
+import { buildBaziCacheKey, getCachedBaziCalculationAsync } from '../services/cache.service.js';
 import { validateBaziInput, parseIdParam } from '../utils/validation.js';
 import { parseRecordsQuery } from '../utils/query.js';
+import { buildSearchOr } from '../utils/search.js';
 import { generateAIContent, resolveAiProvider, buildBaziPrompt } from '../services/ai.service.js';
 import { createAiGuard } from '../lib/concurrency.js';
+import { buildBirthTimeMeta } from '../utils/timezone.js';
+import { resolveLocationCoordinates, computeTrueSolarTime } from '../services/solarTime.service.js';
 
 const router = express.Router();
 const aiGuard = createAiGuard();
@@ -22,15 +26,105 @@ const serializeRecord = (record) => ({
     luckCycles: record.luckCycles ? JSON.parse(record.luckCycles) : null,
 });
 
+const buildRecordData = (payload, userId) => ({
+    userId,
+    birthYear: payload.birthYear,
+    birthMonth: payload.birthMonth,
+    birthDay: payload.birthDay,
+    birthHour: payload.birthHour,
+    gender: payload.gender,
+    birthLocation: payload.birthLocation ?? null,
+    timezone: payload.timezone ?? null,
+});
+
+const buildTimeMetaForPayload = (payload) => {
+    const meta = buildBirthTimeMeta({
+        birthYear: payload?.birthYear,
+        birthMonth: payload?.birthMonth,
+        birthDay: payload?.birthDay,
+        birthHour: payload?.birthHour,
+        birthMinute: payload?.birthMinute,
+        timezone: payload?.timezone,
+        timezoneOffsetMinutes: payload?.timezoneOffsetMinutes,
+    });
+
+    const location = resolveLocationCoordinates(payload?.birthLocation);
+    const trueSolarCalc = location && Number.isFinite(meta?.timezoneOffsetMinutes)
+        ? computeTrueSolarTime({
+            birthYear: payload?.birthYear,
+            birthMonth: payload?.birthMonth,
+            birthDay: payload?.birthDay,
+            birthHour: payload?.birthHour,
+            birthMinute: payload?.birthMinute,
+            timezoneOffsetMinutes: meta.timezoneOffsetMinutes,
+            longitude: location.longitude,
+        })
+        : null;
+
+    const trueSolarTime = trueSolarCalc
+        ? {
+            applied: true,
+            correctionMinutes: trueSolarCalc.correctionMinutes,
+            correctedIso: trueSolarCalc.correctedDate?.toISOString?.() || null,
+            location: {
+                name: location?.name || (typeof payload?.birthLocation === 'string' ? payload.birthLocation.trim() : null),
+                latitude: location.latitude,
+                longitude: location.longitude,
+            },
+        }
+        : null;
+
+    return { ...meta, trueSolarTime };
+};
+
+const resolveRecordsOrderBy = (sortOption) => {
+    switch (sortOption) {
+        case 'created-asc':
+            return { createdAt: 'asc' };
+        case 'birth-asc':
+            return [
+                { birthYear: 'asc' },
+                { birthMonth: 'asc' },
+                { birthDay: 'asc' },
+                { birthHour: 'asc' },
+                { createdAt: 'asc' },
+            ];
+        case 'birth-desc':
+            return [
+                { birthYear: 'desc' },
+                { birthMonth: 'desc' },
+                { birthDay: 'desc' },
+                { birthHour: 'desc' },
+                { createdAt: 'desc' },
+            ];
+        case 'created-desc':
+        default:
+            return { createdAt: 'desc' };
+    }
+};
+
 router.post('/calculate', async (req, res) => {
     const validation = validateBaziInput(req.body);
     if (!validation.ok) {
         return res.status(400).json({ error: validation.reason === 'whitespace' ? 'Whitespace-only input' : 'Invalid input' });
     }
 
+    const timeMeta = buildTimeMetaForPayload(validation.payload);
+
     try {
-        const result = await getBaziCalculation(validation.payload);
-        res.json(result);
+        const cacheKey = buildBaziCacheKey(validation.payload);
+        if (cacheKey) {
+            const cached = await getCachedBaziCalculationAsync(cacheKey);
+            if (cached && hasFullBaziResult(cached)) {
+                res.set('x-bazi-cache', 'hit');
+                return res.json({ ...cached, ...timeMeta });
+            }
+        }
+        const result = await getBaziCalculation(validation.payload, { bypassCache: true });
+        if (cacheKey) {
+            res.set('x-bazi-cache', 'miss');
+        }
+        res.json({ ...result, ...timeMeta });
     } catch (error) {
         res.status(500).json({ error: 'Calculation error' });
     }
@@ -73,19 +167,23 @@ router.post('/full-analysis', requireAuth, async (req, res) => {
         return res.status(400).json({ error: validation.reason === 'whitespace' ? 'Whitespace-only input' : 'Invalid input' });
     }
 
+    const timeMeta = buildTimeMetaForPayload(validation.payload);
+
+    let provider = null;
+    try {
+        provider = resolveAiProvider(req.body?.provider);
+    } catch (error) {
+        return res.status(400).json({ error: error.message || 'Invalid AI provider.' });
+    }
+
     try {
         const calculation = await getBaziCalculation(validation.payload);
-
-        let provider = null;
-        try {
-            provider = resolveAiProvider(req.body?.provider);
-        } catch (error) {
-            // fallback silently
-        }
-
+        const enrichedCalculation = { ...calculation, ...timeMeta };
         const { system, user, fallback } = buildBaziPrompt({
-            ...calculation,
-            strength: req.body.strength
+            pillars: enrichedCalculation.pillars,
+            fiveElements: enrichedCalculation.fiveElements,
+            tenGods: enrichedCalculation.tenGods,
+            luckCycles: enrichedCalculation.luckCycles,
         });
 
         const release = await aiGuard.acquire(req.user.id);
@@ -94,8 +192,12 @@ router.post('/full-analysis', requireAuth, async (req, res) => {
         }
 
         try {
-            const content = await generateAIContent({ system, user, fallback, provider });
-            res.json({ calculation, interpretation: content });
+            const interpretation = await generateAIContent({ system, user, fallback, provider });
+            res.json({
+                ...enrichedCalculation,
+                calculation: enrichedCalculation,
+                interpretation,
+            });
         } finally {
             release();
         }
@@ -118,46 +220,39 @@ router.get('/records', requireAuth, async (req, res) => {
         });
         const trashedIds = trashed.map(t => t.recordId);
 
-        const where = { userId };
-
-        // Add search query filter
-        if (query.normalizedQuery) {
-            where.OR = [
-                // Add simple search logic or use buildSearchOr from query utils if exported
-                // Replicating basic search for now if query utils is not fully exposing it or just reuse if possible.
-                // Assuming parseSearchTerms/buildSearchOr are not imported here.
-                // We can use a basic contains for commonly text fields
-                { pillars: { contains: query.normalizedQuery } }, // Basic search
-                // Real app might need better search logic
-            ];
-            // If the query util `buildSearchOr` was available we would use it. 
-            // For now, let's keep it simple or check imports.
-            // Wait, import shows: parseRecordsQuery only.
-            // I'll stick to basic status filtering which is the core request.
-        }
-
-        // Status filtering
+        const statusWhere = { userId };
         if (query.normalizedStatus === 'active') {
-            where.id = { notIn: trashedIds };
+            statusWhere.id = { notIn: trashedIds };
         } else if (query.normalizedStatus === 'deleted') {
-            where.id = { in: trashedIds };
+            statusWhere.id = { in: trashedIds };
         }
-        // 'all' includes both (no filter on id)
+
+        const where = { ...statusWhere };
+
+        if (query.validGender) {
+            where.gender = query.validGender;
+        }
+
+        if (query.normalizedQuery) {
+            where.OR = buildSearchOr(query.normalizedQuery);
+        }
 
         const records = await prisma.baziRecord.findMany({
             where,
-            orderBy: { createdAt: 'desc' },
+            orderBy: resolveRecordsOrderBy(query.sortOption),
             skip: (query.safePage - 1) * query.safePageSize,
             take: query.safePageSize
         });
 
-        // Count for pagination
-        const totalCount = await prisma.baziRecord.count({ where });
+        const [totalCount, filteredCount] = await Promise.all([
+            prisma.baziRecord.count({ where: statusWhere }),
+            prisma.baziRecord.count({ where }),
+        ]);
 
         res.json({
             records: records.map(serializeRecord),
             totalCount,
-            filteredCount: totalCount // Approximation
+            filteredCount
         });
     } catch (error) {
         console.error(error);
@@ -173,8 +268,7 @@ router.post('/records', requireAuth, async (req, res) => {
         const calculation = await getBaziCalculation(validation.payload);
         const record = await prisma.baziRecord.create({
             data: {
-                userId: req.user.id,
-                ...validation.payload,
+                ...buildRecordData(validation.payload, req.user.id),
                 pillars: JSON.stringify(calculation.pillars),
                 fiveElements: JSON.stringify(calculation.fiveElements),
                 tenGods: JSON.stringify(calculation.tenGods),
@@ -205,16 +299,22 @@ router.post('/records/import', requireAuth, async (req, res) => {
             const validation = validateBaziInput(input);
             if (validation.ok) {
                 const calculation = await getBaziCalculation(validation.payload);
-                await prisma.baziRecord.create({
+                const record = await prisma.baziRecord.create({
                     data: {
-                        userId: req.user.id,
-                        ...validation.payload,
+                        ...buildRecordData(validation.payload, req.user.id),
                         pillars: JSON.stringify(calculation.pillars),
                         fiveElements: JSON.stringify(calculation.fiveElements),
                         tenGods: JSON.stringify(calculation.tenGods),
                         luckCycles: JSON.stringify(calculation.luckCycles),
                     }
                 });
+                if (input?.softDeleted) {
+                    await prisma.baziRecordTrash.upsert({
+                        where: { userId_recordId: { userId: req.user.id, recordId: record.id } },
+                        create: { userId: req.user.id, recordId: record.id },
+                        update: {}
+                    });
+                }
                 createdCount++;
             }
         }
@@ -229,22 +329,37 @@ router.get('/records/export', requireAuth, async (req, res) => {
     // Export logic: fetch all matching filters (ignoring page size usually, or large limit)
     const query = parseRecordsQuery(req.query);
     const userId = req.user.id;
+    const includeDeletedStatus = req.query?.includeDeletedStatus === '1' || req.query?.includeDeletedStatus === 1;
 
     try {
         const trashed = await prisma.baziRecordTrash.findMany({ where: { userId }, select: { recordId: true } });
         const trashedIds = trashed.map(t => t.recordId);
+        const trashedIdSet = new Set(trashedIds);
 
         const where = { userId };
         if (query.normalizedStatus === 'active') where.id = { notIn: trashedIds };
         else if (query.normalizedStatus === 'deleted') where.id = { in: trashedIds };
 
+        if (query.validGender) {
+            where.gender = query.validGender;
+        }
+        if (query.normalizedQuery) {
+            where.OR = buildSearchOr(query.normalizedQuery);
+        }
+
         const records = await prisma.baziRecord.findMany({
             where,
-            orderBy: { createdAt: 'desc' },
+            orderBy: resolveRecordsOrderBy(query.sortOption),
             take: 2000 // reasonable limit for export
         });
 
-        res.json(records.map(serializeRecord));
+        const payload = records.map((record) => {
+            const serialized = serializeRecord(record);
+            if (!includeDeletedStatus) return serialized;
+            return { ...serialized, softDeleted: trashedIdSet.has(record.id) };
+        });
+
+        res.json(payload);
     } catch (err) {
         res.status(500).json({ error: 'Export failed' });
     }

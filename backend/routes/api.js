@@ -1,5 +1,8 @@
 import express from 'express';
 import { checkDatabase, checkRedis } from '../services/health.service.js';
+import { handleLogin, handleRegister } from '../controllers/auth.controller.js';
+import { requireAuth, sessionStore } from '../middleware/auth.js';
+import { hasBaziCacheMirror } from '../services/cache.service.js';
 
 // Sub-routers
 import authRouter from './auth.js';
@@ -44,6 +47,20 @@ router.get('/ready', async (req, res) => {
         checks: { db, redis },
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
+    });
+});
+
+// Compatibility auth endpoints (legacy clients/tests)
+router.post('/register', handleRegister);
+router.post('/login', handleLogin);
+
+// System endpoints
+router.get('/system/cache-status', requireAuth, async (req, res) => {
+    const redis = await checkRedis();
+    res.json({
+        redis,
+        sessionCache: { mirror: sessionStore.hasMirror() },
+        baziCache: { mirror: hasBaziCacheMirror() },
     });
 });
 

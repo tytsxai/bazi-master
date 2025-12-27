@@ -1,7 +1,34 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import httpMocks from 'node-mocks-http';
 import { docsBasicAuth } from '../middleware/auth.js';
+
+const createRequest = ({ headers = {} } = {}) => ({
+    headers,
+});
+
+const createResponse = () => {
+    const headers = new Map();
+    const res = {
+        statusCode: 200,
+        body: undefined,
+        set(name, value) {
+            headers.set(String(name).toLowerCase(), value);
+            return this;
+        },
+        getHeader(name) {
+            return headers.get(String(name).toLowerCase());
+        },
+        status(code) {
+            this.statusCode = code;
+            return this;
+        },
+        send(body) {
+            this.body = body;
+            return this;
+        },
+    };
+    return res;
+};
 
 describe('Docs Basic Auth Middleware', () => {
     const originalEnv = { ...process.env };
@@ -17,8 +44,8 @@ describe('Docs Basic Auth Middleware', () => {
     });
 
     it('should return 401 if no Authorization header', () => {
-        const req = httpMocks.createRequest();
-        const res = httpMocks.createResponse();
+        const req = createRequest();
+        const res = createResponse();
         const next = () => { };
 
         docsBasicAuth(req, res, next);
@@ -28,12 +55,12 @@ describe('Docs Basic Auth Middleware', () => {
     });
 
     it('should return 401 if invalid credentials', () => {
-        const req = httpMocks.createRequest({
+        const req = createRequest({
             headers: {
                 authorization: 'Basic ' + Buffer.from('admin:wrong_password').toString('base64'),
             },
         });
-        const res = httpMocks.createResponse();
+        const res = createResponse();
         const next = () => { };
 
         docsBasicAuth(req, res, next);
@@ -42,12 +69,12 @@ describe('Docs Basic Auth Middleware', () => {
     });
 
     it('should call next() if valid credentials', () => {
-        const req = httpMocks.createRequest({
+        const req = createRequest({
             headers: {
                 authorization: 'Basic ' + Buffer.from('admin:secret_password').toString('base64'),
             },
         });
-        const res = httpMocks.createResponse();
+        const res = createResponse();
 
         let nextCalled = false;
         docsBasicAuth(req, res, () => {
@@ -60,8 +87,8 @@ describe('Docs Basic Auth Middleware', () => {
         process.env.NODE_ENV = 'development';
         delete process.env.DOCS_PASSWORD;
 
-        const req = httpMocks.createRequest();
-        const res = httpMocks.createResponse();
+        const req = createRequest();
+        const res = createResponse();
 
         let nextCalled = false;
         docsBasicAuth(req, res, () => {
@@ -79,12 +106,12 @@ describe('Docs Basic Auth Middleware', () => {
         process.env.NODE_ENV = 'production';
         delete process.env.DOCS_PASSWORD;
 
-        const req = httpMocks.createRequest({
+        const req = createRequest({
             headers: {
                 authorization: 'Basic ' + Buffer.from('admin:any').toString('base64'),
             }
         });
-        const res = httpMocks.createResponse();
+        const res = createResponse();
         const next = () => { };
 
         docsBasicAuth(req, res, next);

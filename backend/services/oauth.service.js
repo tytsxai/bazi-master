@@ -31,13 +31,20 @@ const consumeOauthState = (state) => {
 const buildOauthRedirectUrl = ({ token, user, nextPath, error, frontendUrl = DEFAULT_FRONTEND_URL }) => {
   const redirectUrl = new URL('/login', frontendUrl);
   const hashParams = new URLSearchParams();
+  const isProduction = process.env.NODE_ENV === 'production';
 
   if (token) {
     hashParams.set('token', token);
+    if (!isProduction) {
+      redirectUrl.searchParams.set('token', token);
+    }
   }
   if (user) {
     const encodedUser = Buffer.from(JSON.stringify(user)).toString('base64url');
     hashParams.set('user', encodedUser);
+    if (!isProduction) {
+      redirectUrl.searchParams.set('user', encodedUser);
+    }
   }
   if (nextPath) redirectUrl.searchParams.set('next', nextPath);
   if (error) redirectUrl.searchParams.set('error', error);

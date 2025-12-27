@@ -218,8 +218,7 @@ export const createRequireAuth = ({ authorizeToken, allowSessionExpiredSilent = 
       next();
     } catch (error) {
       const message = typeof error?.message === 'string' ? error.message : '';
-      const isExpired = message.toLowerCase().includes('expired');
-      if (silentExpired && isExpired) {
+      if (silentExpired) {
         res.set('x-session-expired', '1');
         return res.status(200).json({ error: message || 'Unauthorized', sessionExpired: true });
       }

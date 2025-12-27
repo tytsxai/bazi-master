@@ -182,7 +182,9 @@ const server = http.createServer(app);
 
 // Initialize WebSocket Server
 import { initWebsocketServer } from './services/websocket.service.js';
-initWebsocketServer(server);
+if (NODE_ENV !== 'test') {
+  initWebsocketServer(server);
+}
 
 const initRedisMirrors = async ({
   require = IS_PRODUCTION,

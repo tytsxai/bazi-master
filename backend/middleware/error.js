@@ -18,7 +18,7 @@ const redactSensitive = (value, depth = 0, seen = new WeakSet()) => {
     if (value === null || value === undefined) return value;
     if (typeof value !== 'object') return value;
     if (seen.has(value)) return '[Circular]';
-    if (depth > 4) return '[Truncated]';
+    if (depth > 5) return '[Truncated]';
     seen.add(value);
     if (Array.isArray(value)) {
         return value.map((item) => redactSensitive(item, depth + 1, seen));
