@@ -20,18 +20,15 @@ export const useChat = (options = {}) => {
     // Resolve WebSocket URL based on current location
     const resolveWsUrl = useCallback(() => {
         const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const host = window.location.host;
         const hostname = window.location.hostname;
-        const port = window.location.port;
+        const configuredBackendPort = import.meta.env?.VITE_BACKEND_PORT;
 
-        // Handle dev environment specific port mapping if needed
-        // If frontend is on 3000/5173, backend likely on 4000
-        if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '4000') {
-            // In dev, if proxy isn't handling WS perfectly, direct to backend port
-            return `${protocol}://${hostname}:4000/ws/ai`;
+        if ((hostname === 'localhost' || hostname === '127.0.0.1') && configuredBackendPort) {
+            return `${protocol}://${hostname}:${configuredBackendPort}/ws/ai`;
         }
 
-        // Production or same-origin
-        return `${protocol}://${window.location.host}/ws/ai`;
+        return `${protocol}://${host}/ws/ai`;
     }, []);
 
     const connect = useCallback(() => {
@@ -149,6 +146,7 @@ export const useChat = (options = {}) => {
 
         const payload = {
             type: 'chat_request',
+            token,
             payload: {
                 messages: [
                     ...messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })),

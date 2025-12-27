@@ -42,7 +42,11 @@ export const formatCoordinate = (value) =>
   Number.isFinite(value) ? Number(value).toFixed(4) : '—';
 
 export const formatLocationLabel = (location) => {
-  if (!location || typeof location !== 'object') return '—';
+  if (!location) return '—';
+  if (typeof location === 'string') return location.trim() || '—';
+  if (typeof location !== 'object') return '—';
+  if (typeof location.label === 'string' && location.label.trim()) return location.label.trim();
+  if (typeof location.name === 'string' && location.name.trim()) return location.name.trim();
   const parts = [];
   if (location.city) parts.push(location.city);
   if (location.region) parts.push(location.region);

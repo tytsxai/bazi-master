@@ -12,8 +12,35 @@ const RETRY_ACTION_KEY = 'bazi_retry_action';
 const SESSION_EXPIRED_KEY = 'bazi_session_expired';
 const PROFILE_NAME_KEY = 'bazi_profile_name';
 const SESSION_IDLE_MS = 30 * 60 * 1000;
-const isBackendToken = (value) =>
-  typeof value === 'string' && /^token_\d+_\d+_[A-Za-z0-9]+$/.test(value);
+const isBackendToken = (value) => {
+  if (typeof value !== 'string') return false;
+  return (
+    /^token_\d+_[A-Za-z0-9_-]+\.[a-f0-9]+$/i.test(value)
+    || /^token_\d+_\d+(?:_[A-Za-z0-9]+)?$/.test(value)
+  );
+};
+
+const readStoredValue = (key) => {
+  try {
+    const localValue = localStorage.getItem(key);
+    if (localValue) return localValue;
+  } catch {
+    // Ignore storage failures.
+  }
+
+  try {
+    const sessionValue = sessionStorage.getItem(key);
+    if (!sessionValue) return null;
+    try {
+      localStorage.setItem(key, sessionValue);
+    } catch {
+      // Ignore localStorage failures.
+    }
+    return sessionValue;
+  } catch {
+    return null;
+  }
+};
 const safeParseUser = (raw) => {
   if (!raw) return null;
   try {
@@ -30,9 +57,9 @@ const safeParseUser = (raw) => {
 
 export function AuthProvider({ children }) {
   const { t } = useTranslation();
-  const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY));
+  const [token, setToken] = useState(() => readStoredValue(TOKEN_KEY));
   const [user, setUser] = useState(() => {
-    const raw = localStorage.getItem(USER_KEY);
+    const raw = readStoredValue(USER_KEY);
     return safeParseUser(raw);
   });
   const [profileName, setProfileNameState] = useState(() => {
@@ -89,7 +116,11 @@ export function AuthProvider({ children }) {
     if (storedToken) {
       fetch('/api/auth/logout', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${storedToken}`, 'Content-Type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${storedToken}`,
+          'Content-Type': 'application/json',
+          'x-session-expired-silent': '1',
+        },
         body: JSON.stringify({ token: storedToken })
       }).catch(() => {
         // Ignore logout network errors.
@@ -183,7 +214,10 @@ export function AuthProvider({ children }) {
         return data.user;
       }
     } catch (error) {
-      console.error('Failed to refresh user', error);
+      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      if (!isFetchFailure) {
+        console.error('Failed to refresh user', error);
+      }
     }
     return null;
   }, [token, logout]);
@@ -211,7 +245,10 @@ export function AuthProvider({ children }) {
       setProfileName(nextProfileName);
       return nextProfileName;
     } catch (error) {
-      console.error('Failed to refresh profile name', error);
+      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      if (!isFetchFailure) {
+        console.error('Failed to refresh profile name', error);
+      }
     }
     return null;
   }, [setProfileName, token]);

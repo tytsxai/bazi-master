@@ -517,9 +517,22 @@ if (
 }
 
 if (isSqliteProvider) {
-  ensureSqliteDatabaseUrl();
   if (forceRestart && process.env.E2E_SKIP_RESET !== '1' && process.env.PW_SKIP_RESET !== '1') {
-    console.log('[dev-server] SQLite provider detected; skipping Postgres reset.');
+    const sqlitePath = path.join(rootDir, 'prisma', 'e2e.db');
+    process.env.DATABASE_URL = `file:${sqlitePath}`;
+    console.log(`[dev-server] Resetting E2E SQLite database at ${sqlitePath}`);
+    try {
+      const prismaEnv = { ...process.env, DATABASE_URL: process.env.DATABASE_URL };
+      execSync(
+        `${nodeCmd} scripts/prisma.mjs db push --force-reset --schema=../prisma/schema.prisma`,
+        { cwd: backendDir, stdio: 'inherit', env: prismaEnv }
+      );
+    } catch {
+      console.error('[dev-server] Failed to reset E2E SQLite database.');
+      process.exit(1);
+    }
+  } else {
+    ensureSqliteDatabaseUrl();
   }
 }
 

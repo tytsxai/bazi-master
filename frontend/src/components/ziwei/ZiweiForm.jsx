@@ -70,6 +70,7 @@ export default function ZiweiForm({
             <label className="text-sm text-white/70">
                 {t('bazi.gender')}
                 <select
+                    id="gender"
                     value={form.gender}
                     onChange={onChange('gender')}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-white"

@@ -303,10 +303,26 @@ export default function Login() {
     const userFromParam = decodeUserParam(userParam);
     localStorage.setItem('bazi_token', tokenParam);
     localStorage.setItem('bazi_token_origin', 'backend');
+    try {
+      sessionStorage.setItem('bazi_token', tokenParam);
+      sessionStorage.setItem('bazi_token_origin', 'backend');
+    } catch {
+      // Ignore storage failures.
+    }
     if (userFromParam) {
       localStorage.setItem('bazi_user', JSON.stringify(userFromParam));
+      try {
+        sessionStorage.setItem('bazi_user', JSON.stringify(userFromParam));
+      } catch {
+        // Ignore storage failures.
+      }
     }
     localStorage.setItem('bazi_last_activity', String(Date.now()));
+    try {
+      sessionStorage.setItem('bazi_last_activity', String(Date.now()));
+    } catch {
+      // Ignore storage failures.
+    }
 
     const nextPath = sanitizeNextPath(nextParam) || resolveRedirectPath(location.state?.from, location.search);
     window.location.replace(nextPath);
@@ -395,7 +411,7 @@ export default function Login() {
     if (Object.keys(nextErrors).length > 0) return;
     try {
       setIsResetSubmitting(true);
-      const res = await fetch('/api/password/request', {
+      const res = await fetch('/api/auth/password/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: resetEmail }),
@@ -427,7 +443,7 @@ export default function Login() {
     if (Object.keys(nextErrors).length > 0) return;
     try {
       setIsResetSubmitting(true);
-      const res = await fetch('/api/password/reset', {
+      const res = await fetch('/api/auth/password/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: resetToken.trim(), password: resetPassword }),
@@ -605,6 +621,7 @@ export default function Login() {
                 className="underline decoration-white/40 underline-offset-4"
                 onClick={() => {
                   const search = buildAuthSearch();
+                  switchMode('register');
                   navigate(search ? `/register?${search}` : '/register');
                 }}
               >
@@ -751,6 +768,7 @@ export default function Login() {
                 className="underline decoration-white/40 underline-offset-4"
                 onClick={() => {
                   const search = buildAuthSearch();
+                  switchMode('login');
                   navigate(search ? `/login?${search}` : '/login');
                 }}
               >
@@ -820,6 +838,7 @@ export default function Login() {
                 className="underline decoration-white/40 underline-offset-4"
                 onClick={() => {
                   const search = buildAuthSearch();
+                  switchMode('login');
                   navigate(search ? `/login?${search}` : '/login');
                 }}
               >
@@ -924,6 +943,7 @@ export default function Login() {
                 className="underline decoration-white/40 underline-offset-4"
                 onClick={() => {
                   const search = buildAuthSearch();
+                  switchMode('login');
                   navigate(search ? `/login?${search}` : '/login');
                 }}
               >

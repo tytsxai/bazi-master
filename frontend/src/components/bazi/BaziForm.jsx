@@ -132,6 +132,7 @@ export default function BaziForm({
           </label>
           <select
             id="gender"
+            aria-label={t('bazi.gender')}
             value={formData.gender}
             onChange={onFieldChange('gender')}
             className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"

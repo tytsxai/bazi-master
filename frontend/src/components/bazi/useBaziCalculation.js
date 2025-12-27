@@ -17,6 +17,7 @@ import {
   RECENT_SAVE_KEY,
   PREFILL_STORAGE_KEY,
   UNSAVED_WARNING_MESSAGE,
+  NUMERIC_FIELD_LIMITS,
 } from './baziConstants.js';
 import {
   formatOffsetMinutes,
@@ -1004,19 +1005,11 @@ export default function useBaziCalculation() {
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const host = window.location.host;
     const hostname = window.location.hostname;
-    const port = window.location.port;
 
     const configuredBackendPort = import.meta.env?.VITE_BACKEND_PORT;
     if ((hostname === 'localhost' || hostname === '127.0.0.1') && configuredBackendPort) {
       return `${protocol}://${hostname}:${configuredBackendPort}/ws/ai`;
     }
-
-    // Local dev: frontend (any port) + backend (4000) without a reverse-proxy for websocket upgrades.
-    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '4000') {
-      return `${protocol}://${hostname}:4000/ws/ai`;
-    }
-
-    // Production / reverse-proxied deployments.
     return `${protocol}://${host}/ws/ai`;
   };
 

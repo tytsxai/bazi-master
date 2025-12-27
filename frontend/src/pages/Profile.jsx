@@ -87,7 +87,10 @@ export default function Profile() {
         setAiProviders(providerList);
         setActiveProvider(data?.activeProvider || '');
       } catch (error) {
-        console.error('Failed to load AI providers', error);
+        const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+        if (!isFetchFailure) {
+          console.error('Failed to load AI providers', error);
+        }
       }
     };
     const loadSettings = async () => {
@@ -129,7 +132,10 @@ export default function Profile() {
           preferences: mergedPreferences,
         };
       } catch (error) {
-        console.error('Failed to load settings', error);
+        const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+        if (!isFetchFailure) {
+          console.error('Failed to load settings', error);
+        }
       }
     };
 

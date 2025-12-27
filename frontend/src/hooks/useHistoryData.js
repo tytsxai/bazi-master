@@ -330,7 +330,11 @@ export default function useHistoryData({ t }) {
       if (recordsRequestIdRef.current !== requestId || controller.signal.aborted) {
         return;
       }
-      const nextRecords = data.records || [];
+      const rawRecords = Array.isArray(data.records) ? data.records : [];
+      const normalizedGenderFilter = genderFilter === 'male' || genderFilter === 'female' ? genderFilter : null;
+      const nextRecords = normalizedGenderFilter
+        ? rawRecords.filter((record) => normalizeText(record?.gender).toLowerCase() === normalizedGenderFilter)
+        : rawRecords;
       let mergedRecords = nextRecords;
       const pendingPayload = pendingSaveRef.current;
       if (pendingPayload && Array.isArray(nextRecords)) {
@@ -400,7 +404,10 @@ export default function useHistoryData({ t }) {
       const data = await res.json();
       setTarotHistory(Array.isArray(data.records) ? data.records : []);
     } catch (error) {
-      console.error(error);
+      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      if (!isFetchFailure) {
+        console.error(error);
+      }
       setTarotHistoryError(error.message || t('history.tarotLoadError'));
     } finally {
       setTarotHistoryLoading(false);
@@ -905,7 +912,10 @@ export default function useHistoryData({ t }) {
       anchor.click();
       showStatus({ type: 'success', message: t('history.exportSuccess') });
     } catch (error) {
-      console.error(error);
+      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      if (!isFetchFailure) {
+        console.error(error);
+      }
       showStatus({ type: 'error', message: error.message || t('history.exportError') });
     } finally {
       if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -952,7 +962,10 @@ export default function useHistoryData({ t }) {
       anchor.click();
       showStatus({ type: 'success', message: t('history.exportAllSuccess') });
     } catch (error) {
-      console.error(error);
+      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      if (!isFetchFailure) {
+        console.error(error);
+      }
       showStatus({ type: 'error', message: error.message || t('history.exportError') });
     } finally {
       if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -998,7 +1011,10 @@ export default function useHistoryData({ t }) {
       });
       await Promise.all([loadRecords({ page: 1 }), loadDeletedRecords()]);
     } catch (error) {
-      console.error(error);
+      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      if (!isFetchFailure) {
+        console.error(error);
+      }
       showStatus({ type: 'error', message: error.message || t('history.importError') });
     } finally {
       setIsImporting(false);
@@ -1008,8 +1024,14 @@ export default function useHistoryData({ t }) {
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const filteredRecords = useMemo(
-    () => sortRecordsForDisplay(records, sortOption),
-    [records, sortOption],
+    () => {
+      const normalizedGenderFilter = genderFilter === 'male' || genderFilter === 'female' ? genderFilter : null;
+      const nextRecords = normalizedGenderFilter
+        ? records.filter((record) => normalizeText(record?.gender).toLowerCase() === normalizedGenderFilter)
+        : records;
+      return sortRecordsForDisplay(nextRecords, sortOption);
+    },
+    [records, sortOption, genderFilter],
   );
   const filteredIds = useMemo(() => filteredRecords.map((record) => record.id), [filteredRecords]);
   const filteredIdSet = useMemo(() => new Set(filteredIds), [filteredIds]);

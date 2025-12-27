@@ -27,6 +27,9 @@ export const computeFiveElementsPercent = (fiveElements) => {
 export const normalizeBaziApiResponse = (payload) => {
   if (!payload || typeof payload !== 'object') return null;
   const root =
+    payload.calculation && typeof payload.calculation === 'object'
+      ? payload.calculation
+      :
     payload.result && typeof payload.result === 'object'
       ? payload.result
       : payload.data && typeof payload.data === 'object'
