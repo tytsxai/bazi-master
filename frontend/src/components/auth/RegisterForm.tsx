@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { validatePasswordStrength } from '../../utils/validation';
+import type { AuthMode } from '../../auth/authTypes';
 
 interface RegisterFormProps {
     name: string;
@@ -15,7 +16,7 @@ interface RegisterFormProps {
     setErrors: Dispatch<SetStateAction<Record<string, string | undefined>>>;
     status: string;
     isSubmitting: boolean;
-    onSwitchMode: (mode: string) => void;
+    onSwitchMode: (mode: AuthMode) => void;
     emailPattern: RegExp;
 }
 

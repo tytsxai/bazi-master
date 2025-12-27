@@ -110,9 +110,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!action || !action.action) return;
     try {
       const payload: RetryAction = {
+        ...action,
         action: action.action,
-        params: action.params,
-        createdAt: Date.now()
+        createdAt: action.createdAt ?? Date.now(),
       };
       localStorage.setItem(RETRY_ACTION_KEY, JSON.stringify(payload));
     } catch {

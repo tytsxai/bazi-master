@@ -1,5 +1,6 @@
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { AuthMode } from '../../auth/authTypes';
 
 interface LoginFormProps {
     email: string;
@@ -15,7 +16,7 @@ interface LoginFormProps {
     handleSubmit: (e: FormEvent) => void;
     handleGoogleLogin: () => void;
     handleWeChatLogin: () => void;
-    onSwitchMode: (mode: string) => void;
+    onSwitchMode: (mode: AuthMode) => void;
     emailPattern: RegExp;
 }
 

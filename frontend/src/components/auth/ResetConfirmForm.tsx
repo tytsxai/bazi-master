@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { validatePasswordStrength } from '../../utils/validation';
+import type { AuthMode } from '../../auth/authTypes';
 
 interface ResetConfirmFormProps {
     token: string;
@@ -11,7 +12,7 @@ interface ResetConfirmFormProps {
     setErrors: Dispatch<SetStateAction<Record<string, string | undefined>>>;
     status: { type: string; message: string } | null;
     isSubmitting: boolean;
-    onSwitchMode: (mode: string) => void;
+    onSwitchMode: (mode: AuthMode) => void;
 }
 
 export default function ResetConfirmForm({

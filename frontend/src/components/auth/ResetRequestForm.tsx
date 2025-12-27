@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { AuthMode } from '../../auth/authTypes';
 
 interface ResetRequestFormProps {
     email: string;
@@ -8,7 +9,7 @@ interface ResetRequestFormProps {
     setErrors: Dispatch<SetStateAction<Record<string, string | undefined>>>;
     status: { type: string; message: string } | null;
     isSubmitting: boolean;
-    onSwitchMode: (mode: string) => void;
+    onSwitchMode: (mode: AuthMode) => void;
     emailPattern: RegExp;
 }
 

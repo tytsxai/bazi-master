@@ -19,12 +19,13 @@ export async function initBaziWasm(): Promise<BaziWasmExports> {
         if (!response.ok) {
             throw new Error(`Failed to load wasm: ${response.status}`);
         }
+        const responseClone = response.clone();
         try {
             const { instance } = await WebAssembly.instantiateStreaming(response);
             wasmInstance = instance.exports as unknown as BaziWasmExports;
             return wasmInstance;
         } catch {
-            const buffer = await response.arrayBuffer();
+            const buffer = await responseClone.arrayBuffer();
             const { instance } = await WebAssembly.instantiate(buffer);
             wasmInstance = instance.exports as unknown as BaziWasmExports;
             return wasmInstance;

@@ -12,6 +12,7 @@ import LoginForm from '../components/auth/LoginForm';
 import RegisterForm from '../components/auth/RegisterForm';
 import ResetRequestForm from '../components/auth/ResetRequestForm';
 import ResetConfirmForm from '../components/auth/ResetConfirmForm';
+import type { AuthMode } from '../auth/authTypes';
 
 const SESSION_EXPIRED_KEY = 'bazi_session_expired';
 
@@ -21,7 +22,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [mode, setMode] = useState<'login' | 'register' | 'request' | 'reset'>('login');
+  const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
@@ -102,7 +103,7 @@ export default function Login() {
     }
   };
 
-  const switchMode = (nextMode: any) => {
+  const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
     setResetErrors({});
     setResetStatus(null);
