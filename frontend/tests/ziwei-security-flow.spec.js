@@ -32,7 +32,7 @@ test('Ziwei V2 flow from /zodiac uses protected access and matches backend data'
   await page.getByLabel(/Birth Month|出生月份/).fill('7');
   await page.getByLabel(/Birth Day|出生日/).fill('15');
   await page.getByLabel(/Birth Hour|出生时辰/).selectOption('9');
-  await page.getByLabel(/Gender|性别/).selectOption('female');
+  await page.locator('#gender').selectOption('female');
 
   const responsePromise = page.waitForResponse(
     (resp) => resp.url().includes('/api/ziwei/calculate') && resp.request().method() === 'POST'

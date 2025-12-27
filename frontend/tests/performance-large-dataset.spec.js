@@ -76,7 +76,7 @@ test('Performance smoke flow with large dataset search', async ({ page, request 
   await page.getByLabel('Birth Month').fill(birth.month);
   await page.getByLabel('Birth Day').fill(birth.day);
   await page.getByLabel('Birth Hour (0-23)').fill(birth.hour);
-  await page.getByLabel('Gender').selectOption(gender);
+  await page.locator('#gender').selectOption(gender);
   await page.getByLabel('Birth Location').fill(flowLocation);
   await page.getByLabel('Timezone').fill('UTC');
 

@@ -56,7 +56,7 @@ test('[J] Data cleanup: Bazi full analysis from /iching matches backend data', a
   await page.getByLabel(/Birth Month|出生月份/).fill('6');
   await page.getByLabel(/Birth Day|出生日/).fill('11');
   await page.getByLabel(/Birth Hour|出生时辰/).fill('9');
-  await page.getByLabel(/Gender|性别/).selectOption('male');
+  await page.locator('#gender').selectOption('male');
   await page.getByLabel(/Birth Location|出生地/).fill('DATA_CLEANUP_SCENARIO_2');
   await page.getByLabel(/Timezone|时区/).fill('UTC+8');
 

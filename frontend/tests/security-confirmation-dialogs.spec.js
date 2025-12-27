@@ -25,7 +25,7 @@ test('Sensitive actions require confirmation (delete, AI request)', async ({ pag
   await page.getByLabel('Birth Month').fill('7');
   await page.getByLabel('Birth Day').fill('19');
   await page.getByLabel('Birth Hour (0-23)').fill('11');
-  await page.getByLabel('Gender').selectOption('female');
+  await page.locator('#gender').selectOption('female');
   await page.getByLabel('Birth Location').fill(uniqueLocation);
   await page.getByLabel('Timezone').fill('UTC');
 

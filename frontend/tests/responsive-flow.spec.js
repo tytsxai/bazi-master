@@ -61,7 +61,7 @@ test('Responsive layout verification across desktop/tablet/mobile in one run', a
   await page.getByLabel('Birth Month').fill('6');
   await page.getByLabel('Birth Day').fill('18');
   await page.getByLabel('Birth Hour (0-23)').fill('14');
-  await page.getByLabel('Gender').selectOption('female');
+  await page.locator('#gender').selectOption('female');
   await page.getByLabel('Birth Location').fill(location);
   await page.getByLabel('Timezone').fill('UTC+8');
 

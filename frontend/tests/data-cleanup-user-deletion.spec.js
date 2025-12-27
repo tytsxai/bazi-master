@@ -34,7 +34,7 @@ test('Data cleanup cascade after user deletion removes history and favorites', a
   await page.getByLabel('Birth Month').fill('8');
   await page.getByLabel('Birth Day').fill('14');
   await page.getByLabel('Birth Hour (0-23)').fill('9');
-  await page.getByLabel('Gender').selectOption('male');
+  await page.locator('#gender').selectOption('male');
   await page.getByLabel('Birth Location').fill(uniqueLocation);
   await page.getByLabel('Timezone').fill('UTC');
   await page.screenshot({ path: screenshotPath('user-delete-step-2-form-filled') });

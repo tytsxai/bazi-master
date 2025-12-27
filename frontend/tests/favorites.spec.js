@@ -31,7 +31,7 @@ test('User can add and remove a BaZi favorite', async ({ page }) => {
   await page.getByLabel('Birth Month').fill('6');
   await page.getByLabel('Birth Day').fill('18');
   await page.getByLabel('Birth Hour (0-23)').fill('14');
-  await page.getByLabel('Gender').selectOption('female');
+  await page.locator('#gender').selectOption('female');
   await page.getByLabel('Birth Location').fill(uniqueLocation);
   await page.getByLabel('Timezone').fill('UTC');
   await page.screenshot({ path: screenshotPath('favorites-step-2-form-filled') });

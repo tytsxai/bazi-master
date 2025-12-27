@@ -42,7 +42,7 @@ test('Bazi calculation applies true solar time correction from location', async 
   await page.getByLabel('Birth Month').fill('6');
   await page.getByLabel('Birth Day').fill('15');
   await page.getByLabel('Birth Hour (0-23)').fill('9');
-  await page.getByLabel('Gender').selectOption('female');
+  await page.locator('#gender').selectOption('female');
   await page.getByLabel('Birth Location').fill(uniqueLocation);
   await page.getByLabel('Timezone').fill('UTC+08:00');
   await page.screenshot({ path: screenshotPath('solar-step-2-form-filled') });

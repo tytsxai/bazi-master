@@ -35,7 +35,7 @@ test('Real data audit flow with unique BaZi record and cleanup', async ({ page }
   await page.getByLabel('Birth Month').fill('7');
   await page.getByLabel('Birth Day').fill('19');
   await page.getByLabel('Birth Hour (0-23)').fill('16');
-  await page.getByLabel('Gender').selectOption('female');
+  await page.locator('#gender').selectOption('female');
   await page.getByLabel('Birth Location').fill(uniqueLocation);
   await page.getByLabel('Timezone').fill('UTC+8');
   await page.screenshot({ path: screenshotPath('step-3-form') });

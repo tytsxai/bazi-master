@@ -107,7 +107,7 @@ test('AI streaming via WebSocket flow (connect, stream, disconnect)', async ({ p
   await page.getByLabel('Birth Month').fill('11');
   await page.getByLabel('Birth Day').fill('9');
   await page.getByLabel('Birth Hour (0-23)').fill('9');
-  await page.getByLabel('Gender').selectOption('male');
+  await page.locator('#gender').selectOption('male');
   await page.getByLabel('Birth Location').fill(uniqueLocation);
   await page.getByLabel('Timezone').fill('UTC+8');
   await page.screenshot({ path: screenshotPath('ai-streaming-step-5-form') });

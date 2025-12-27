@@ -32,7 +32,7 @@ test('Stress flow with rapid submissions remains idempotent', async ({ page }) =
   await page.getByLabel('Birth Month').fill('5');
   await page.getByLabel('Birth Day').fill('21');
   await page.getByLabel('Birth Hour (0-23)').fill('8');
-  await page.getByLabel('Gender').selectOption('male');
+  await page.locator('#gender').selectOption('male');
   await page.getByLabel('Birth Location').fill(uniqueLocation);
   await page.getByLabel('Timezone').fill('UTC+8');
   await page.screenshot({ path: screenshotPath('stress-step-2-form') });

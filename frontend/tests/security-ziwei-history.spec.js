@@ -69,7 +69,7 @@ test('Security: Ziwei history flow from /ziwei matches backend data and supports
   await page.getByLabel('Birth Month').fill(String(birthMonth));
   await page.getByLabel('Birth Day').fill(String(birthDay));
   await page.getByLabel('Birth Hour').selectOption(String(birthHour));
-  await page.getByLabel('Gender').selectOption('female');
+  await page.locator('#gender').selectOption('female');
 
   const calculateResponsePromise = page.waitForResponse(
     (resp) => resp.url().includes('/api/ziwei/calculate') && resp.request().method() === 'POST'

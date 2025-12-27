@@ -30,7 +30,7 @@ test('Timezone change affects derived time metadata and full Bazi flow', async (
   await page.getByLabel('Birth Month').fill('11');
   await page.getByLabel('Birth Day').fill('9');
   await page.getByLabel('Birth Hour (0-23)').fill('9');
-  await page.getByLabel('Gender').selectOption('male');
+  await page.locator('#gender').selectOption('male');
   await page.getByLabel('Birth Location').fill(uniqueLocation);
   await page.getByLabel('Timezone').fill('America/New_York');
   await page.screenshot({ path: screenshotPath('tz-step-2-form-filled') });

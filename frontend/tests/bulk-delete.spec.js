@@ -39,7 +39,7 @@ test('Bulk operation flow for batch deletion', async ({ page }) => {
     await page.getByLabel('Birth Month').fill(record.birth.month);
     await page.getByLabel('Birth Day').fill(record.birth.day);
     await page.getByLabel('Birth Hour (0-23)').fill(record.birth.hour);
-    await page.getByLabel('Gender').selectOption(record.gender);
+    await page.locator('#gender').selectOption(record.gender);
     await page.getByLabel('Birth Location').fill(record.location);
     await page.getByLabel('Timezone').fill('UTC');
 

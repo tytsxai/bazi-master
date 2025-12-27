@@ -36,7 +36,7 @@ test('Error handling: favorites flow matches backend data', async ({ page, reque
     await page.getByLabel('Birth Month').fill('9');
     await page.getByLabel('Birth Day').fill('21');
     await page.getByLabel('Birth Hour (0-23)').fill('6');
-    await page.getByLabel('Gender').selectOption('female');
+    await page.locator('#gender').selectOption('female');
     await page.getByLabel('Birth Location').fill(uniqueLocation);
     await page.getByLabel('Timezone').fill('UTC');
 

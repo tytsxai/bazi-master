@@ -68,7 +68,7 @@ test('Cache validation flow for Redis session and calculation cache', async ({ p
   await page.getByLabel('Birth Month').fill(String(uniqueBirthMonth));
   await page.getByLabel('Birth Day').fill(String(uniqueBirthDay));
   await page.getByLabel('Birth Hour (0-23)').fill(String(uniqueBirthHour));
-  await page.getByLabel('Gender').selectOption('male');
+  await page.locator('#gender').selectOption('male');
   await page.getByLabel('Birth Location').fill(uniqueLocation);
   await page.getByLabel('Timezone').fill('UTC+8');
   await snap('05-inputs');

@@ -51,7 +51,7 @@ test('Security: Bazi full analysis from / matches backend data', async ({ page }
   await page.getByLabel(/Birth Month|出生月份/).fill('7');
   await page.getByLabel(/Birth Day|出生日/).fill('19');
   await page.getByLabel(/Birth Hour|出生时辰/).fill('16');
-  await page.getByLabel(/Gender|性别/).selectOption('female');
+  await page.locator('#gender').selectOption('female');
   await page.getByLabel(/Birth Location|出生地/).fill('SECURITY_HOME');
   await page.getByLabel(/Timezone|时区/).fill('UTC+8');
   await page.screenshot({ path: buildScreenshotPath('security-home-full-analysis-step-2-form') });

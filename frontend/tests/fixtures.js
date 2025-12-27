@@ -8,7 +8,9 @@ export const test = base.extend({
   page: async ({ page }, use) => {
     // Set locale in localStorage before any navigation
     await page.addInitScript(() => {
-      localStorage.setItem('locale', 'en-US');
+      if (!localStorage.getItem('locale')) {
+        localStorage.setItem('locale', 'en-US');
+      }
     });
     await use(page);
   },

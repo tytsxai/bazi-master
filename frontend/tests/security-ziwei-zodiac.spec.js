@@ -75,7 +75,7 @@ test('Security: Ziwei V2 chart from /zodiac matches backend data', async ({ page
   await page.getByLabel('Birth Month').fill('6');
   await page.getByLabel('Birth Day').fill('18');
   await page.getByLabel('Birth Hour').selectOption('9');
-  await page.getByLabel('Gender').selectOption('female');
+  await page.locator('#gender').selectOption('female');
 
   const responsePromise = page.waitForResponse(
     (resp) => resp.url().includes('/api/ziwei/calculate') && resp.request().method() === 'POST'

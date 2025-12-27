@@ -16,7 +16,7 @@ test('BaZi page can trigger Zi Wei (V2) flow and match backend data', async ({ p
   await page.getByLabel('Birth Month').fill('7');
   await page.getByLabel('Birth Day').fill('15');
   await page.getByLabel('Birth Hour (0-23)').fill('9');
-  await page.getByLabel('Gender').selectOption('female');
+  await page.locator('#gender').selectOption('female');
 
   const responsePromise = page.waitForResponse(
     (resp) => resp.url().includes('/api/ziwei/calculate') && resp.request().method() === 'POST'

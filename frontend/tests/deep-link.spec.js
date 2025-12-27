@@ -39,7 +39,7 @@ test('Deep link flow loads shared history record with filters', async ({ page })
   await page.getByLabel('Birth Month').fill('6');
   await page.getByLabel('Birth Day').fill('12');
   await page.getByLabel('Birth Hour (0-23)').fill('9');
-  await page.getByLabel('Gender').selectOption('female');
+  await page.locator('#gender').selectOption('female');
   await page.getByLabel('Birth Location').fill(uniqueLocation);
   await page.getByLabel('Timezone').fill('UTC+8');
   await page.screenshot({ path: screenshotPath('step-3-form') });
