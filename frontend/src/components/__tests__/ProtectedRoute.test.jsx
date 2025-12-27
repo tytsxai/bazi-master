@@ -23,7 +23,7 @@ describe('ProtectedRoute', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/protected']}>
+      <MemoryRouter initialEntries={['/protected']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/login" element={<div>Login Page</div>} />
           <Route
@@ -50,7 +50,7 @@ describe('ProtectedRoute', () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProtectedRoute>
           <div>Protected Content</div>
         </ProtectedRoute>
@@ -68,7 +68,7 @@ describe('ProtectedRoute', () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProtectedRoute>
           <div>Protected Content</div>
         </ProtectedRoute>

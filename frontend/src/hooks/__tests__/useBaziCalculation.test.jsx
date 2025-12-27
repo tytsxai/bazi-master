@@ -31,7 +31,11 @@ vi.mock('../../context/BaziContext', () => ({
   useBaziContext: () => baziContextState,
 }));
 
-const wrapper = ({ children }) => <MemoryRouter>{children}</MemoryRouter>;
+const wrapper = ({ children }) => (
+  <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    {children}
+  </MemoryRouter>
+);
 const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('useBaziCalculation', () => {

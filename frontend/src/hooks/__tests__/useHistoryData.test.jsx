@@ -18,7 +18,11 @@ vi.mock('../../auth/useAuthFetch', () => ({
   useAuthFetch: () => authFetchMock,
 }));
 
-const wrapper = ({ children }) => <MemoryRouter>{children}</MemoryRouter>;
+const wrapper = ({ children }) => (
+  <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    {children}
+  </MemoryRouter>
+);
 
 describe('useHistoryData', () => {
   const t = (key) => key;
