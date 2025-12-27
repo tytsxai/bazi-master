@@ -6,21 +6,13 @@ import { parseIdParam } from '../utils/validation.js';
 const router = express.Router();
 
 const serializeRecord = (record) => {
-
-    try {
-        const result = {
-            ...record,
-            pillars: JSON.parse(record.pillars),
-            fiveElements: JSON.parse(record.fiveElements),
-            tenGods: record.tenGods ? JSON.parse(record.tenGods) : null,
-            luckCycles: record.luckCycles ? JSON.parse(record.luckCycles) : null,
-        };
-
-        return result;
-    } catch (error) {
-
-        throw error;
-    }
+    return {
+        ...record,
+        pillars: JSON.parse(record.pillars),
+        fiveElements: JSON.parse(record.fiveElements),
+        tenGods: record.tenGods ? JSON.parse(record.tenGods) : null,
+        luckCycles: record.luckCycles ? JSON.parse(record.luckCycles) : null,
+    };
 };
 
 router.post('/', requireAuth, async (req, res) => {
@@ -67,17 +59,10 @@ router.get('/', requireAuth, async (req, res) => {
             orderBy: { createdAt: 'desc' }
         });
 
-        const serializedFavorites = favorites.map(f => {
-            try {
-                return {
-                    ...f,
-                    record: serializeRecord(f.record)
-                };
-            } catch (error) {
-
-                throw error;
-            }
-        });
+        const serializedFavorites = favorites.map((f) => ({
+            ...f,
+            record: serializeRecord(f.record),
+        }));
         res.json({
             favorites: serializedFavorites
         });

@@ -276,6 +276,9 @@ const validateProductionConfig = ({ env = process.env } = {}) => {
   if (!env.BACKEND_BASE_URL || env.BACKEND_BASE_URL.includes('localhost')) {
     warnings.push('BACKEND_BASE_URL should not be localhost in production');
   }
+  if (!env.SENTRY_DSN) {
+    warnings.push('SENTRY_DSN is not configured. Monitoring and error tracking will be disabled.');
+  }
 
   return { errors, warnings };
 };

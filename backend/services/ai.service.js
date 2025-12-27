@@ -147,7 +147,7 @@ const callOpenAIStreamWithConfig = async (config, { system, user, messages, onCh
   let buffer = '';
 
   try {
-    while (true) {
+    for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
 
@@ -258,7 +258,7 @@ const callAnthropicStreamWithConfig = async (config, { system, user, messages, o
   let buffer = '';
 
   try {
-    while (true) {
+    for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
 

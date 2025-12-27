@@ -24,6 +24,7 @@ describe('server startup coverage', () => {
           REDIS_URL: 'redis://localhost:6379',
           FRONTEND_URL: 'https://example.com',
           BACKEND_BASE_URL: 'https://api.example.com',
+          SENTRY_DSN: 'https://public@example.ingest.sentry.io/1',
         },
       });
       assert.deepEqual(errors, []);
