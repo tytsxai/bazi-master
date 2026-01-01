@@ -20,7 +20,7 @@ const logRequestStart = ({ req, requestId }) => {
     return;
   }
 
-  console.info(`--> ${req.method} ${getRequestUrl(req)} [${requestId}]`);
+  logger.info(`--> ${req.method} ${getRequestUrl(req)} [${requestId}]`);
 };
 
 const logRequestFinish = ({ req, res, requestId, durationMs }) => {
@@ -42,7 +42,7 @@ const logRequestFinish = ({ req, res, requestId, durationMs }) => {
   }
 
   const statusIcon = res.statusCode >= 400 ? '!!' : '<-';
-  console[logLevel](
+  logger[logLevel](
     `${statusIcon} ${req.method} ${getRequestUrl(req)} ${res.statusCode} ${durationMs}ms [${requestId}]`,
   );
 };

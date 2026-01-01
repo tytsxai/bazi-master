@@ -1,6 +1,7 @@
 import express from 'express';
 
 import { prisma } from '../config/prisma.js';
+import { logger } from '../config/logger.js';
 import { requireAuth } from '../middleware/auth.js';
 import { buildBirthTimeMeta } from '../utils/timezone.js';
 import { calculateZiweiChart } from '../services/ziwei.service.js';
@@ -81,7 +82,7 @@ router.post('/calculate', requireAuth, (req, res) => {
     const timeMeta = buildBirthTimeMeta(parsed.payload);
     return res.json({ ...result, ...timeMeta });
   } catch (error) {
-    console.error('Ziwei calculation error:', error);
+    logger.error({ err: error }, 'Ziwei calculation error');
     return res.status(500).json({ error: 'Calculation error' });
   }
 });
@@ -106,7 +107,7 @@ router.post('/history', requireAuth, async (req, res) => {
     });
     return res.json({ record: serializeZiweiRecord(record) });
   } catch (error) {
-    console.error('Failed to save Ziwei history:', error);
+    logger.error({ err: error }, 'Failed to save Ziwei history');
     return res.status(500).json({ error: 'Unable to save history' });
   }
 });
@@ -122,7 +123,7 @@ router.get('/history', requireAuth, async (req, res) => {
     });
     return res.json({ records: records.map(serializeZiweiRecord) });
   } catch (error) {
-    console.error('Failed to load Ziwei history:', error);
+    logger.error({ err: error }, 'Failed to load Ziwei history');
     return res.status(500).json({ error: 'Unable to load history' });
   }
 });
@@ -141,7 +142,7 @@ router.delete('/history/:id', requireAuth, async (req, res) => {
     await prisma.ziweiRecord.delete({ where: { id: recordId } });
     return res.json({ status: 'ok' });
   } catch (error) {
-    console.error('Failed to delete Ziwei history:', error);
+    logger.error({ err: error }, 'Failed to delete Ziwei history');
     return res.status(500).json({ error: 'Unable to delete history' });
   }
 });

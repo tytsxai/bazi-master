@@ -1,5 +1,6 @@
 import express from 'express';
 import { prisma } from '../config/prisma.js';
+import { logger } from '../config/logger.js';
 import { requireAuth, requireAuthStrict } from '../middleware/auth.js';
 import { drawTarot, getTarotSpreadConfig } from '../services/tarot.service.js';
 import tarotDeck from '../data/tarotData.js';
@@ -87,7 +88,7 @@ ${cardList}
             }
         });
     } catch (error) {
-        console.error('Tarot interpret error:', error);
+        logger.error({ err: error }, 'Tarot interpret error');
         // Don't fail if persistence fails
     } finally {
         release();

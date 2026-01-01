@@ -1,3 +1,5 @@
+import { logger as defaultLogger } from './logger.js';
+
 const getRedisUrl = (env = process.env) => env.REDIS_URL || '';
 let redisClient = null;
 let redisInitPromise = null;
@@ -12,7 +14,7 @@ export const initRedis = async ({
   env = process.env,
   url,
   importRedis = () => import('redis'),
-  logger = console,
+  logger = defaultLogger,
 } = {}) => {
   const redisUrl = typeof url === 'string' ? url : getRedisUrl(env);
   if (!redisUrl) {
@@ -47,7 +49,7 @@ export const initRedis = async ({
   return redisInitPromise;
 };
 
-export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) => {
+export const createRedisMirror = (client, { prefix = '', ttlMs = null, logger = defaultLogger } = {}) => {
   const resolveKey = (key) => `${prefix}${key}`;
   const toJson = (value) => {
     try {
@@ -72,7 +74,7 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
         const raw = await client.get(resolveKey(key));
         return fromJson(raw);
       } catch (error) {
-        console.warn('[redis] get failed:', error?.message || error);
+        logger.warn({ err: error }, '[redis] get failed');
         return null;
       }
     },
@@ -92,7 +94,7 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
           await client.set(resolveKey(key), payload);
         }
       } catch (error) {
-        console.warn('[redis] set failed:', error?.message || error);
+        logger.warn({ err: error }, '[redis] set failed');
       }
     },
     async delete(key) {
@@ -100,7 +102,7 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
       try {
         await client.del(resolveKey(key));
       } catch (error) {
-        console.warn('[redis] delete failed:', error?.message || error);
+        logger.warn({ err: error }, '[redis] delete failed');
       }
     },
     async clear() {
@@ -120,7 +122,7 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
           }
         }
       } catch (error) {
-        console.warn('[redis] clear failed:', error?.message || error);
+        logger.warn({ err: error }, '[redis] clear failed');
       }
     },
     async deleteByPrefix(rawPrefix) {
@@ -141,7 +143,7 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
           }
         }
       } catch (error) {
-        console.warn('[redis] deleteByPrefix failed:', error?.message || error);
+        logger.warn({ err: error }, '[redis] deleteByPrefix failed');
       }
     },
   };

@@ -1,4 +1,5 @@
 import { initRedis } from '../config/redis.js';
+import { logger } from '../config/logger.js';
 
 const rateLimitStore = new Map();
 const DEFAULT_REDIS_PREFIX = 'rate-limit:';
@@ -18,7 +19,7 @@ const warnOnFallback = () => {
   if (warnedOnFallback) return;
   if (process.env.NODE_ENV === 'production') return;
   warnedOnFallback = true;
-  console.warn('[rate-limit] Redis unavailable; using in-memory rate limit store.');
+  logger.warn('[rate-limit] Redis unavailable; using in-memory rate limit store.');
 };
 
 const ensureRedisClient = async (initRedisClient) => {
@@ -31,7 +32,7 @@ const ensureRedisClient = async (initRedisClient) => {
       redisClient = client;
       return client;
     } catch (error) {
-      console.warn('[rate-limit] Redis init failed:', error?.message || error);
+      logger.warn({ err: error }, '[rate-limit] Redis init failed');
       return null;
     }
   })();
@@ -49,7 +50,7 @@ const getRedisRateLimitEntry = async (client, { key, windowMs, now, prefix }) =>
       ttlMs = Number(results[1]);
     }
   } catch (error) {
-    console.warn('[rate-limit] Redis error:', error?.message || error);
+    logger.warn({ err: error }, '[rate-limit] Redis error');
     return null;
   }
 
@@ -58,7 +59,7 @@ const getRedisRateLimitEntry = async (client, { key, windowMs, now, prefix }) =>
     try {
       await client.pexpire(redisKey, windowMs);
     } catch (error) {
-      console.warn('[rate-limit] Redis expire failed:', error?.message || error);
+      logger.warn({ err: error }, '[rate-limit] Redis expire failed');
     }
     ttlMs = windowMs;
   }

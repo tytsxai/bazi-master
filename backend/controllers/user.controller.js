@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma.js';
+import { logger } from '../config/logger.js';
 import { revokeSession } from '../middleware/auth.js';
 import { deleteUserCascade } from '../userCleanup.js';
 
@@ -55,7 +56,7 @@ export const deleteAuthMe = async (req, res) => {
     });
     return res.json({ status: 'ok' });
   } catch (error) {
-    console.error('User self-delete failed:', error);
+    logger.error({ err: error }, 'User self-delete failed');
     return res.status(500).json({ error: 'Unable to delete account' });
   }
 };
@@ -74,7 +75,7 @@ export const getUserSettings = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Failed to load user settings:', error);
+    logger.error({ err: error }, 'Failed to load user settings');
     return res.status(500).json({ error: 'Failed to load settings' });
   }
 };
@@ -120,7 +121,7 @@ export const putUserSettings = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Failed to update user settings:', error);
+    logger.error({ err: error }, 'Failed to update user settings');
     return res.status(500).json({ error: 'Failed to update settings' });
   }
 };
