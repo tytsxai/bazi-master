@@ -13,7 +13,7 @@ fi
 
 # Check Node.js
 if ! command -v node >/dev/null 2>&1; then
-  echo "Node.js is required. Please install Node.js 18+."
+  echo "Node.js is required. Please install Node.js 20+."
   exit 1
 fi
 
