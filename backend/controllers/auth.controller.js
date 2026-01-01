@@ -1,3 +1,4 @@
+import { logger } from '../config/logger.js';
 import crypto from 'crypto';
 
 import { prisma } from '../config/prisma.js';
@@ -12,13 +13,25 @@ import {
 import { hashPassword, verifyPassword } from '../utils/passwords.js';
 import {
   buildOauthRedirectUrl,
-  consumeOauthState,
+  consumeOauthStateAsync,
   handleDevOauthLogin,
 } from '../services/oauth.service.js';
 import { ensureDefaultUser } from '../services/schema.service.js';
+import { setSessionCookie, clearSessionCookie } from '../utils/sessionCookie.js';
+import {
+  resetTokenStore,
+  resetTokenByUser,
+  pruneResetTokens,
+  getResetTokenEntryAsync,
+  setResetTokenForUser,
+  deleteResetToken,
+} from '../services/resetTokens.service.js';
+import {
+  ensurePasswordResetDeliveryReady,
+  sendPasswordResetEmail,
+} from '../services/email.service.js';
 
-const SHOULD_LOG_RESET_TOKEN =
-  process.env.PASSWORD_RESET_DEBUG_LOG === '1' || process.env.PASSWORD_RESET_DEBUG_LOG === 'true';
+// SECURITY: Never log reset tokens, even in debug mode - removed PASSWORD_RESET_DEBUG_LOG support
 
 const ensureDefaultUserReady = (() => {
   let promise = null;
@@ -47,19 +60,7 @@ const ensureMinDuration = async (startedAtMs, minDurationMs) => {
   }
 };
 
-export const resetTokenStore = new Map();
-export const resetTokenByUser = new Map();
-
-const pruneResetTokens = (now = Date.now()) => {
-  for (const [token, entry] of resetTokenStore.entries()) {
-    if (!entry?.expiresAt || now > entry.expiresAt) {
-      resetTokenStore.delete(token);
-      if (entry?.userId && resetTokenByUser.get(entry.userId) === token) {
-        resetTokenByUser.delete(entry.userId);
-      }
-    }
-  }
-};
+export { resetTokenStore, resetTokenByUser };
 
 const appendProviderParam = (url, provider) => {
   if (!provider) return url;
@@ -125,6 +126,7 @@ export const handleRegister = async (req, res) => {
 
   const token = createSessionToken(user.id);
   touchSession(token);
+  setSessionCookie(res, token);
 
   return res.json({
     token,
@@ -161,6 +163,7 @@ export const handleLogin = async (req, res) => {
 
   const token = createSessionToken(user.id);
   touchSession(token);
+  setSessionCookie(res, token);
 
   return res.json({
     token,
@@ -174,15 +177,27 @@ export const handleLogin = async (req, res) => {
 };
 
 export const handleLogout = async (req, res) => {
+  const cookieToken = req.cookies?.bazi_session || null;
   const token =
-    readBearerToken(req) || (typeof req.body?.token === 'string' ? req.body.token : null);
+    cookieToken ||
+    readBearerToken(req) ||
+    (typeof req.body?.token === 'string' ? req.body.token : null);
   revokeSession(token);
+  clearSessionCookie(res);
   res.json({ status: 'ok' });
 };
 
 export const handlePasswordResetRequest = async (req, res) => {
   const { resetTokenTtlMs, resetRequestMinDurationMs } = getServerConfig();
   const startedAt = Date.now();
+  const deliveryReady = ensurePasswordResetDeliveryReady();
+  if (!deliveryReady.ok) {
+    const message =
+      deliveryReady.reason === 'disabled'
+        ? 'Password reset is disabled'
+        : 'Password reset email is not configured';
+    return res.status(503).json({ error: message });
+  }
   const email = normalizeEmail(req.body?.email);
   let user = null;
 
@@ -193,17 +208,20 @@ export const handlePasswordResetRequest = async (req, res) => {
   if (user) {
     pruneResetTokens();
     const token = crypto.randomBytes(24).toString('hex');
-    const expiresAt = Date.now() + (Number.isFinite(resetTokenTtlMs)
-      ? resetTokenTtlMs
-      : 30 * 60 * 1000);
-    const existingToken = resetTokenByUser.get(user.id);
-    if (existingToken) {
-      resetTokenStore.delete(existingToken);
-    }
-    resetTokenStore.set(token, { userId: user.id, expiresAt });
-    resetTokenByUser.set(user.id, token);
-    if (SHOULD_LOG_RESET_TOKEN) {
-      console.log(`[auth] Password reset token for ${email}: ${token}`);
+    const expiresAt =
+      Date.now() + (Number.isFinite(resetTokenTtlMs) ? resetTokenTtlMs : 30 * 60 * 1000);
+    await setResetTokenForUser({
+      userId: user.id,
+      token,
+      expiresAt,
+      ttlMs: resetTokenTtlMs,
+    });
+    // SECURITY: Reset token is never logged - send via email in production
+    try {
+      await sendPasswordResetEmail({ to: user.email, token });
+    } catch (error) {
+      logger.error({ error }, 'Failed to send password reset email');
+      return res.status(503).json({ error: 'Password reset email failed' });
     }
   }
 
@@ -226,19 +244,14 @@ export const handlePasswordResetConfirm = async (req, res) => {
   }
 
   pruneResetTokens();
-  const entry = resetTokenStore.get(token);
+  const entry = await getResetTokenEntryAsync(token);
   if (!entry?.userId) {
-    return res.status(400).json({ error: 'Invalid or expired token' });
-  }
-  if (entry.expiresAt && Date.now() > entry.expiresAt) {
-    resetTokenStore.delete(token);
     return res.status(400).json({ error: 'Invalid or expired token' });
   }
 
   const user = await prisma.user.findUnique({ where: { id: entry.userId } });
   if (!user) {
-    resetTokenStore.delete(token);
-    resetTokenByUser.delete(entry.userId);
+    deleteResetToken(token, entry.userId);
     return res.status(400).json({ error: 'Invalid or expired token' });
   }
 
@@ -248,10 +261,7 @@ export const handlePasswordResetConfirm = async (req, res) => {
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { password: hashed } });
-  resetTokenStore.delete(token);
-  if (resetTokenByUser.get(user.id) === token) {
-    resetTokenByUser.delete(user.id);
-  }
+  deleteResetToken(token, user.id);
 
   return res.json({ status: 'ok' });
 };
@@ -263,14 +273,16 @@ export const handleGoogleCallback = async (req, res) => {
     googleRedirectUri: GOOGLE_REDIRECT_URI,
     frontendUrl: FRONTEND_URL,
     allowDevOauth: ALLOW_DEV_OAUTH,
+    nodeEnv: NODE_ENV,
   } = getServerConfig();
+  const IS_PRODUCTION = NODE_ENV === 'production';
 
   const queryError = typeof req.query?.error === 'string' ? req.query.error : '';
   const state = typeof req.query?.state === 'string' ? req.query.state : '';
 
   let nextPath = null;
   if (state) {
-    const entry = consumeOauthState(state);
+    const entry = await consumeOauthStateAsync(state);
     if (!entry && !queryError) {
       return redirectOauthError(res, {
         provider: 'google',
@@ -290,7 +302,7 @@ export const handleGoogleCallback = async (req, res) => {
   }
 
   const hasDevParams = Boolean(req.query?.dev_email || req.query?.dev_name || req.query?.dev);
-  if (ALLOW_DEV_OAUTH && hasDevParams) {
+  if (!IS_PRODUCTION && ALLOW_DEV_OAUTH && hasDevParams) {
     return handleDevOauthLogin({
       provider: 'google',
       req,
@@ -302,6 +314,7 @@ export const handleGoogleCallback = async (req, res) => {
       sessionStore,
       isAdminUser,
       frontendUrl: FRONTEND_URL,
+      setSessionCookie,
     });
   }
 
@@ -404,22 +417,17 @@ export const handleGoogleCallback = async (req, res) => {
 
     const token = createSessionToken(user.id);
     touchSession(token);
+    setSessionCookie(res, token);
 
     const redirectUrl = buildOauthRedirectUrl({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        isAdmin: isAdminUser(user),
-      },
       nextPath,
       frontendUrl: FRONTEND_URL,
+      success: true,
     });
 
     return res.redirect(redirectUrl);
   } catch (error) {
-    console.error('Google OAuth callback failed:', error);
+    logger.error('Google OAuth callback failed:', error);
     return redirectOauthError(res, {
       provider: 'google',
       error: 'server_error',
@@ -436,7 +444,9 @@ export const handleWeChatCallback = async (req, res) => {
     wechatAppSecret: WECHAT_APP_SECRET,
     wechatFrontendUrl: WECHAT_FRONTEND_URL,
     wechatRedirectUri: WECHAT_REDIRECT_URI,
+    nodeEnv: NODE_ENV,
   } = getServerConfig();
+  const IS_PRODUCTION = NODE_ENV === 'production';
 
   const code = typeof req.query?.code === 'string' ? req.query.code : '';
   const state = typeof req.query?.state === 'string' ? req.query.state : '';
@@ -450,7 +460,7 @@ export const handleWeChatCallback = async (req, res) => {
     });
   }
 
-  const entry = consumeOauthState(state);
+  const entry = await consumeOauthStateAsync(state);
   if (!entry) {
     return redirectOauthError(res, {
       provider: 'wechat',
@@ -463,7 +473,7 @@ export const handleWeChatCallback = async (req, res) => {
   const nextPath = entry?.nextPath || null;
 
   const hasDevParams = Boolean(req.query?.dev_email || req.query?.dev_name || req.query?.dev);
-  if (ALLOW_DEV_OAUTH && hasDevParams) {
+  if (!IS_PRODUCTION && ALLOW_DEV_OAUTH && hasDevParams) {
     return handleDevOauthLogin({
       provider: 'wechat',
       req,
@@ -475,6 +485,7 @@ export const handleWeChatCallback = async (req, res) => {
       sessionStore,
       isAdminUser,
       frontendUrl: WECHAT_FRONTEND_URL,
+      setSessionCookie,
     });
   }
 
@@ -558,22 +569,17 @@ export const handleWeChatCallback = async (req, res) => {
 
     const token = createSessionToken(user.id);
     touchSession(token);
+    setSessionCookie(res, token);
 
     const redirectUrl = buildOauthRedirectUrl({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        isAdmin: isAdminUser(user),
-      },
       nextPath,
       frontendUrl: WECHAT_FRONTEND_URL,
+      success: true,
     });
 
     return res.redirect(redirectUrl);
   } catch (error) {
-    console.error('WeChat OAuth callback failed:', error);
+    logger.error('WeChat OAuth callback failed:', error);
     return redirectOauthError(res, {
       provider: 'wechat',
       error: 'wechat_oauth_failed',

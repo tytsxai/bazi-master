@@ -1,3 +1,4 @@
+import { logger as appLogger } from './logger.js';
 const getRedisUrl = (env = process.env) => env.REDIS_URL || '';
 let redisClient = null;
 let redisInitPromise = null;
@@ -12,7 +13,7 @@ export const initRedis = async ({
   env = process.env,
   url,
   importRedis = () => import('redis'),
-  logger = console,
+  logger = appLogger,
 } = {}) => {
   const redisUrl = typeof url === 'string' ? url : getRedisUrl(env);
   if (!redisUrl) {
@@ -32,7 +33,11 @@ export const initRedis = async ({
         logger.error('[redis] client error:', error);
       });
       await redisClient.connect();
-      logger.log('[redis] connected');
+      if (typeof logger.info === 'function') {
+        logger.info('[redis] connected');
+      } else if (typeof logger.log === 'function') {
+        logger.log('[redis] connected');
+      }
       return redisClient;
     } catch (error) {
       redisInitPromise = null;
@@ -47,7 +52,10 @@ export const initRedis = async ({
   return redisInitPromise;
 };
 
-export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) => {
+export const createRedisMirror = (
+  client,
+  { prefix = '', ttlMs = null, logger = appLogger } = {}
+) => {
   const resolveKey = (key) => `${prefix}${key}`;
   const toJson = (value) => {
     try {
@@ -72,7 +80,7 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
         const raw = await client.get(resolveKey(key));
         return fromJson(raw);
       } catch (error) {
-        console.warn('[redis] get failed:', error?.message || error);
+        logger.warn('[redis] get failed:', error?.message || error);
         return null;
       }
     },
@@ -80,11 +88,12 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
       if (!key) return;
       const payload = toJson(value);
       if (!payload) return;
-      const ttl = Number.isFinite(overrideTtlMs) && overrideTtlMs > 0
-        ? overrideTtlMs
-        : Number.isFinite(ttlMs) && ttlMs > 0
-          ? ttlMs
-          : null;
+      const ttl =
+        Number.isFinite(overrideTtlMs) && overrideTtlMs > 0
+          ? overrideTtlMs
+          : Number.isFinite(ttlMs) && ttlMs > 0
+            ? ttlMs
+            : null;
       try {
         if (ttl) {
           await client.set(resolveKey(key), payload, { PX: ttl });
@@ -92,7 +101,7 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
           await client.set(resolveKey(key), payload);
         }
       } catch (error) {
-        console.warn('[redis] set failed:', error?.message || error);
+        logger.warn('[redis] set failed:', error?.message || error);
       }
     },
     async delete(key) {
@@ -100,7 +109,7 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
       try {
         await client.del(resolveKey(key));
       } catch (error) {
-        console.warn('[redis] delete failed:', error?.message || error);
+        logger.warn('[redis] delete failed:', error?.message || error);
       }
     },
     async clear() {
@@ -120,7 +129,7 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
           }
         }
       } catch (error) {
-        console.warn('[redis] clear failed:', error?.message || error);
+        logger.warn('[redis] clear failed:', error?.message || error);
       }
     },
     async deleteByPrefix(rawPrefix) {
@@ -141,7 +150,7 @@ export const createRedisMirror = (client, { prefix = '', ttlMs = null } = {}) =>
           }
         }
       } catch (error) {
-        console.warn('[redis] deleteByPrefix failed:', error?.message || error);
+        logger.warn('[redis] deleteByPrefix failed:', error?.message || error);
       }
     },
   };

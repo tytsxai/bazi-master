@@ -1,3 +1,4 @@
+import { logger } from '../config/logger.js';
 import { initRedis } from '../config/redis.js';
 
 const rateLimitStore = new Map();
@@ -6,6 +7,13 @@ let lastRateLimitCleanup = 0;
 let redisClient = null;
 let redisInitPromise = null;
 let warnedOnFallback = false;
+
+const logWarn = (...args) => {
+  logger.warn(...args);
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn(...args);
+  }
+};
 
 const resetRateLimitState = () => {
   lastRateLimitCleanup = 0;
@@ -18,7 +26,7 @@ const warnOnFallback = () => {
   if (warnedOnFallback) return;
   if (process.env.NODE_ENV === 'production') return;
   warnedOnFallback = true;
-  console.warn('[rate-limit] Redis unavailable; using in-memory rate limit store.');
+  logWarn('[rate-limit] Redis unavailable; using in-memory rate limit store.');
 };
 
 const ensureRedisClient = async (initRedisClient) => {
@@ -31,7 +39,7 @@ const ensureRedisClient = async (initRedisClient) => {
       redisClient = client;
       return client;
     } catch (error) {
-      console.warn('[rate-limit] Redis init failed:', error?.message || error);
+      logWarn('[rate-limit] Redis init failed:', error?.message || error);
       return null;
     }
   })();
@@ -49,7 +57,7 @@ const getRedisRateLimitEntry = async (client, { key, windowMs, now, prefix }) =>
       ttlMs = Number(results[1]);
     }
   } catch (error) {
-    console.warn('[rate-limit] Redis error:', error?.message || error);
+    logWarn('[rate-limit] Redis error:', error?.message || error);
     return null;
   }
 
@@ -58,7 +66,7 @@ const getRedisRateLimitEntry = async (client, { key, windowMs, now, prefix }) =>
     try {
       await client.pexpire(redisKey, windowMs);
     } catch (error) {
-      console.warn('[rate-limit] Redis expire failed:', error?.message || error);
+      logWarn('[rate-limit] Redis expire failed:', error?.message || error);
     }
     ttlMs = windowMs;
   }
@@ -70,7 +78,8 @@ const getRedisRateLimitEntry = async (client, { key, windowMs, now, prefix }) =>
 };
 
 const maybeCleanupRateLimitStore = (now) => {
-  const RATE_LIMIT_ENABLED = process.env.NODE_ENV === 'production' || process.env.RATE_LIMIT_MAX > 0;
+  const RATE_LIMIT_ENABLED =
+    process.env.NODE_ENV === 'production' || process.env.RATE_LIMIT_MAX > 0;
   if (!RATE_LIMIT_ENABLED) return;
   const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60000;
   if (!Number.isFinite(RATE_LIMIT_WINDOW_MS) || RATE_LIMIT_WINDOW_MS <= 0) return;
@@ -93,7 +102,12 @@ const getRateLimitKey = (req) => {
 
 const isLocalAddress = (value) => {
   if (!value || typeof value !== 'string') return false;
-  return value === '127.0.0.1' || value === '::1' || value.startsWith('127.0.0.') || value === 'localhost';
+  return (
+    value === '127.0.0.1' ||
+    value === '::1' ||
+    value.startsWith('127.0.0.') ||
+    value === 'localhost'
+  );
 };
 
 const createRateLimitMiddleware = (config) => {
@@ -149,7 +163,7 @@ const createRateLimitMiddleware = (config) => {
       res.setHeader('Retry-After', Math.ceil((entry.resetAt - now) / 1000));
       return res.status(429).json({
         error: 'Too many requests',
-        retryAfter: Math.ceil((entry.resetAt - now) / 1000)
+        retryAfter: Math.ceil((entry.resetAt - now) / 1000),
       });
     }
 

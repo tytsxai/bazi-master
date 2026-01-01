@@ -15,12 +15,12 @@ const logRequestStart = ({ req, requestId }) => {
         userAgent: req.get('User-Agent'),
         ip: req.ip,
       },
-      'Request started',
+      'Request started'
     );
     return;
   }
 
-  console.info(`--> ${req.method} ${getRequestUrl(req)} [${requestId}]`);
+  logger.info(`--> ${req.method} ${getRequestUrl(req)} [${requestId}]`);
 };
 
 const logRequestFinish = ({ req, res, requestId, durationMs }) => {
@@ -36,14 +36,14 @@ const logRequestFinish = ({ req, res, requestId, durationMs }) => {
         statusCode: res.statusCode,
         durationMs,
       },
-      'Request completed',
+      'Request completed'
     );
     return;
   }
 
   const statusIcon = res.statusCode >= 400 ? '!!' : '<-';
-  console[logLevel](
-    `${statusIcon} ${req.method} ${getRequestUrl(req)} ${res.statusCode} ${durationMs}ms [${requestId}]`,
+  logger[logLevel](
+    `${statusIcon} ${req.method} ${getRequestUrl(req)} ${res.statusCode} ${durationMs}ms [${requestId}]`
   );
 };
 

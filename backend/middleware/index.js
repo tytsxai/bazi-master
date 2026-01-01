@@ -4,3 +4,4 @@ export * from './rateLimit.middleware.js';
 export * from './security.js';
 export * from './urlLength.middleware.js';
 export * from './error.js';
+export * from './validation.middleware.js';

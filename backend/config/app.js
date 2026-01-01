@@ -64,22 +64,16 @@ export const getServerConfig = () => {
   const maxUrlLength = readNumber(process.env.MAX_URL_LENGTH, 16384);
   const nodeEnv = process.env.NODE_ENV || '';
   const isProduction = nodeEnv === 'production';
-  const rateLimitWindowMs = readNumber(
-    process.env.RATE_LIMIT_WINDOW_MS,
-    isProduction ? 60_000 : 0
-  );
-  const rateLimitMax = readNumber(
-    process.env.RATE_LIMIT_MAX,
-    isProduction ? 120 : 0
-  );
+  const rateLimitWindowMs = readNumber(process.env.RATE_LIMIT_WINDOW_MS, isProduction ? 60_000 : 0);
+  const rateLimitMax = readNumber(process.env.RATE_LIMIT_MAX, isProduction ? 120 : 0);
 
   const openaiApiKey = process.env.OPENAI_API_KEY || '';
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
   const aiProvider = (
-    process.env.AI_PROVIDER
-    || (openaiApiKey ? 'openai' : null)
-    || (anthropicApiKey ? 'anthropic' : null)
-    || 'mock'
+    process.env.AI_PROVIDER ||
+    (openaiApiKey ? 'openai' : null) ||
+    (anthropicApiKey ? 'anthropic' : null) ||
+    'mock'
   ).toLowerCase();
 
   const openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -88,29 +82,30 @@ export const getServerConfig = () => {
   const aiTimeoutMs = readNumber(process.env.AI_TIMEOUT_MS, 15000);
 
   const resetTokenTtlMs = readNumber(process.env.RESET_TOKEN_TTL_MS, 30 * 60 * 1000);
-  const resetRequestMinDurationMs = readNumber(
-    process.env.RESET_REQUEST_MIN_DURATION_MS,
-    350
-  );
+  const resetRequestMinDurationMs = readNumber(process.env.RESET_REQUEST_MIN_DURATION_MS, 350);
   const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
   const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
   const googleRedirectUri =
     process.env.GOOGLE_REDIRECT_URI || `http://localhost:${port}/api/auth/google/callback`;
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS, nodeEnv);
-  const sessionTokenSecret = process.env.SESSION_TOKEN_SECRET || (nodeEnv === 'test' ? 'test-session-secret-for-auth-me-test' : '');
+  const sessionTokenSecret =
+    process.env.SESSION_TOKEN_SECRET ||
+    (nodeEnv === 'test' ? 'test-session-secret-for-auth-me-test' : '');
   const allowDevOauthRaw = process.env.ALLOW_DEV_OAUTH;
-  const allowDevOauth = allowDevOauthRaw === undefined || allowDevOauthRaw === ''
-    ? !isProduction
-    : allowDevOauthRaw === '1' || allowDevOauthRaw === 'true';
+  const allowDevOauth =
+    allowDevOauthRaw === undefined || allowDevOauthRaw === ''
+      ? !isProduction
+      : allowDevOauthRaw === '1' || allowDevOauthRaw === 'true';
 
   const wechatAppId = process.env.WECHAT_APP_ID || '';
   const wechatAppSecret = process.env.WECHAT_APP_SECRET || '';
   const wechatScope = process.env.WECHAT_SCOPE || 'snsapi_login';
-  const wechatFrontendUrl = process.env.WECHAT_FRONTEND_URL || frontendUrl || 'http://localhost:3000';
+  const wechatFrontendUrl =
+    process.env.WECHAT_FRONTEND_URL || frontendUrl || 'http://localhost:3000';
   const backendBaseUrl = process.env.BACKEND_BASE_URL || 'http://localhost:4000';
-  const wechatRedirectUri = process.env.WECHAT_REDIRECT_URI
-    || `${backendBaseUrl}/api/auth/wechat/callback`;
+  const wechatRedirectUri =
+    process.env.WECHAT_REDIRECT_URI || `${backendBaseUrl}/api/auth/wechat/callback`;
   const openApiBaseUrl = process.env.BACKEND_BASE_URL || `http://localhost:${port}`;
 
   const importBatchSize = readNumber(process.env.IMPORT_BATCH_SIZE, 500);
@@ -119,7 +114,7 @@ export const getServerConfig = () => {
   const availableProviders = [
     { name: 'openai', enabled: Boolean(openaiApiKey) },
     { name: 'anthropic', enabled: Boolean(anthropicApiKey) },
-    { name: 'mock', enabled: true }
+    { name: 'mock', enabled: true },
   ];
 
   return {
@@ -184,7 +179,6 @@ export const initAppConfig = () => {
     googleRedirectUri: GOOGLE_REDIRECT_URI,
     frontendUrl: FRONTEND_URL,
     adminEmails: ADMIN_EMAILS,
-    sessionTokenSecret: SESSION_TOKEN_SECRET,
     allowDevOauth: DEV_OAUTH_ENABLED,
     wechatAppId: WECHAT_APP_ID,
     wechatAppSecret: WECHAT_APP_SECRET,
