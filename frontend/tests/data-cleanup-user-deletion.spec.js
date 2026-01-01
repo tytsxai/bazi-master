@@ -40,7 +40,7 @@ test('Data cleanup cascade after user deletion removes history and favorites', a
   await page.screenshot({ path: screenshotPath('user-delete-step-2-form-filled') });
 
   const calculateResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/calculate') && resp.status() === 200,
+    (resp) => resp.url().includes('/api/bazi/calculate') && resp.status() === 200
   );
   await page.getByRole('button', { name: 'Calculate' }).click();
   await calculateResponse;
@@ -48,7 +48,7 @@ test('Data cleanup cascade after user deletion removes history and favorites', a
   await page.screenshot({ path: screenshotPath('user-delete-step-3-calculated') });
 
   const fullAnalysisResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/full-analysis') && resp.status() === 200,
+    (resp) => resp.url().includes('/api/bazi/full-analysis') && resp.status() === 200
   );
   await page.getByTestId('bazi-full-analysis').click();
   await fullAnalysisResponse;
@@ -60,7 +60,7 @@ test('Data cleanup cascade after user deletion removes history and favorites', a
     (resp) =>
       resp.url().includes('/api/bazi/records') &&
       resp.request().method() === 'POST' &&
-      resp.status() === 200,
+      resp.status() === 200
   );
   await page.getByTestId('bazi-save-record').click();
   await saveResponse;
@@ -71,7 +71,7 @@ test('Data cleanup cascade after user deletion removes history and favorites', a
     (resp) =>
       resp.url().includes('/api/favorites') &&
       resp.request().method() === 'POST' &&
-      resp.status() === 200,
+      resp.status() === 200
   );
   await page.getByRole('button', { name: 'Add to Favorites' }).click();
   await favoriteResponse;

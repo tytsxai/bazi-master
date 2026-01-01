@@ -6,7 +6,10 @@ const buildScreenshotPath = (name) => {
   return path.join(process.cwd(), 'verification', `${stamp}-${name}.png`);
 };
 
-test('[J] Data cleanup: Zodiac weekly horoscope from /iching matches backend data', async ({ page, request }) => {
+test('[J] Data cleanup: Zodiac weekly horoscope from /iching matches backend data', async ({
+  page,
+  request,
+}) => {
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));
@@ -57,7 +60,7 @@ test('[J] Data cleanup: Zodiac weekly horoscope from /iching matches backend dat
     sign: backendData.sign,
     period: backendData.period,
     range: backendData.range,
-    horoscope: backendData.horoscope
+    horoscope: backendData.horoscope,
   });
   expect(typeof data.generatedAt).toBe('string');
   expect(typeof backendData.generatedAt).toBe('string');

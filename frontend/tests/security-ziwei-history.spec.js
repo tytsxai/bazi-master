@@ -6,7 +6,9 @@ const buildScreenshotPath = (name) => {
   return path.join(process.cwd(), '..', 'verification', `${stamp}-${name}.png`);
 };
 
-test('Security: Ziwei history flow from /ziwei matches backend data and supports delete', async ({ page }) => {
+test('Security: Ziwei history flow from /ziwei matches backend data and supports delete', async ({
+  page,
+}) => {
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));
@@ -109,7 +111,8 @@ test('Security: Ziwei history flow from /ziwei matches backend data and supports
   const deleteButton = persistedCard.getByTestId('ziwei-history-delete');
   await deleteButton.click();
   const deleteResponsePromise = page.waitForResponse(
-    (resp) => resp.url().includes(`/api/ziwei/history/${record.id}`) && resp.request().method() === 'DELETE'
+    (resp) =>
+      resp.url().includes(`/api/ziwei/history/${record.id}`) && resp.request().method() === 'DELETE'
   );
   const deleteDialog = page.getByRole('dialog', { name: /Delete this Zi Wei chart/i });
   await deleteDialog.getByRole('button', { name: /^Delete$/i }).click();

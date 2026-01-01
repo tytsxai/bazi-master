@@ -60,7 +60,8 @@ test('Failure handling with network interruption and retry in BaZi flow', async 
   await page.screenshot({ path: screenshotPath('failure-retry-04-retry-banner') });
 
   const calcResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/calculate') && resp.request().method() === 'POST' && resp.ok()
+    (resp) =>
+      resp.url().includes('/api/bazi/calculate') && resp.request().method() === 'POST' && resp.ok()
   );
   await page.getByTestId('retry-action').click();
   await calcResponse;
@@ -70,7 +71,10 @@ test('Failure handling with network interruption and retry in BaZi flow', async 
   await page.screenshot({ path: screenshotPath('failure-retry-05-calculated') });
 
   const fullResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/full-analysis') && resp.request().method() === 'POST' && resp.ok()
+    (resp) =>
+      resp.url().includes('/api/bazi/full-analysis') &&
+      resp.request().method() === 'POST' &&
+      resp.ok()
   );
   await page.getByRole('button', { name: /request full analysis/i }).click();
   await fullResponse;
@@ -80,9 +84,7 @@ test('Failure handling with network interruption and retry in BaZi flow', async 
 
   const saveResponse = page.waitForResponse(
     (resp) =>
-      resp.url().includes('/api/bazi/records') &&
-      resp.request().method() === 'POST' &&
-      resp.ok()
+      resp.url().includes('/api/bazi/records') && resp.request().method() === 'POST' && resp.ok()
   );
   await page.getByRole('button', { name: 'Save to History' }).click();
   await saveResponse;
@@ -91,9 +93,7 @@ test('Failure handling with network interruption and retry in BaZi flow', async 
 
   const favoriteResponse = page.waitForResponse(
     (resp) =>
-      resp.url().includes('/api/favorites') &&
-      resp.request().method() === 'POST' &&
-      resp.ok()
+      resp.url().includes('/api/favorites') && resp.request().method() === 'POST' && resp.ok()
   );
   await page.getByRole('button', { name: 'Add to Favorites' }).click();
   await favoriteResponse;

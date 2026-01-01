@@ -51,9 +51,10 @@ test('Bulk operation flow for batch deletion', async ({ page }) => {
     const saveButton = page.getByRole('button', { name: /Save to History|保存到历史/i });
     await expect(saveButton).toBeEnabled({ timeout: 20000 });
     await Promise.all([
-      page.waitForResponse((res) => res.url().includes('/api/bazi/records')
-        && res.request().method() === 'POST'
-        && res.ok()),
+      page.waitForResponse(
+        (res) =>
+          res.url().includes('/api/bazi/records') && res.request().method() === 'POST' && res.ok()
+      ),
       saveButton.click(),
     ]);
   };
@@ -82,16 +83,20 @@ test('Bulk operation flow for batch deletion', async ({ page }) => {
   await expect(dialog).toBeVisible();
 
   const bulkDeleteResponsePromise = page.waitForResponse(
-    (res) => res.url().includes('/api/bazi/records/bulk-delete')
-      && res.request().method() === 'POST'
+    (res) =>
+      res.url().includes('/api/bazi/records/bulk-delete') && res.request().method() === 'POST'
   );
   await dialog.getByRole('button', { name: 'Delete selected' }).click();
   const bulkDeleteResponse = await bulkDeleteResponsePromise;
   expect(bulkDeleteResponse.ok()).toBeTruthy();
 
   await expect(page.getByTestId('history-record-card').filter({ hasText: prefix })).toHaveCount(0);
-  await expect(page.getByTestId('history-deleted-card').filter({ hasText: recordA.location })).toBeVisible();
-  await expect(page.getByTestId('history-deleted-card').filter({ hasText: recordB.location })).toBeVisible();
+  await expect(
+    page.getByTestId('history-deleted-card').filter({ hasText: recordA.location })
+  ).toBeVisible();
+  await expect(
+    page.getByTestId('history-deleted-card').filter({ hasText: recordB.location })
+  ).toBeVisible();
   await page.screenshot({ path: 'verification/bulk-delete-03-deleted.png', fullPage: true });
 
   await page.reload();

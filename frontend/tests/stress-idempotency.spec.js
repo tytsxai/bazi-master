@@ -38,7 +38,7 @@ test('Stress flow with rapid submissions remains idempotent', async ({ page }) =
   await page.screenshot({ path: screenshotPath('stress-step-2-form') });
 
   const calcResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/calculate') && resp.status() === 200,
+    (resp) => resp.url().includes('/api/bazi/calculate') && resp.status() === 200
   );
   const calcButton = page.getByRole('button', { name: 'Calculate' });
   await Promise.all([calcResponse, calcButton.click(), calcButton.click(), calcButton.click()]);
@@ -47,7 +47,7 @@ test('Stress flow with rapid submissions remains idempotent', async ({ page }) =
   await page.screenshot({ path: screenshotPath('stress-step-3-calculated') });
 
   const fullResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/full-analysis') && resp.status() === 200,
+    (resp) => resp.url().includes('/api/bazi/full-analysis') && resp.status() === 200
   );
   const fullButton = page.getByRole('button', { name: 'Request Full Analysis' });
   await Promise.all([fullResponse, fullButton.click(), fullButton.click()]);
@@ -59,7 +59,7 @@ test('Stress flow with rapid submissions remains idempotent', async ({ page }) =
     (resp) =>
       resp.url().includes('/api/bazi/records') &&
       resp.request().method() === 'POST' &&
-      resp.status() === 200,
+      resp.status() === 200
   );
   const saveButton = page.getByRole('button', { name: 'Save to History' });
   await Promise.all([saveResponse, saveButton.click(), saveButton.click()]);
@@ -70,7 +70,7 @@ test('Stress flow with rapid submissions remains idempotent', async ({ page }) =
     (resp) =>
       resp.url().includes('/api/favorites') &&
       resp.request().method() === 'POST' &&
-      resp.status() === 200,
+      resp.status() === 200
   );
   const favoriteButton = page.getByRole('button', { name: 'Add to Favorites' });
   await Promise.all([favoriteResponse, favoriteButton.click(), favoriteButton.click()]);
@@ -80,7 +80,7 @@ test('Stress flow with rapid submissions remains idempotent', async ({ page }) =
   await page.goto('/history');
   await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   const historyFilterResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/records') && resp.url().includes('q='),
+    (resp) => resp.url().includes('/api/bazi/records') && resp.url().includes('q=')
   );
   await page.getByPlaceholder('Location, timezone, pillar').fill(uniqueLocation);
   await historyFilterResponse;

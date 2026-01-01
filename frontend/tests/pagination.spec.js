@@ -51,11 +51,14 @@ test('History pagination flow', async ({ page, request }) => {
   });
   expect(importResponse.ok()).toBeTruthy();
 
-  await page.addInitScript(({ authToken, authUser }) => {
-    localStorage.setItem('bazi_token', authToken);
-    localStorage.setItem('bazi_user', JSON.stringify(authUser));
-    localStorage.setItem('bazi_last_activity', String(Date.now()));
-  }, { authToken: token, authUser: user });
+  await page.addInitScript(
+    ({ authToken, authUser }) => {
+      localStorage.setItem('bazi_token', authToken);
+      localStorage.setItem('bazi_user', JSON.stringify(authUser));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+    },
+    { authToken: token, authUser: user }
+  );
 
   await page.goto(`/history?q=${encodeURIComponent(prefix)}`);
   await expect(page.getByText('Page 1 of 2')).toBeVisible();

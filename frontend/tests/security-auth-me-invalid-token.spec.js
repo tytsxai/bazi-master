@@ -6,7 +6,10 @@ const buildScreenshotPath = (name) => {
   return path.join(process.cwd(), '..', 'verification', `${stamp}-${name}.png`);
 };
 
-test('Security: /api/auth/me rejects invalid or expired tokens with 401', async ({ page, request }) => {
+test('Security: /api/auth/me rejects invalid or expired tokens with 401', async ({
+  page,
+  request,
+}) => {
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));

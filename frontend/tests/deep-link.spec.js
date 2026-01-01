@@ -115,7 +115,9 @@ test('Deep link flow loads shared history record with filters', async ({ page })
   await expect(page).toHaveURL(/\/history/);
   await expect(page.getByTestId('history-shared-record')).toBeVisible();
   await expect(page.getByPlaceholder('Location, timezone, pillar')).toHaveValue(uniqueLocation);
-  await expect(page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })).toHaveCount(1);
+  await expect(
+    page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })
+  ).toHaveCount(1);
   await page.screenshot({ path: screenshotPath('step-10-deeplink-history') });
 
   await page.goto('/favorites');
