@@ -1,5 +1,6 @@
 import express from 'express';
 import { prisma } from '../config/prisma.js';
+import { logger } from '../config/logger.js';
 import { getServerConfig } from '../config/app.js';
 import {
   requireAuth,
@@ -155,7 +156,7 @@ router.delete('/me', requireAuth, async (req, res) => {
     });
     res.json({ status: 'ok' });
   } catch (error) {
-    console.error('User self-delete failed:', error);
+    logger.error({ err: error }, 'User self-delete failed');
     res.status(500).json({ error: 'Unable to delete account' });
   }
 });

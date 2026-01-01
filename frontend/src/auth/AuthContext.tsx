@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import * as Sentry from '@sentry/react';
 import { readApiErrorMessage } from '../utils/apiError';
 
 export interface User {
@@ -94,6 +95,18 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const setSentryUser = (user: User | null) => {
+  if (user) {
+    Sentry.setUser({
+      id: String(user.id),
+      email: user.email,
+      username: user.name || undefined,
+    });
+  } else {
+    Sentry.setUser(null);
+  }
+};
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const { t } = useTranslation();
   const [token, setToken] = useState<string | null>(() => readStoredValue(TOKEN_KEY));
@@ -152,6 +165,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     clearIdleTimeout();
     setToken(null);
     setUser(null);
+    setSentryUser(null);
   }, [clearIdleTimeout]);
 
   const logout = useCallback(({ preserveRetry = false } = {}) => {
@@ -263,6 +277,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (data?.user) {
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));
         setUser(data.user);
+        setSentryUser(data.user);
         return data.user as User;
       }
     } catch (error) {
@@ -333,6 +348,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       setToken(data.token);
       setUser(data.user);
+      setSentryUser(data.user);
       recordActivity();
       return true;
     } catch (error) {
@@ -373,6 +389,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     setToken(nextToken);
     setUser(nextUser ?? null);
+    setSentryUser(nextUser ?? null);
     recordActivity();
   }, [recordActivity]);
 
@@ -425,6 +442,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setToken(storedToken);
       }
       setUser(storedUser);
+      setSentryUser(storedUser);
       const storedProfileName = localStorage.getItem(PROFILE_NAME_KEY);
       setProfileNameState(storedProfileName ? storedProfileName.trim() : '');
 

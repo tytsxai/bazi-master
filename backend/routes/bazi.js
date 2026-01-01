@@ -1,5 +1,6 @@
 import express from 'express';
 import { prisma } from '../config/prisma.js';
+import { logger } from '../config/logger.js';
 import { requireAuth } from '../middleware/auth.js';
 import {
     getBaziCalculation,
@@ -202,7 +203,7 @@ router.post('/full-analysis', requireAuth, async (req, res) => {
             release();
         }
     } catch (error) {
-        console.error('Full analysis failed:', error);
+        logger.error({ err: error }, 'Full analysis failed');
         res.status(500).json({ error: 'Analysis error' });
     }
 });
@@ -255,7 +256,7 @@ router.get('/records', requireAuth, async (req, res) => {
             filteredCount
         });
     } catch (error) {
-        console.error(error);
+        logger.error({ err: error }, 'Failed to fetch records');
         res.status(500).json({ error: 'Failed to fetch records' });
     }
 });
@@ -345,7 +346,7 @@ router.post('/records/import', requireAuth, async (req, res) => {
         }
         res.json({ created: createdCount });
     } catch (err) {
-        console.error(err);
+        logger.error({ err }, 'Import failed');
         res.status(500).json({ error: 'Import failed' });
     }
 });
@@ -411,7 +412,7 @@ router.post('/records/bulk-delete', requireAuth, async (req, res) => {
         await prisma.$transaction(operations);
         res.json({ status: 'ok' });
     } catch (err) {
-        console.error(err);
+        logger.error({ err }, 'Bulk delete failed');
         res.status(500).json({ error: 'Bulk delete failed' });
     }
 });

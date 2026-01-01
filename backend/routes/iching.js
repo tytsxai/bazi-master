@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { prisma } from '../config/prisma.js';
+import { logger } from '../config/logger.js';
 import { hexagrams } from '../data/ichingHexagrams.js';
 import { generateAIContent } from '../services/ai.service.js';
 import {
@@ -146,7 +147,7 @@ Hexagram: ${hexagramName}
 
         res.json({ content });
     } catch (error) {
-        console.error('I Ching interpret error:', error);
+        logger.error({ err: error }, 'I Ching interpret error');
         res.status(500).json({ error: 'AI interpretation failed' });
     }
 });
@@ -174,7 +175,7 @@ router.post('/history', requireAuth, async (req, res) => {
 
         return res.json({ record: serializeIchingRecord(record) });
     } catch (error) {
-        console.error('Failed to save I Ching history:', error);
+        logger.error({ err: error }, 'Failed to save I Ching history');
         return res.status(500).json({ error: 'Failed to save history' });
     }
 });

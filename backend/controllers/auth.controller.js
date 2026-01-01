@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 
 import { prisma } from '../config/prisma.js';
+import { logger } from '../config/logger.js';
 import { getServerConfig } from '../config/app.js';
 import {
   createSessionToken,
@@ -14,6 +15,7 @@ import {
   buildOauthRedirectUrl,
   consumeOauthState,
   handleDevOauthLogin,
+  verifyGoogleIdToken,
 } from '../services/oauth.service.js';
 import { ensureDefaultUser } from '../services/schema.service.js';
 
@@ -203,7 +205,7 @@ export const handlePasswordResetRequest = async (req, res) => {
     resetTokenStore.set(token, { userId: user.id, expiresAt });
     resetTokenByUser.set(user.id, token);
     if (SHOULD_LOG_RESET_TOKEN) {
-      console.log(`[auth] Password reset token for ${email}: ${token}`);
+      logger.info({ email }, '[auth] Password reset token generated');
     }
   }
 
@@ -357,6 +359,8 @@ export const handleGoogleCallback = async (req, res) => {
 
     const tokenData = await tokenRes.json();
     const accessToken = tokenData?.access_token;
+    const idToken = tokenData?.id_token;
+
     if (!accessToken) {
       return redirectOauthError(res, {
         provider: 'google',
@@ -364,6 +368,15 @@ export const handleGoogleCallback = async (req, res) => {
         nextPath,
         frontendUrl: FRONTEND_URL,
       });
+    }
+
+    // Verify ID token if present (recommended for security)
+    let verifiedClaims = null;
+    if (idToken) {
+      verifiedClaims = await verifyGoogleIdToken(idToken, GOOGLE_CLIENT_ID);
+      if (!verifiedClaims) {
+        logger.warn('Google ID token verification failed');
+      }
     }
 
     const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -380,8 +393,13 @@ export const handleGoogleCallback = async (req, res) => {
     }
 
     const profile = await profileRes.json();
-    const email = normalizeEmail(profile?.email);
-    const name = typeof profile?.name === 'string' ? profile.name.trim() : '';
+
+    // Prefer verified claims from ID token, fallback to profile API
+    const email = normalizeEmail(verifiedClaims?.email || profile?.email);
+    const name = typeof (verifiedClaims?.name || profile?.name) === 'string'
+      ? (verifiedClaims?.name || profile?.name).trim()
+      : '';
+    const emailVerified = verifiedClaims?.email_verified ?? profile?.verified_email;
 
     if (!email || !email.includes('@')) {
       return redirectOauthError(res, {
@@ -419,7 +437,7 @@ export const handleGoogleCallback = async (req, res) => {
 
     return res.redirect(redirectUrl);
   } catch (error) {
-    console.error('Google OAuth callback failed:', error);
+    logger.error({ err: error }, 'Google OAuth callback failed');
     return redirectOauthError(res, {
       provider: 'google',
       error: 'server_error',
@@ -573,7 +591,7 @@ export const handleWeChatCallback = async (req, res) => {
 
     return res.redirect(redirectUrl);
   } catch (error) {
-    console.error('WeChat OAuth callback failed:', error);
+    logger.error({ err: error }, 'WeChat OAuth callback failed');
     return redirectOauthError(res, {
       provider: 'wechat',
       error: 'wechat_oauth_failed',

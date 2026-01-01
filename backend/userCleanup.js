@@ -1,4 +1,5 @@
 import { parseAuthToken } from './services/auth.service.js';
+import { logger } from './config/logger.js';
 
 const deleteUserResetTokens = (userId, resetTokenStore, resetTokenByUser) => {
   if (!resetTokenStore || !resetTokenByUser) return;
@@ -86,7 +87,7 @@ export const deleteUserCascade = async ({
       await prisma.$executeRaw`DELETE FROM BaziRecordTrash WHERE userId = ${userId}`;
     }
   } catch (error) {
-    console.warn('Failed to clear BaziRecordTrash for deleted user:', error?.message || error);
+    logger.warn({ err: error }, 'Failed to clear BaziRecordTrash for deleted user');
   }
 
   if (typeof cleanupUserMemory === 'function') {

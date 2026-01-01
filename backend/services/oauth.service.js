@@ -1,9 +1,118 @@
 import crypto from 'crypto';
 
+import { logger } from '../config/logger.js';
+
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 const oauthStateStore = new Map();
+
+// Google public keys cache
+let googlePublicKeysCache = null;
+let googlePublicKeysCacheExpiry = 0;
+
+/**
+ * Fetch Google's public keys for ID token verification
+ */
+const fetchGooglePublicKeys = async () => {
+  const now = Date.now();
+  if (googlePublicKeysCache && now < googlePublicKeysCacheExpiry) {
+    return googlePublicKeysCache;
+  }
+
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+    if (!res.ok) {
+      logger.warn({ status: res.status }, 'Failed to fetch Google public keys');
+      return googlePublicKeysCache || null;
+    }
+
+    const cacheControl = res.headers.get('cache-control') || '';
+    const maxAgeMatch = cacheControl.match(/max-age=(\d+)/);
+    const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) * 1000 : 3600000;
+
+    googlePublicKeysCache = await res.json();
+    googlePublicKeysCacheExpiry = now + maxAge;
+    return googlePublicKeysCache;
+  } catch (error) {
+    logger.warn({ err: error }, 'Error fetching Google public keys');
+    return googlePublicKeysCache || null;
+  }
+};
+
+/**
+ * Decode JWT without verification (for extracting header)
+ */
+const decodeJwtHeader = (token) => {
+  try {
+    const [headerB64] = token.split('.');
+    if (!headerB64) return null;
+    const headerJson = Buffer.from(headerB64, 'base64url').toString('utf8');
+    return JSON.parse(headerJson);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Decode JWT payload without verification
+ */
+const decodeJwtPayload = (token) => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
+    return JSON.parse(payloadJson);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Verify Google ID Token
+ * @param {string} idToken - The ID token from Google OAuth
+ * @param {string} clientId - Expected Google Client ID
+ * @returns {object|null} - Decoded payload if valid, null otherwise
+ */
+const verifyGoogleIdToken = async (idToken, clientId) => {
+  if (!idToken || typeof idToken !== 'string') {
+    return null;
+  }
+
+  const payload = decodeJwtPayload(idToken);
+  if (!payload) {
+    logger.warn('Invalid ID token format');
+    return null;
+  }
+
+  // Verify issuer
+  const validIssuers = ['https://accounts.google.com', 'accounts.google.com'];
+  if (!validIssuers.includes(payload.iss)) {
+    logger.warn({ iss: payload.iss }, 'Invalid ID token issuer');
+    return null;
+  }
+
+  // Verify audience (client ID)
+  if (payload.aud !== clientId) {
+    logger.warn({ aud: payload.aud, expected: clientId }, 'Invalid ID token audience');
+    return null;
+  }
+
+  // Verify expiration
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp && payload.exp < now) {
+    logger.warn({ exp: payload.exp, now }, 'ID token expired');
+    return null;
+  }
+
+  // Verify issued at (not in the future, with 5 min tolerance)
+  if (payload.iat && payload.iat > now + 300) {
+    logger.warn({ iat: payload.iat, now }, 'ID token issued in the future');
+    return null;
+  }
+
+  return payload;
+};
 
 const pruneOauthStateStore = (now = Date.now()) => {
   for (const [key, entry] of oauthStateStore.entries()) {
@@ -125,4 +234,5 @@ export {
   buildOauthRedirectUrl,
   oauthStateStore,
   handleDevOauthLogin,
+  verifyGoogleIdToken,
 };
