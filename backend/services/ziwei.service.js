@@ -113,8 +113,12 @@ export const calculateZiweiChart = (data) => {
     { star: ZIWEI_MAJOR_STARS.pojun, offset: 7 },
   ];
 
-  ziweiGroup.forEach(({ star, offset }) => addStar(normalizeIndex(ziweiIndex + offset), star, 'major'));
-  tianfuGroup.forEach(({ star, offset }) => addStar(normalizeIndex(tianfuIndex + offset), star, 'major'));
+  ziweiGroup.forEach(({ star, offset }) =>
+    addStar(normalizeIndex(ziweiIndex + offset), star, 'major')
+  );
+  tianfuGroup.forEach(({ star, offset }) =>
+    addStar(normalizeIndex(tianfuIndex + offset), star, 'major')
+  );
 
   const minorBase = normalizeIndex(lunarDay + timeBranchIndex);
   const minorGroup = [
@@ -127,7 +131,9 @@ export const calculateZiweiChart = (data) => {
     { star: ZIWEI_MINOR_STARS.tiankui, offset: 1 },
     { star: ZIWEI_MINOR_STARS.tianyue, offset: 7 },
   ];
-  minorGroup.forEach(({ star, offset }) => addStar(normalizeIndex(minorBase + offset), star, 'minor'));
+  minorGroup.forEach(({ star, offset }) =>
+    addStar(normalizeIndex(minorBase + offset), star, 'minor')
+  );
 
   const transformations = Object.entries(transformMap).map(([type, starKey]) => {
     const starDef = ZIWEI_MAJOR_STARS[starKey] || ZIWEI_MINOR_STARS[starKey] || { key: starKey };

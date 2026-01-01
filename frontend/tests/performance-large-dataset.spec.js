@@ -95,15 +95,17 @@ test('Performance smoke flow with large dataset search', async ({ page, request 
   await expect(page.getByRole('heading', { name: 'Major Luck Cycles' })).toBeVisible();
 
   await Promise.all([
-    page.waitForResponse((resp) =>
-      resp.url().includes('/api/bazi/records') && resp.request().method() === 'POST' && resp.ok()
+    page.waitForResponse(
+      (resp) =>
+        resp.url().includes('/api/bazi/records') && resp.request().method() === 'POST' && resp.ok()
     ),
     page.getByRole('button', { name: /save to history/i }).click(),
   ]);
 
   await Promise.all([
-    page.waitForResponse((resp) =>
-      resp.url().includes('/api/favorites') && resp.request().method() === 'POST' && resp.ok()
+    page.waitForResponse(
+      (resp) =>
+        resp.url().includes('/api/favorites') && resp.request().method() === 'POST' && resp.ok()
     ),
     page.getByRole('button', { name: /add to favorites/i }).click(),
   ]);
@@ -122,14 +124,20 @@ test('Performance smoke flow with large dataset search', async ({ page, request 
   const searchDuration = Date.now() - searchStart;
   expect(searchDuration).toBeLessThan(4000);
 
-  const recordCard = page.getByTestId('history-record-card').filter({ hasText: flowLocation }).first();
+  const recordCard = page
+    .getByTestId('history-record-card')
+    .filter({ hasText: flowLocation })
+    .first();
   await expect(recordCard).toBeVisible();
   await expect(recordCard).toContainText(`${birth.year}-${birth.month}-${birth.day}`);
   await expect(recordCard).toContainText(gender);
   await expect(recordCard).toContainText('UTC');
 
   await page.goto('/favorites');
-  const favoriteCard = page.getByTestId('favorite-record-card').filter({ hasText: flowLocation }).first();
+  const favoriteCard = page
+    .getByTestId('favorite-record-card')
+    .filter({ hasText: flowLocation })
+    .first();
   await expect(favoriteCard).toBeVisible();
 
   const logoutButton = page.getByRole('button', { name: /logout/i });

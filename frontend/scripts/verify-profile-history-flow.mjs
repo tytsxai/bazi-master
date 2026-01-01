@@ -91,10 +91,10 @@ try {
   await shot('step-4-history');
 
   const profileRequest = page.waitForResponse(
-    (resp) => resp.url().includes('/api/auth/me') && resp.status() === 200,
+    (resp) => resp.url().includes('/api/auth/me') && resp.status() === 200
   );
   const settingsRequest = page.waitForResponse(
-    (resp) => resp.url().includes('/api/user/settings') && resp.status() === 200,
+    (resp) => resp.url().includes('/api/user/settings') && resp.status() === 200
   );
 
   await page.getByRole('link', { name: 'Profile' }).click();

@@ -41,19 +41,18 @@ test('History CRUD flow', async ({ page }) => {
 
   await Promise.all([
     page.waitForResponse(
-      (res) => res.url().includes('/api/bazi/records')
-        && res.request().method() === 'POST'
-        && res.ok()
+      (res) =>
+        res.url().includes('/api/bazi/records') && res.request().method() === 'POST' && res.ok()
     ),
     saveButton.click(),
   ]);
-  await expect(page.getByText(/Record saved to history\.|Record already saved\./)).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText(/Record saved to history\.|Record already saved\./)).toBeVisible({
+    timeout: 20000,
+  });
 
   await page.goto('/history');
   await page.waitForResponse(
-    (res) => res.url().includes('/api/bazi/records')
-      && res.request().method() === 'GET'
-      && res.ok()
+    (res) => res.url().includes('/api/bazi/records') && res.request().method() === 'GET' && res.ok()
   );
   const locationText = page.getByText(uniqueLocation);
   await expect(locationText).toBeVisible({ timeout: 20000 });

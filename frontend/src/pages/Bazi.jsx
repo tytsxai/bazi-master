@@ -70,14 +70,16 @@ export default function Bazi() {
         >
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-amber-200">{t('common.warning')}</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-amber-200">
+                {t('common.warning')}
+              </p>
               <p className="mt-2 text-sm text-amber-50">
                 {getRetryLabel(pendingRetry.action)}{' '}
                 {t('errors.actionQueued', { label: '' })
                   .replace('已加入重试队列。', '')
                   .replace('queued for retry.', '')
-                  .trim()}.{' '}
-                {isOnline ? t('bazi.retryNow') : t('errors.offline')}
+                  .trim()}
+                . {isOnline ? t('bazi.retryNow') : t('errors.offline')}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">

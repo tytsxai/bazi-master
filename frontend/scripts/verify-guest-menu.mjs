@@ -32,7 +32,10 @@ try {
   await expect(page.getByRole('link', { name: 'Favorites' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Zi Wei' })).toHaveCount(0);
 
-  await page.screenshot({ path: path.join(outDir, `${stamp}-guest-menu-hidden.png`), fullPage: true });
+  await page.screenshot({
+    path: path.join(outDir, `${stamp}-guest-menu-hidden.png`),
+    fullPage: true,
+  });
 
   if (consoleErrors.length) {
     throw new Error(`Console errors detected: ${consoleErrors.join(' | ')}`);

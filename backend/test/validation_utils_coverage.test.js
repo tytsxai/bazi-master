@@ -74,16 +74,27 @@ describe('validation utils coverage', () => {
   });
 
   it('validateBaziInput returns whitespace/invalid/ok as expected', () => {
-    assert.deepEqual(validateBaziInput({ gender: '   ' }), { ok: false, payload: null, reason: 'whitespace' });
-    assert.deepEqual(validateBaziInput({ timezone: '   ' }), { ok: false, payload: null, reason: 'whitespace' });
+    assert.deepEqual(validateBaziInput({ gender: '   ' }), {
+      ok: false,
+      payload: null,
+      reason: 'whitespace',
+    });
+    assert.deepEqual(validateBaziInput({ timezone: '   ' }), {
+      ok: false,
+      payload: null,
+      reason: 'whitespace',
+    });
 
-    assert.equal(validateBaziInput({
-      birthYear: 2024,
-      birthMonth: 2,
-      birthDay: 31,
-      birthHour: 10,
-      gender: 'm',
-    }).ok, false);
+    assert.equal(
+      validateBaziInput({
+        birthYear: 2024,
+        birthMonth: 2,
+        birthDay: 31,
+        birthHour: 10,
+        gender: 'm',
+      }).ok,
+      false
+    );
 
     const ok = validateBaziInput({
       birthYear: '2024',

@@ -1,120 +1,26 @@
 import crypto from 'crypto';
-
 import { logger } from '../config/logger.js';
 
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const isTest = process.env.NODE_ENV === 'test';
 
 const oauthStateStore = new Map();
+let oauthStateMirror = null;
+let warnedOnFallback = false;
 
-// Google public keys cache
-let googlePublicKeysCache = null;
-let googlePublicKeysCacheExpiry = 0;
-
-/**
- * Fetch Google's public keys for ID token verification
- */
-const fetchGooglePublicKeys = async () => {
-  const now = Date.now();
-  if (googlePublicKeysCache && now < googlePublicKeysCacheExpiry) {
-    return googlePublicKeysCache;
-  }
-
-  try {
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/certs');
-    if (!res.ok) {
-      logger.warn({ status: res.status }, 'Failed to fetch Google public keys');
-      return googlePublicKeysCache || null;
-    }
-
-    const cacheControl = res.headers.get('cache-control') || '';
-    const maxAgeMatch = cacheControl.match(/max-age=(\d+)/);
-    const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) * 1000 : 3600000;
-
-    googlePublicKeysCache = await res.json();
-    googlePublicKeysCacheExpiry = now + maxAge;
-    return googlePublicKeysCache;
-  } catch (error) {
-    logger.warn({ err: error }, 'Error fetching Google public keys');
-    return googlePublicKeysCache || null;
-  }
+export const setOauthStateMirror = (mirror) => {
+  oauthStateMirror = mirror;
 };
 
-/**
- * Decode JWT without verification (for extracting header)
- */
-const decodeJwtHeader = (token) => {
-  try {
-    const [headerB64] = token.split('.');
-    if (!headerB64) return null;
-    const headerJson = Buffer.from(headerB64, 'base64url').toString('utf8');
-    return JSON.parse(headerJson);
-  } catch {
-    return null;
-  }
-};
-
-/**
- * Decode JWT payload without verification
- */
-const decodeJwtPayload = (token) => {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
-    return JSON.parse(payloadJson);
-  } catch {
-    return null;
-  }
-};
-
-/**
- * Verify Google ID Token
- * @param {string} idToken - The ID token from Google OAuth
- * @param {string} clientId - Expected Google Client ID
- * @returns {object|null} - Decoded payload if valid, null otherwise
- */
-const verifyGoogleIdToken = async (idToken, clientId) => {
-  if (!idToken || typeof idToken !== 'string') {
-    return null;
-  }
-
-  const payload = decodeJwtPayload(idToken);
-  if (!payload) {
-    logger.warn('Invalid ID token format');
-    return null;
-  }
-
-  // Verify issuer
-  const validIssuers = ['https://accounts.google.com', 'accounts.google.com'];
-  if (!validIssuers.includes(payload.iss)) {
-    logger.warn({ iss: payload.iss }, 'Invalid ID token issuer');
-    return null;
-  }
-
-  // Verify audience (client ID)
-  if (payload.aud !== clientId) {
-    logger.warn({ aud: payload.aud, expected: clientId }, 'Invalid ID token audience');
-    return null;
-  }
-
-  // Verify expiration
-  const now = Math.floor(Date.now() / 1000);
-  if (payload.exp && payload.exp < now) {
-    logger.warn({ exp: payload.exp, now }, 'ID token expired');
-    return null;
-  }
-
-  // Verify issued at (not in the future, with 5 min tolerance)
-  if (payload.iat && payload.iat > now + 300) {
-    logger.warn({ iat: payload.iat, now }, 'ID token issued in the future');
-    return null;
-  }
-
-  return payload;
+const warnOnFallback = () => {
+  if (isTest || oauthStateMirror || warnedOnFallback) return;
+  warnedOnFallback = true;
+  logger.warn('[oauth-state] Redis unavailable; using in-memory OAuth state store.');
 };
 
 const pruneOauthStateStore = (now = Date.now()) => {
+  warnOnFallback();
   for (const [key, entry] of oauthStateStore.entries()) {
     if (!entry?.createdAt || now - entry.createdAt > OAUTH_STATE_TTL_MS) {
       oauthStateStore.delete(key);
@@ -125,41 +31,82 @@ const pruneOauthStateStore = (now = Date.now()) => {
 const buildOauthState = (nextPath) => {
   pruneOauthStateStore();
   const state = crypto.randomBytes(24).toString('hex');
-  oauthStateStore.set(state, { createdAt: Date.now(), nextPath });
+  const entry = { createdAt: Date.now(), nextPath };
+  oauthStateStore.set(state, entry);
+  if (oauthStateMirror?.set) {
+    oauthStateMirror.set(state, entry, OAUTH_STATE_TTL_MS);
+  }
   return state;
 };
 
+const getLocalOauthState = (state) => {
+  warnOnFallback();
+  const entry = oauthStateStore.get(state);
+  if (!entry) return null;
+  if (Date.now() - entry.createdAt > OAUTH_STATE_TTL_MS) {
+    oauthStateStore.delete(state);
+    return null;
+  }
+  return entry;
+};
+
 const consumeOauthState = (state) => {
+  warnOnFallback();
   const entry = oauthStateStore.get(state);
   if (!entry) return null;
   oauthStateStore.delete(state);
   if (Date.now() - entry.createdAt > OAUTH_STATE_TTL_MS) return null;
+  if (oauthStateMirror?.delete) {
+    oauthStateMirror.delete(state);
+  }
   return entry;
 };
 
-const buildOauthRedirectUrl = ({ token, user, nextPath, error, frontendUrl = DEFAULT_FRONTEND_URL }) => {
-  const redirectUrl = new URL('/login', frontendUrl);
-  const hashParams = new URLSearchParams();
-  const isProduction = process.env.NODE_ENV === 'production';
+const consumeOauthStateAsync = async (state) => {
+  const local = getLocalOauthState(state);
+  if (local) {
+    oauthStateStore.delete(state);
+    if (oauthStateMirror?.delete) {
+      oauthStateMirror.delete(state);
+    }
+    return local;
+  }
 
-  if (token) {
-    hashParams.set('token', token);
-    if (!isProduction) {
-      redirectUrl.searchParams.set('token', token);
+  if (!oauthStateMirror?.get) return null;
+  const remote = await oauthStateMirror.get(state);
+  if (!remote || typeof remote !== 'object') return null;
+  const createdAt = Number(remote.createdAt);
+  if (!Number.isFinite(createdAt)) {
+    if (oauthStateMirror?.delete) {
+      oauthStateMirror.delete(state);
     }
+    return null;
   }
-  if (user) {
-    const encodedUser = Buffer.from(JSON.stringify(user)).toString('base64url');
-    hashParams.set('user', encodedUser);
-    if (!isProduction) {
-      redirectUrl.searchParams.set('user', encodedUser);
+  if (Date.now() - createdAt > OAUTH_STATE_TTL_MS) {
+    if (oauthStateMirror?.delete) {
+      oauthStateMirror.delete(state);
     }
+    return null;
   }
+  if (oauthStateMirror?.delete) {
+    oauthStateMirror.delete(state);
+  }
+  return {
+    createdAt,
+    nextPath: typeof remote.nextPath === 'string' ? remote.nextPath : remote.nextPath || null,
+  };
+};
+
+const buildOauthRedirectUrl = ({
+  nextPath,
+  error,
+  success = false,
+  frontendUrl = DEFAULT_FRONTEND_URL,
+}) => {
+  const redirectUrl = new URL('/login', frontendUrl);
   if (nextPath) redirectUrl.searchParams.set('next', nextPath);
   if (error) redirectUrl.searchParams.set('error', error);
-  if (hashParams.size) {
-    redirectUrl.hash = hashParams.toString();
-  }
+  if (!error && success) redirectUrl.searchParams.set('oauth', 'success');
   return redirectUrl.toString();
 };
 
@@ -173,10 +120,10 @@ const buildDevOauthIdentity = (provider, req) => {
   const rawName = normalizeDevOauthValue(req.query?.dev_name);
   const safeProvider = provider.replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'oauth';
   const timestamp = Date.now();
-  const email = rawEmail && rawEmail.includes('@')
-    ? rawEmail
-    : `dev-${safeProvider}-${timestamp}@example.com`;
-  const name = rawName || `Dev ${safeProvider.charAt(0).toUpperCase()}${safeProvider.slice(1)} User`;
+  const email =
+    rawEmail && rawEmail.includes('@') ? rawEmail : `dev-${safeProvider}-${timestamp}@example.com`;
+  const name =
+    rawName || `Dev ${safeProvider.charAt(0).toUpperCase()}${safeProvider.slice(1)} User`;
   return { email, name };
 };
 
@@ -189,8 +136,8 @@ const handleDevOauthLogin = async ({
   hashPassword,
   createSessionToken,
   sessionStore,
-  isAdminUser,
   frontendUrl,
+  setSessionCookie,
 }) => {
   const identity = buildDevOauthIdentity(provider, req);
   let user = await prisma.user.findUnique({ where: { email: identity.email } });
@@ -213,17 +160,14 @@ const handleDevOauthLogin = async ({
 
   const token = createSessionToken(user.id);
   sessionStore.set(token, Date.now());
+  if (typeof setSessionCookie === 'function') {
+    setSessionCookie(res, token);
+  }
 
   const redirectUrl = buildOauthRedirectUrl({
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      isAdmin: isAdminUser(user),
-    },
     nextPath,
     frontendUrl,
+    success: true,
   });
   return res.redirect(redirectUrl);
 };
@@ -231,8 +175,8 @@ const handleDevOauthLogin = async ({
 export {
   buildOauthState,
   consumeOauthState,
+  consumeOauthStateAsync,
   buildOauthRedirectUrl,
   oauthStateStore,
   handleDevOauthLogin,
-  verifyGoogleIdToken,
 };

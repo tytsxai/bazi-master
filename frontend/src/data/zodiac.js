@@ -10,11 +10,11 @@ export const ZODIAC_SIGNS = [
   { value: 'sagittarius', label: 'Sagittarius', range: 'Nov 22 - Dec 21' },
   { value: 'capricorn', label: 'Capricorn', range: 'Dec 22 - Jan 19' },
   { value: 'aquarius', label: 'Aquarius', range: 'Jan 20 - Feb 18' },
-  { value: 'pisces', label: 'Pisces', range: 'Feb 19 - Mar 20' }
+  { value: 'pisces', label: 'Pisces', range: 'Feb 19 - Mar 20' },
 ];
 
 export const ZODIAC_PERIODS = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' }
+  { value: 'monthly', label: 'Monthly' },
 ];

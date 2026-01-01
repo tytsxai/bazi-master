@@ -16,7 +16,7 @@ const INITIAL_FORM = {
   birthMonth: '',
   birthDay: '',
   birthHour: '',
-  gender: 'female'
+  gender: 'female',
 };
 
 const parseChartPayload = (chart) => {
@@ -38,7 +38,7 @@ const normalizeHistoryRecord = (record) => {
 
 export default function Ziwei() {
   const { t } = useTranslation();
-  const { token, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const authFetch = useAuthFetch();
 
   const [form, setForm] = useState(INITIAL_FORM);
@@ -70,7 +70,7 @@ export default function Ziwei() {
 
   // --- History Loading ---
   const loadHistory = async () => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     setHistoryLoading(true);
     try {
       const res = await authFetch('/api/ziwei/history');
@@ -95,7 +95,7 @@ export default function Ziwei() {
       return;
     }
     loadHistory();
-  }, [isAuthenticated, token]);
+  }, [isAuthenticated]);
 
   // --- Input Handlers ---
   const updateField = (field) => (event) => {
@@ -110,13 +110,17 @@ export default function Ziwei() {
     const hour = Number(form.birthHour);
 
     if (!String(form.birthYear).trim()) nextErrors.birthYear = t('bazi.errors.yearRequired');
-    else if (!Number.isInteger(year) || year < 1900 || year > 2030) nextErrors.birthYear = t('bazi.errors.yearInvalid');
+    else if (!Number.isInteger(year) || year < 1900 || year > 2030)
+      nextErrors.birthYear = t('bazi.errors.yearInvalid');
     if (!String(form.birthMonth).trim()) nextErrors.birthMonth = t('bazi.errors.monthRequired');
-    else if (!Number.isInteger(month) || month < 1 || month > 12) nextErrors.birthMonth = t('bazi.errors.monthInvalid');
+    else if (!Number.isInteger(month) || month < 1 || month > 12)
+      nextErrors.birthMonth = t('bazi.errors.monthInvalid');
     if (!String(form.birthDay).trim()) nextErrors.birthDay = t('bazi.errors.dayRequired');
-    else if (!Number.isInteger(day) || day < 1 || day > 31) nextErrors.birthDay = t('bazi.errors.dayInvalid');
+    else if (!Number.isInteger(day) || day < 1 || day > 31)
+      nextErrors.birthDay = t('bazi.errors.dayInvalid');
     if (!String(form.birthHour).trim()) nextErrors.birthHour = t('bazi.errors.hourRequired');
-    else if (!Number.isInteger(hour) || hour < 0 || hour > 23) nextErrors.birthHour = t('bazi.errors.hourInvalid');
+    else if (!Number.isInteger(hour) || hour < 0 || hour > 23)
+      nextErrors.birthHour = t('bazi.errors.hourInvalid');
     if (!form.gender) nextErrors.gender = t('bazi.errors.genderRequired');
 
     return nextErrors;
@@ -125,7 +129,7 @@ export default function Ziwei() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (loading) return;
-    if (!token) {
+    if (!isAuthenticated) {
       setStatus({ type: 'error', message: t('ziwei.errors.loginRequired') });
       return;
     }
@@ -147,8 +151,8 @@ export default function Ziwei() {
           birthMonth: Number(form.birthMonth),
           birthDay: Number(form.birthDay),
           birthHour: Number(form.birthHour),
-          gender: form.gender
-        })
+          gender: form.gender,
+        }),
       });
 
       if (res.status === 401) return;
@@ -169,7 +173,7 @@ export default function Ziwei() {
 
   // --- Save Logic ---
   const handleSave = async () => {
-    if (!token) {
+    if (!isAuthenticated) {
       setStatus({ type: 'error', message: t('ziwei.errors.loginRequiredSave') });
       return false;
     }
@@ -238,7 +242,7 @@ export default function Ziwei() {
   };
 
   const handleAiInterpret = async () => {
-    if (!token) {
+    if (!isAuthenticated) {
       setStatus({ type: 'error', message: t('ziwei.errors.loginRequiredAi') });
       return;
     }
@@ -261,7 +265,6 @@ export default function Ziwei() {
         const provider = getPreferredAiProvider();
         const message = {
           type: 'ziwei_ai_request',
-          token,
           provider,
           payload: {
             birthYear: Number(form.birthYear),
@@ -269,8 +272,8 @@ export default function Ziwei() {
             birthDay: Number(form.birthDay),
             birthHour: Number(form.birthHour),
             gender: form.gender,
-            chart: result
-          }
+            chart: result,
+          },
         };
         ws.send(JSON.stringify(message));
       };
@@ -295,14 +298,20 @@ export default function Ziwei() {
         if (message?.type === 'done') {
           wsStatusRef.current.done = true;
           setAiLoading(false);
-          setStatus({ type: 'success', message: t('ziwei.errors.aiInterpretReady') || t('bazi.aiReady') });
+          setStatus({
+            type: 'success',
+            message: t('ziwei.errors.aiInterpretReady') || t('bazi.aiReady'),
+          });
           closeAiSocket(1000, 'Stream complete');
           return;
         }
         if (message?.type === 'error') {
           wsStatusRef.current.errored = true;
           setAiLoading(false);
-          setStatus({ type: 'error', message: message.message || t('ziwei.errors.calculateFailed') });
+          setStatus({
+            type: 'error',
+            message: message.message || t('ziwei.errors.calculateFailed'),
+          });
           closeAiSocket(1011, 'AI error');
         }
       };
@@ -343,7 +352,7 @@ export default function Ziwei() {
   const [hasSaved, setHasSaved] = useState(false);
 
   const requestAiConfirm = () => {
-    if (!token) {
+    if (!isAuthenticated) {
       setStatus({ type: 'error', message: t('ziwei.errors.loginRequiredAi') });
       return;
     }
@@ -394,9 +403,11 @@ export default function Ziwei() {
   };
 
   const statusStyle =
-    status?.type === 'error' ? 'text-rose-200 bg-rose-900/50' :
-      status?.type === 'success' ? 'text-emerald-200 bg-emerald-900/50' :
-        'text-blue-200 bg-blue-900/50';
+    status?.type === 'error'
+      ? 'text-rose-200 bg-rose-900/50'
+      : status?.type === 'success'
+        ? 'text-emerald-200 bg-emerald-900/50'
+        : 'text-blue-200 bg-blue-900/50';
 
   const wizardSteps = [
     { id: 1, title: t('ziwei.steps.birth.title'), description: t('ziwei.steps.birth.desc') },
@@ -429,11 +440,7 @@ export default function Ziwei() {
             >
               {t('profile.cancel')}
             </Button>
-            <Button
-              onClick={handleConfirmAiRequest}
-            >
-              {t('bazi.aiInterpret')}
-            </Button>
+            <Button onClick={handleConfirmAiRequest}>{t('bazi.aiInterpret')}</Button>
           </>
         }
       >
@@ -453,10 +460,7 @@ export default function Ziwei() {
             >
               {t('profile.cancel')}
             </Button>
-            <Button
-              variant="danger"
-              onClick={handleConfirmDelete}
-            >
+            <Button variant="danger" onClick={handleConfirmDelete}>
               {t('common.delete')}
             </Button>
           </>
@@ -465,7 +469,8 @@ export default function Ziwei() {
         <p className="mt-2 text-sm text-white/70">{t('ziwei.deleteConfirmDesc')}</p>
         {confirmDeleteRecord && (
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
-            {confirmDeleteRecord.birthYear}-{confirmDeleteRecord.birthMonth}-{confirmDeleteRecord.birthDay} · {confirmDeleteRecord.birthHour}:00
+            {confirmDeleteRecord.birthYear}-{confirmDeleteRecord.birthMonth}-
+            {confirmDeleteRecord.birthDay} · {confirmDeleteRecord.birthHour}:00
           </div>
         )}
       </Modal>
@@ -478,7 +483,9 @@ export default function Ziwei() {
         <section className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-white/50">{t('ziwei.wizardTitle')}</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-white/50">
+                {t('ziwei.wizardTitle')}
+              </p>
               <h2 className="text-lg font-display text-gold-300">{t('ziwei.wizardSubtitle')}</h2>
             </div>
             {hasSaved ? (
@@ -499,15 +506,18 @@ export default function Ziwei() {
               return (
                 <li
                   key={step.id}
-                  className={`rounded-2xl border px-4 py-3 text-sm transition ${isComplete
-                    ? 'border-emerald-300/60 bg-emerald-500/10 text-emerald-100'
-                    : isActive
-                      ? 'border-gold-400/60 bg-gold-400/10 text-gold-100'
-                      : 'border-white/10 bg-white/5 text-white/60'
-                    }`}
+                  className={`rounded-2xl border px-4 py-3 text-sm transition ${
+                    isComplete
+                      ? 'border-emerald-300/60 bg-emerald-500/10 text-emerald-100'
+                      : isActive
+                        ? 'border-gold-400/60 bg-gold-400/10 text-gold-100'
+                        : 'border-white/10 bg-white/5 text-white/60'
+                  }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold">{t('ziwei.palace')} {step.id}</span>
+                    <span className="font-semibold">
+                      {t('ziwei.palace')} {step.id}
+                    </span>
                     {isComplete && <span className="text-xs">✓</span>}
                   </div>
                   <div className="mt-2 text-base text-white">{step.title}</div>
@@ -563,7 +573,9 @@ export default function Ziwei() {
                 <h2 className="font-display text-2xl text-white">{t('history.title')}</h2>
                 <p className="text-sm text-white/60">{t('history.subtitle')}</p>
               </div>
-              <div className="text-xs text-white/60">{t('history.count', { count: history.length })}</div>
+              <div className="text-xs text-white/60">
+                {t('history.count', { count: history.length })}
+              </div>
             </div>
 
             {historyLoading ? (
@@ -583,8 +595,12 @@ export default function Ziwei() {
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <div className="text-sm text-white">{birthKey} · {record.gender}</div>
-                          <div className="mt-1 text-xs text-white/60">{new Date(record.createdAt).toLocaleString()}</div>
+                          <div className="text-sm text-white">
+                            {birthKey} · {record.gender}
+                          </div>
+                          <div className="mt-1 text-xs text-white/60">
+                            {new Date(record.createdAt).toLocaleString()}
+                          </div>
                         </div>
                         <Button
                           variant="danger"

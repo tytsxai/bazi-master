@@ -107,7 +107,7 @@ describe('AI service coverage v2', () => {
           async () => {
             await assert.rejects(
               () => ai.callOpenAI({ system: 's', user: 'u' }),
-              /OpenAI API error: 401/,
+              /OpenAI API error: 401/
             );
           }
         );
@@ -143,7 +143,7 @@ describe('AI service coverage v2', () => {
           async () => {
             await assert.rejects(
               () => ai.callAnthropic({ system: 's', user: 'u' }),
-              /Anthropic API error: 500/,
+              /Anthropic API error: 500/
             );
           }
         );
@@ -196,10 +196,7 @@ describe('AI service coverage v2', () => {
               options?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
             }),
           async () => {
-            await assert.rejects(
-              () => ai.callOpenAI({ system: 's', user: 'u' }),
-              /aborted/,
-            );
+            await assert.rejects(() => ai.callOpenAI({ system: 's', user: 'u' }), /aborted/);
           }
         );
       }
@@ -347,7 +344,11 @@ describe('AI service coverage v2', () => {
             },
           }),
           async () => {
-            const out = await ai.generateAIContent({ system: 's', user: 'u', provider: 'anthropic' });
+            const out = await ai.generateAIContent({
+              system: 's',
+              user: 'u',
+              provider: 'anthropic',
+            });
             assert.equal(out, 'anthropic-non-stream');
           }
         );
@@ -363,7 +364,7 @@ describe('AI service coverage v2', () => {
           async () => {
             await assert.rejects(
               () => ai.callOpenAIStream({ system: 's', user: 'u', onChunk: () => {} }),
-              /OpenAI API error: 429/,
+              /OpenAI API error: 429/
             );
           }
         );
@@ -379,7 +380,7 @@ describe('AI service coverage v2', () => {
           async () => {
             await assert.rejects(
               () => ai.callAnthropicStream({ system: 's', user: 'u', onChunk: () => {} }),
-              /Anthropic API error: 400/,
+              /Anthropic API error: 400/
             );
           }
         );

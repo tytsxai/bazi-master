@@ -19,39 +19,84 @@ describe('health.service more coverage', () => {
 
   it('checkDatabase returns ok true/false', async () => {
     assert.deepEqual(
-      await checkDatabase({ prismaClient: { user: { findFirst: async () => ({ id: 1 }) } }, timeoutMs: 1 }),
-      { ok: true },
+      await checkDatabase({
+        prismaClient: { user: { findFirst: async () => ({ id: 1 }) } },
+        timeoutMs: 1,
+      }),
+      { ok: true }
     );
     assert.deepEqual(
-      await checkDatabase({ prismaClient: { user: { findFirst: async () => { throw new Error('db'); } } }, timeoutMs: 1 }),
-      { ok: false, error: 'db' },
+      await checkDatabase({
+        prismaClient: {
+          user: {
+            findFirst: async () => {
+              throw new Error('db');
+            },
+          },
+        },
+        timeoutMs: 1,
+      }),
+      { ok: false, error: 'db' }
     );
     assert.deepEqual(
-      await checkDatabase({ prismaClient: { user: { findFirst: async () => { throw null; } } }, timeoutMs: 1 }),
-      { ok: false, error: 'db_check_failed' },
+      await checkDatabase({
+        prismaClient: {
+          user: {
+            findFirst: async () => {
+              throw null;
+            },
+          },
+        },
+        timeoutMs: 1,
+      }),
+      { ok: false, error: 'db_check_failed' }
     );
   });
 
   it('checkRedis covers disabled/unavailable/ok/error', async () => {
+    assert.deepEqual(await checkRedis({ initRedisFn: async () => null, env: {}, timeoutMs: 1 }), {
+      ok: true,
+      status: 'disabled',
+    });
     assert.deepEqual(
-      await checkRedis({ initRedisFn: async () => null, env: {}, timeoutMs: 1 }),
-      { ok: true, status: 'disabled' },
+      await checkRedis({
+        initRedisFn: async () => null,
+        env: { REDIS_URL: 'redis://x' },
+        timeoutMs: 1,
+      }),
+      { ok: false, status: 'unavailable' }
     );
     assert.deepEqual(
-      await checkRedis({ initRedisFn: async () => null, env: { REDIS_URL: 'redis://x' }, timeoutMs: 1 }),
-      { ok: false, status: 'unavailable' },
+      await checkRedis({
+        initRedisFn: async () => ({ ping: async () => 'PONG' }),
+        env: { REDIS_URL: 'redis://x' },
+        timeoutMs: 1,
+      }),
+      { ok: true }
     );
     assert.deepEqual(
-      await checkRedis({ initRedisFn: async () => ({ ping: async () => 'PONG' }), env: { REDIS_URL: 'redis://x' }, timeoutMs: 1 }),
-      { ok: true },
+      await checkRedis({
+        initRedisFn: async () => ({
+          ping: async () => {
+            throw new Error('no');
+          },
+        }),
+        env: { REDIS_URL: 'redis://x' },
+        timeoutMs: 1,
+      }),
+      { ok: false, error: 'no' }
     );
     assert.deepEqual(
-      await checkRedis({ initRedisFn: async () => ({ ping: async () => { throw new Error('no'); } }), env: { REDIS_URL: 'redis://x' }, timeoutMs: 1 }),
-      { ok: false, error: 'no' },
-    );
-    assert.deepEqual(
-      await checkRedis({ initRedisFn: async () => ({ ping: async () => { throw null; } }), env: { REDIS_URL: 'redis://x' }, timeoutMs: 1 }),
-      { ok: false, error: 'redis_check_failed' },
+      await checkRedis({
+        initRedisFn: async () => ({
+          ping: async () => {
+            throw null;
+          },
+        }),
+        env: { REDIS_URL: 'redis://x' },
+        timeoutMs: 1,
+      }),
+      { ok: false, error: 'redis_check_failed' }
     );
   });
 });

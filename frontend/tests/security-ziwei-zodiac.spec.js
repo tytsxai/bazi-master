@@ -66,7 +66,10 @@ test('Security: Ziwei V2 chart from /zodiac matches backend data', async ({ page
   await expect(page.getByRole('button', { name: /Logout/i })).toBeVisible();
   await page.screenshot({ path: buildScreenshotPath('security-ziwei-zodiac-step-1') });
 
-  const ziweiLink = page.locator('#main-content').getByRole('link', { name: /Zi Wei/i }).first();
+  const ziweiLink = page
+    .locator('#main-content')
+    .getByRole('link', { name: /Zi Wei/i })
+    .first();
   await ziweiLink.click();
   await expect(page).toHaveURL(/\/ziwei/);
   await page.screenshot({ path: buildScreenshotPath('security-ziwei-zodiac-step-2') });

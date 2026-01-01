@@ -41,10 +41,8 @@ describe('OAuth service coverage v2', () => {
     assert.equal(entry.nextPath, '/next');
   });
 
-  it('buildOauthRedirectUrl sets token/user hash and query params', () => {
+  it('buildOauthRedirectUrl sets error/next params', () => {
     const url = buildOauthRedirectUrl({
-      token: 'tok',
-      user: { id: 1, email: 'a@b.com' },
       nextPath: '/profile',
       error: 'x',
       frontendUrl: 'http://localhost:3000',
@@ -52,7 +50,16 @@ describe('OAuth service coverage v2', () => {
     assert.ok(url.includes('/login'));
     assert.ok(url.includes('next=%2Fprofile'));
     assert.ok(url.includes('error=x'));
-    assert.ok(url.includes('#'));
+    assert.ok(!url.includes('oauth=success'));
+  });
+
+  it('buildOauthRedirectUrl marks oauth success', () => {
+    const url = buildOauthRedirectUrl({
+      nextPath: '/profile',
+      success: true,
+      frontendUrl: 'http://localhost:3000',
+    });
+    assert.ok(url.includes('oauth=success'));
   });
 
   it('handleDevOauthLogin redirects with server_error when password hash fails', async () => {
@@ -82,7 +89,7 @@ describe('OAuth service coverage v2', () => {
     assert.ok(res.redirectedTo.includes('next=%2Fhome'));
   });
 
-  it('handleDevOauthLogin creates/updates user and redirects with token and encoded user', async () => {
+  it('handleDevOauthLogin creates/updates user and redirects with oauth success', async () => {
     const email = `dev_oauth_${Date.now()}@example.com`;
     const res = {
       redirectedTo: null,
@@ -111,9 +118,7 @@ describe('OAuth service coverage v2', () => {
 
     assert.ok(res.redirectedTo);
     assert.ok(res.redirectedTo.includes('/login'));
-    assert.ok(res.redirectedTo.includes('#'));
-    assert.ok(res.redirectedTo.includes('token='));
-    assert.ok(res.redirectedTo.includes('user='));
+    assert.ok(res.redirectedTo.includes('oauth=success'));
 
     // Update branch: user exists but name missing.
     await prisma.user.update({ where: { id: created.id }, data: { name: null } });

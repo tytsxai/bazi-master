@@ -1,5 +1,5 @@
-import { parseAuthToken } from './services/auth.service.js';
 import { logger } from './config/logger.js';
+import { parseAuthToken } from './services/auth.service.js';
 
 const deleteUserResetTokens = (userId, resetTokenStore, resetTokenByUser) => {
   if (!resetTokenStore || !resetTokenByUser) return;
@@ -49,7 +49,7 @@ export const cleanupUserInMemory = (
     resetTokenByUser,
     deletedClientIndex,
     clientRecordIndex,
-    sessionTokenSecret
+    sessionTokenSecret,
   } = {}
 ) => {
   if (!userId) return;
@@ -59,11 +59,7 @@ export const cleanupUserInMemory = (
   clientRecordIndex?.delete?.(userId);
 };
 
-export const deleteUserCascade = async ({
-  prisma,
-  userId,
-  cleanupUserMemory = null,
-} = {}) => {
+export const deleteUserCascade = async ({ prisma, userId, cleanupUserMemory = null } = {}) => {
   if (!prisma || !userId) {
     throw new Error('Missing prisma or userId for deleteUserCascade');
   }
@@ -87,7 +83,7 @@ export const deleteUserCascade = async ({
       await prisma.$executeRaw`DELETE FROM BaziRecordTrash WHERE userId = ${userId}`;
     }
   } catch (error) {
-    logger.warn({ err: error }, 'Failed to clear BaziRecordTrash for deleted user');
+    logger.warn('Failed to clear BaziRecordTrash for deleted user:', error?.message || error);
   }
 
   if (typeof cleanupUserMemory === 'function') {

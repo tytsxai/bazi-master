@@ -123,14 +123,12 @@ test('AI streaming via WebSocket flow (connect, stream, disconnect)', async ({ p
 
   await expect(page.getByTestId('bazi-full-analysis')).toBeEnabled();
   await page.getByTestId('bazi-full-analysis').click();
-  await expect.poll(
-    async () => page.getByTestId('ten-god-item').count(),
-    { timeout: 60000 }
-  ).toBeGreaterThan(0);
-  await expect.poll(
-    async () => page.getByTestId('luck-cycle-item').count(),
-    { timeout: 60000 }
-  ).toBeGreaterThan(0);
+  await expect
+    .poll(async () => page.getByTestId('ten-god-item').count(), { timeout: 60000 })
+    .toBeGreaterThan(0);
+  await expect
+    .poll(async () => page.getByTestId('luck-cycle-item').count(), { timeout: 60000 })
+    .toBeGreaterThan(0);
   await expect(page.getByTestId('bazi-ai-interpret')).toBeEnabled({ timeout: 60000 });
   await page.screenshot({ path: screenshotPath('ai-streaming-step-7-full-analysis') });
 

@@ -37,7 +37,7 @@ test('User can add and remove a BaZi favorite', async ({ page }) => {
   await page.screenshot({ path: screenshotPath('favorites-step-2-form-filled') });
 
   const calculateResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/calculate') && resp.status() === 200,
+    (resp) => resp.url().includes('/api/bazi/calculate') && resp.status() === 200
   );
   await page.getByRole('button', { name: 'Calculate' }).click();
   await calculateResponse;
@@ -48,7 +48,7 @@ test('User can add and remove a BaZi favorite', async ({ page }) => {
     (resp) =>
       resp.url().includes('/api/bazi/records') &&
       resp.request().method() === 'POST' &&
-      resp.status() === 200,
+      resp.status() === 200
   );
   await page.getByRole('button', { name: 'Save to History' }).click();
   await saveResponse;
@@ -61,7 +61,7 @@ test('User can add and remove a BaZi favorite', async ({ page }) => {
     (resp) =>
       resp.url().includes('/api/favorites') &&
       resp.request().method() === 'POST' &&
-      resp.status() === 200,
+      resp.status() === 200
   );
   await favoriteButton.click();
   await favoriteResponse;
@@ -79,7 +79,9 @@ test('User can add and remove a BaZi favorite', async ({ page }) => {
     .first();
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await favoriteCard.getByRole('button', { name: 'Share' }).click();
-  await expect(page.getByText(/Copied to clipboard|Shared successfully|Share failed/i)).toBeVisible();
+  await expect(
+    page.getByText(/Copied to clipboard|Shared successfully|Share failed/i)
+  ).toBeVisible();
   await page.screenshot({ path: screenshotPath('favorites-step-7-share') });
 
   await favoriteCard.getByRole('button', { name: 'Remove' }).click();
@@ -108,7 +110,9 @@ test('User can add and remove a BaZi favorite', async ({ page }) => {
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Delete' }).click();
   await expect(page.getByText('Record deleted.')).toBeVisible();
-  await expect(page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })).toHaveCount(0);
+  await expect(
+    page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })
+  ).toHaveCount(0);
   await page.screenshot({ path: screenshotPath('favorites-step-11-history-deleted') });
 
   expect(consoleErrors).toEqual([]);

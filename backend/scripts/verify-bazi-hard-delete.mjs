@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { deleteBaziRecordHard } from '../recordCleanup.js';
+import { logger } from '../config/logger.js';
 
 const prisma = new PrismaClient();
 
@@ -91,7 +92,7 @@ try {
     throw new Error(`BaziRecordTrash expected 0 but got ${trashRows.length}`);
   }
 
-  console.log('Bazi hard delete verified.');
+  logger.info('Bazi hard delete verified.');
 } finally {
   if (userId) {
     await prisma.user.delete({ where: { id: userId } }).catch(() => {});

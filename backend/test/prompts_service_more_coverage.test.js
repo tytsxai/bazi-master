@@ -1,11 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildBaziPrompt, buildZiweiPrompt, getChatSystemPrompt } from '../services/prompts.service.js';
+import {
+  buildBaziPrompt,
+  buildZiweiPrompt,
+  getChatSystemPrompt,
+} from '../services/prompts.service.js';
 
 describe('prompts.service more coverage', () => {
   it('buildBaziPrompt provides prompt + fallback even with partial inputs', () => {
-    const out = buildBaziPrompt({ pillars: {}, fiveElements: null, tenGods: null, luckCycles: null });
+    const out = buildBaziPrompt({
+      pillars: {},
+      fiveElements: null,
+      tenGods: null,
+      luckCycles: null,
+    });
     assert.equal(typeof out.system, 'string');
     assert.equal(typeof out.user, 'string');
     assert.equal(typeof out.fallback, 'function');
@@ -21,8 +30,16 @@ describe('prompts.service more coverage', () => {
     const out2 = buildZiweiPrompt({
       chart: {
         lunar: { year: 2024, month: 1, day: 2, isLeap: true },
-        mingPalace: { palace: { cn: '命宫' }, branch: { name: 'Zi' }, stars: { major: [{ cn: 'StarA' }, { key: 'StarB' }] } },
-        shenPalace: { palace: { name: '身宫' }, branch: { name: 'Chou' }, stars: { major: [{ name: 'StarC' }] } },
+        mingPalace: {
+          palace: { cn: '命宫' },
+          branch: { name: 'Zi' },
+          stars: { major: [{ cn: 'StarA' }, { key: 'StarB' }] },
+        },
+        shenPalace: {
+          palace: { name: '身宫' },
+          branch: { name: 'Chou' },
+          stars: { major: [{ name: 'StarC' }] },
+        },
         fourTransformations: [
           { type: 'huaLu', starCn: '禄' },
           { type: { toUpperCase: () => 'HUAJI' }, starName: 'Ji' },

@@ -11,8 +11,8 @@ const resources = {
   'en-US': { translation: en },
   'zh-CN': { translation: zhCN },
   'zh-TW': { translation: zhTW },
-  'ja': { translation: ja },
-  'ko': { translation: ko }
+  ja: { translation: ja },
+  ko: { translation: ko },
 };
 
 const STORAGE_KEY = 'locale';
@@ -22,7 +22,8 @@ const normalizeLocale = (locale) => {
   if (!locale) return 'en-US';
   const lowered = locale.toLowerCase();
   if (lowered.startsWith('zh')) {
-    if (lowered.includes('hant') || lowered.endsWith('-tw') || lowered.includes('-tw')) return 'zh-TW';
+    if (lowered.includes('hant') || lowered.endsWith('-tw') || lowered.includes('-tw'))
+      return 'zh-TW';
     return 'zh-CN';
   }
   if (lowered.startsWith('ja')) return 'ja';
@@ -53,17 +54,15 @@ const getInitialLocale = () => {
   return normalizeLocale(navigator.language);
 };
 
-void i18n
-  .use(initReactI18next)
-  .init({
-    resources,
-    lng: getInitialLocale(),
-    fallbackLng: {
-      'zh-TW': ['zh-CN', 'en-US'],
-      default: ['en-US']
-    },
-    interpolation: { escapeValue: false }
-  });
+void i18n.use(initReactI18next).init({
+  resources,
+  lng: getInitialLocale(),
+  fallbackLng: {
+    'zh-TW': ['zh-CN', 'en-US'],
+    default: ['en-US'],
+  },
+  interpolation: { escapeValue: false },
+});
 
 i18n.on('languageChanged', (locale) => {
   const normalized = normalizeLocale(locale);

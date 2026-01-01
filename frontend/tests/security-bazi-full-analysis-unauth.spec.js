@@ -6,7 +6,10 @@ const buildScreenshotPath = (name) => {
   return path.join(process.cwd(), '..', 'verification', `${stamp}-${name}.png`);
 };
 
-test('Security: /api/bazi/full-analysis rejects unauthenticated requests with 401', async ({ page, request }) => {
+test('Security: /api/bazi/full-analysis rejects unauthenticated requests with 401', async ({
+  page,
+  request,
+}) => {
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));
@@ -24,7 +27,9 @@ test('Security: /api/bazi/full-analysis rejects unauthenticated requests with 40
 
   await page.goto('/bazi', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /BaZi/i })).toBeVisible();
-  await page.screenshot({ path: buildScreenshotPath('security-bazi-full-analysis-unauth-step-1-bazi') });
+  await page.screenshot({
+    path: buildScreenshotPath('security-bazi-full-analysis-unauth-step-1-bazi'),
+  });
 
   const response = await request.post('/api/bazi/full-analysis', {
     data: {
@@ -42,6 +47,8 @@ test('Security: /api/bazi/full-analysis rejects unauthenticated requests with 40
   const body = await response.json().catch(() => ({}));
   expect(body && typeof body).toBe('object');
 
-  await page.screenshot({ path: buildScreenshotPath('security-bazi-full-analysis-unauth-step-2-response') });
+  await page.screenshot({
+    path: buildScreenshotPath('security-bazi-full-analysis-unauth-step-2-response'),
+  });
   expect(consoleErrors).toEqual([]);
 });

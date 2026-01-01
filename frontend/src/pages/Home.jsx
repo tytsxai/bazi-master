@@ -9,7 +9,7 @@ const modules = [
   { title: 'nav.tarot', path: '/tarot', desc: 'home.modules.tarot.desc' },
   { title: 'nav.iching', path: '/iching', desc: 'home.modules.iching.desc' },
   { title: 'nav.zodiac', path: '/zodiac', desc: 'home.modules.zodiac.desc' },
-  { title: 'nav.ziwei', path: '/ziwei', desc: 'home.modules.ziwei.desc', requiresAuth: true }
+  { title: 'nav.ziwei', path: '/ziwei', desc: 'home.modules.ziwei.desc', requiresAuth: true },
 ];
 
 export default function Home() {
@@ -23,7 +23,9 @@ export default function Home() {
       <Breadcrumbs />
       <section className="starfield rounded-3xl border border-white/10 bg-white/5 p-6 shadow-glass md:p-10">
         <div className="max-w-3xl">
-          <p className="text-sm uppercase tracking-[0.3em] text-gold-400/80">{t('home.oraclePlatform')}</p>
+          <p className="text-sm uppercase tracking-[0.3em] text-gold-400/80">
+            {t('home.oraclePlatform')}
+          </p>
           <h1 className="mt-3 font-display text-4xl text-white md:text-5xl">{t('home.title')}</h1>
           <p className="mt-4 text-lg text-white/80">{t('home.subtitle')}</p>
           <Link

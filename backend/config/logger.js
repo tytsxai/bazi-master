@@ -16,5 +16,3 @@ export const logger = pino({
     err: pino.stdSerializers.err,
   },
 });
-
-

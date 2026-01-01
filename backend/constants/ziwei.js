@@ -1,5 +1,31 @@
-export const ZIWEI_BRANCH_ORDER = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
-export const ZIWEI_MONTH_BRANCH_ORDER = ['寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥', '子', '丑'];
+export const ZIWEI_BRANCH_ORDER = [
+  '子',
+  '丑',
+  '寅',
+  '卯',
+  '辰',
+  '巳',
+  '午',
+  '未',
+  '申',
+  '酉',
+  '戌',
+  '亥',
+];
+export const ZIWEI_MONTH_BRANCH_ORDER = [
+  '寅',
+  '卯',
+  '辰',
+  '巳',
+  '午',
+  '未',
+  '申',
+  '酉',
+  '戌',
+  '亥',
+  '子',
+  '丑',
+];
 
 export const ZIWEI_PALACES = [
   { key: 'ming', name: 'Ming', cn: '命宫' },
@@ -45,14 +71,14 @@ export const ZIWEI_MINOR_STARS = {
 };
 
 export const ZIWEI_SIHUA_BY_STEM = {
-  '甲': { lu: 'lianzhen', quan: 'pojun', ke: 'wuqu', ji: 'taiyang' },
-  '乙': { lu: 'tianji', quan: 'tianliang', ke: 'ziwei', ji: 'taiyin' },
-  '丙': { lu: 'tiantong', quan: 'tianji', ke: 'wenchang', ji: 'lianzhen' },
-  '丁': { lu: 'taiyin', quan: 'tiantong', ke: 'tianji', ji: 'jumen' },
-  '戊': { lu: 'tanlang', quan: 'taiyin', ke: 'youbi', ji: 'tianji' },
-  '己': { lu: 'wuqu', quan: 'tanlang', ke: 'tianliang', ji: 'wenqu' },
-  '庚': { lu: 'taiyang', quan: 'wuqu', ke: 'taiyin', ji: 'tiantong' },
-  '辛': { lu: 'jumen', quan: 'taiyang', ke: 'wenqu', ji: 'wenchang' },
-  '壬': { lu: 'tianliang', quan: 'ziwei', ke: 'tianji', ji: 'pojun' },
-  '癸': { lu: 'pojun', quan: 'jumen', ke: 'taiyin', ji: 'tanlang' },
+  甲: { lu: 'lianzhen', quan: 'pojun', ke: 'wuqu', ji: 'taiyang' },
+  乙: { lu: 'tianji', quan: 'tianliang', ke: 'ziwei', ji: 'taiyin' },
+  丙: { lu: 'tiantong', quan: 'tianji', ke: 'wenchang', ji: 'lianzhen' },
+  丁: { lu: 'taiyin', quan: 'tiantong', ke: 'tianji', ji: 'jumen' },
+  戊: { lu: 'tanlang', quan: 'taiyin', ke: 'youbi', ji: 'tianji' },
+  己: { lu: 'wuqu', quan: 'tanlang', ke: 'tianliang', ji: 'wenqu' },
+  庚: { lu: 'taiyang', quan: 'wuqu', ke: 'taiyin', ji: 'tiantong' },
+  辛: { lu: 'jumen', quan: 'taiyang', ke: 'wenqu', ji: 'wenchang' },
+  壬: { lu: 'tianliang', quan: 'ziwei', ke: 'tianji', ji: 'pojun' },
+  癸: { lu: 'pojun', quan: 'jumen', ke: 'taiyin', ji: 'tanlang' },
 };

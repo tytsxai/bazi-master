@@ -9,7 +9,9 @@ test('Zodiac weekly horoscope from /tarot matches backend data', async ({ page }
   });
 
   await page.goto('/tarot', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: 'Tarot Sanctuary' })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole('heading', { name: 'Tarot Sanctuary' })).toBeVisible({
+    timeout: 15000,
+  });
 
   await page.getByLabel('Sign').selectOption('leo');
   await page.getByLabel('Period').selectOption('weekly');
@@ -24,7 +26,8 @@ test('Zodiac weekly horoscope from /tarot matches backend data', async ({ page }
   expect(horoscopeResponse.ok()).toBeTruthy();
   const data = await horoscopeResponse.json();
 
-  const snapshotSection = page.getByRole('heading', { name: /Weekly Zodiac Snapshot/ })
+  const snapshotSection = page
+    .getByRole('heading', { name: /Weekly Zodiac Snapshot/ })
     .locator('xpath=ancestor::section[1]');
 
   await expect(
@@ -41,7 +44,5 @@ test('Zodiac weekly horoscope from /tarot matches backend data', async ({ page }
   await expect(
     snapshotSection.getByText(`Lucky numbers: ${data.horoscope.lucky.numbers.join(', ')}`)
   ).toBeVisible();
-  await expect(
-    snapshotSection.getByText(`Mantra: ${data.horoscope.mantra}`)
-  ).toBeVisible();
+  await expect(snapshotSection.getByText(`Mantra: ${data.horoscope.mantra}`)).toBeVisible();
 });

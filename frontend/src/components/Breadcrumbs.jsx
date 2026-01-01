@@ -14,7 +14,7 @@ const ROUTE_LABELS = {
   '/login': 'nav.login',
   '/admin': 'nav.admin',
   '/404': '404',
-  '/403': '403'
+  '/403': '403',
 };
 
 const resolveBasePath = (pathname) => {
@@ -49,17 +49,20 @@ export default function Breadcrumbs() {
   if (basePath === '/history') {
     const pathMatch = location.pathname.match(/^\/history\/(\d+)/);
     const recordFromPath = pathMatch ? Number(pathMatch[1]) : null;
-    const recordParam = searchParams.get('recordId')
-      || searchParams.get('id')
-      || searchParams.get('record');
+    const recordParam =
+      searchParams.get('recordId') || searchParams.get('id') || searchParams.get('record');
     const recordFromQuery = Number(recordParam);
-    const recordId = Number.isInteger(recordFromPath) && recordFromPath > 0
-      ? recordFromPath
-      : Number.isInteger(recordFromQuery) && recordFromQuery > 0
-        ? recordFromQuery
-        : null;
+    const recordId =
+      Number.isInteger(recordFromPath) && recordFromPath > 0
+        ? recordFromPath
+        : Number.isInteger(recordFromQuery) && recordFromQuery > 0
+          ? recordFromQuery
+          : null;
     if (recordId) {
-      crumbs.push({ label: t('history.recordHeading', { id: recordId }), path: location.pathname + location.search });
+      crumbs.push({
+        label: t('history.recordHeading', { id: recordId }),
+        path: location.pathname + location.search,
+      });
     }
   }
 

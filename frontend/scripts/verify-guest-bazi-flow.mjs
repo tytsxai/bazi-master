@@ -56,7 +56,9 @@ try {
   await page.getByLabel('Timezone').fill(birthData.timezone);
   await shot('guest-step-3-bazi-filled');
 
-  const calcResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/bazi/calculate'));
+  const calcResponsePromise = page.waitForResponse((resp) =>
+    resp.url().includes('/api/bazi/calculate')
+  );
   await page.getByRole('button', { name: 'Calculate' }).click();
   const calcResponse = await calcResponsePromise;
   if (calcResponse.status() !== 200) {

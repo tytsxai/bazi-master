@@ -89,11 +89,15 @@ test('Real data audit flow with unique BaZi record and cleanup', async ({ page }
   await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   await page.getByPlaceholder('Location, timezone, pillar').fill(uniqueLocation);
   await page.keyboard.press('Enter');
-  await expect(page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })).toHaveCount(1);
+  await expect(
+    page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })
+  ).toHaveCount(1);
   await page.screenshot({ path: screenshotPath('step-8-history-filtered') });
 
   await page.reload();
-  await expect(page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })).toHaveCount(1);
+  await expect(
+    page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })
+  ).toHaveCount(1);
   await page.screenshot({ path: screenshotPath('step-9-history-refresh') });
 
   await page.goto('/favorites');
@@ -124,11 +128,15 @@ test('Real data audit flow with unique BaZi record and cleanup', async ({ page }
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Delete' }).click();
   await expect(page.getByText('Record deleted.')).toBeVisible();
-  await expect(page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })).toHaveCount(0);
+  await expect(
+    page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })
+  ).toHaveCount(0);
   await page.screenshot({ path: screenshotPath('step-13-history-deleted') });
 
   await page.reload();
-  await expect(page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })).toHaveCount(0);
+  await expect(
+    page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })
+  ).toHaveCount(0);
   await page.screenshot({ path: screenshotPath('step-14-history-refresh') });
 
   await page.getByRole('button', { name: 'Logout' }).click();

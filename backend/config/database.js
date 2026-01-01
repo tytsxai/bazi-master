@@ -23,9 +23,7 @@ export const readPrismaDatasourceInfo = () => {
       const raw = fs.readFileSync(schemaPath, 'utf8');
       const datasourceMatch = raw.match(/datasource\s+db\s*{([\s\S]*?)}/m);
       const block = datasourceMatch?.[1] ?? '';
-      provider = (block.match(/\bprovider\s*=\s*"([^"]+)"/)?.[1] ?? '')
-        .trim()
-        .toLowerCase();
+      provider = (block.match(/\bprovider\s*=\s*"([^"]+)"/)?.[1] ?? '').trim().toLowerCase();
       const urlExpr = (block.match(/\burl\s*=\s*([^\n\r]+)/)?.[1] ?? '').trim();
       urlUsesDatabaseUrlEnv = /env\(\s*"DATABASE_URL"\s*\)/.test(urlExpr);
     } catch {
@@ -54,5 +52,6 @@ export const ensureDatabaseUrl = () => {
   }
 
   // Default local Postgres for development/test when schema provider is postgresql.
-  process.env.DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/bazi_master?schema=public';
+  process.env.DATABASE_URL =
+    'postgresql://postgres:postgres@127.0.0.1:5432/bazi_master?schema=public';
 };

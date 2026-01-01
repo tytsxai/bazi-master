@@ -50,7 +50,7 @@ test('Flow integrity: zodiac monthly horoscope matches backend data', async ({ p
 
   await expect(
     page.getByRole('heading', {
-      name: new RegExp(`${horoscopeData.sign.name}\\s+Monthly\\s+Horoscope`, 'i')
+      name: new RegExp(`${horoscopeData.sign.name}\\s+Monthly\\s+Horoscope`, 'i'),
     })
   ).toBeVisible();
 

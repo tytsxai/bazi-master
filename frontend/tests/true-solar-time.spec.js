@@ -55,7 +55,9 @@ test('Bazi calculation applies true solar time correction from location', async 
 
   await expect(page.getByRole('heading', { name: 'Four Pillars' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Five Elements' })).toBeVisible();
-  await expect(page.getByTestId('true-solar-time')).not.toHaveText('Not available (location not recognized)');
+  await expect(page.getByTestId('true-solar-time')).not.toHaveText(
+    'Not available (location not recognized)'
+  );
   await expect(page.getByTestId('true-solar-location')).toContainText('Beijing');
   await expect(page.getByTestId('true-solar-correction')).toContainText('min');
   await page.screenshot({ path: screenshotPath('solar-step-3-calculated') });
@@ -66,7 +68,9 @@ test('Bazi calculation applies true solar time correction from location', async 
   await page.getByRole('button', { name: 'Request Full Analysis' }).click();
   await fullAnalysis;
   await expect(page.getByRole('heading', { name: 'Ten Gods' })).toBeVisible({ timeout: 60000 });
-  await expect(page.getByRole('heading', { name: 'Major Luck Cycles' })).toBeVisible({ timeout: 60000 });
+  await expect(page.getByRole('heading', { name: 'Major Luck Cycles' })).toBeVisible({
+    timeout: 60000,
+  });
   await page.screenshot({ path: screenshotPath('solar-step-4-full-analysis') });
 
   const saveResponse = page.waitForResponse(

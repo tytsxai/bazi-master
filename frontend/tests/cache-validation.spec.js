@@ -1,6 +1,8 @@
 import { test, expect } from './fixtures.js';
 
-test('Cache validation flow for Redis session and calculation cache', async ({ page }, testInfo) => {
+test('Cache validation flow for Redis session and calculation cache', async ({
+  page,
+}, testInfo) => {
   const uniqueLocation = `CACHE_LOCATION_${Date.now()}`;
   const runId = Date.now();
   const uniqueBirthYear = 1900 + (runId % 100);
@@ -8,7 +10,10 @@ test('Cache validation flow for Redis session and calculation cache', async ({ p
   const uniqueBirthDay = 1 + (Math.floor(runId / 1000) % 28);
   const uniqueBirthHour = Math.floor(runId / 10000) % 24;
   const snap = async (label) => {
-    await page.screenshot({ path: testInfo.outputPath(`cache-validation-${runId}-${label}.png`), fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath(`cache-validation-${runId}-${label}.png`),
+      fullPage: true,
+    });
   };
 
   await page.addInitScript(() => {

@@ -40,7 +40,7 @@ export default function Header() {
     { path: '/zodiac', label: t('nav.zodiac', { defaultValue: 'Zodiac' }) },
     { path: '/ziwei', label: t('nav.ziwei', { defaultValue: 'Zi Wei' }), requiresAuth: true },
     { path: '/soul-portrait', label: 'Soul Portrait', requiresAuth: true },
-    { path: '/synastry', label: 'Compatibility', requiresAuth: false }
+    { path: '/synastry', label: 'Compatibility', requiresAuth: false },
   ];
   const visiblePrimaryLinks = primaryLinks.filter((link) => !link.requiresAuth || !isGuest);
 
@@ -57,7 +57,8 @@ export default function Header() {
 
   const closeMenu = () => setIsMenuOpen(false);
 
-  const isActive = (path) => (path === '/' ? location.pathname === '/' : location.pathname.startsWith(path));
+  const isActive = (path) =>
+    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
 
   const handleSafeNavClick = (event) => {
     const now = Date.now();
@@ -119,8 +120,9 @@ export default function Header() {
           to={link.path}
           onClick={handleSafeNavClick}
           data-routed="true"
-          className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive(link.path) ? 'text-gold-400' : 'text-white/80'
-            }`}
+          className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
+            isActive(link.path) ? 'text-gold-400' : 'text-white/80'
+          }`}
         >
           {link.label}
         </Link>
@@ -131,8 +133,9 @@ export default function Header() {
             to="/profile"
             onClick={handleSafeNavClick}
             data-routed="true"
-            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive('/profile') ? 'text-gold-400' : 'text-white/80'
-              }`}
+            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
+              isActive('/profile') ? 'text-gold-400' : 'text-white/80'
+            }`}
           >
             {t('nav.profile')}
           </Link>
@@ -140,8 +143,9 @@ export default function Header() {
             to="/history"
             onClick={handleSafeNavClick}
             data-routed="true"
-            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive('/history') ? 'text-gold-400' : 'text-white/80'
-              }`}
+            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
+              isActive('/history') ? 'text-gold-400' : 'text-white/80'
+            }`}
           >
             {t('nav.history')}
           </Link>
@@ -149,8 +153,9 @@ export default function Header() {
             to="/favorites"
             onClick={handleSafeNavClick}
             data-routed="true"
-            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${isActive('/favorites') ? 'text-gold-400' : 'text-white/80'
-              }`}
+            className={`transition hover:text-gold-400 ${mobile ? 'py-3 text-lg border-b border-white/10 block w-full' : ''} ${
+              isActive('/favorites') ? 'text-gold-400' : 'text-white/80'
+            }`}
           >
             {t('nav.favorites')}
           </Link>
@@ -238,7 +243,9 @@ export default function Header() {
               <button
                 type="button"
                 onClick={handleLogout}
-                aria-label={mobileDisplayName ? `${t('nav.logout')} ${mobileDisplayName}` : t('nav.logout')}
+                aria-label={
+                  mobileDisplayName ? `${t('nav.logout')} ${mobileDisplayName}` : t('nav.logout')
+                }
                 className="text-center rounded-full border border-gold-400/60 px-4 py-3 text-gold-400 transition hover:bg-gold-400/20"
               >
                 {t('nav.logout')}

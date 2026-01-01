@@ -11,9 +11,7 @@ export const isValidCalendarDate = (year, month, day) => {
   if (month < 1 || month > 12 || day < 1 || day > 31) return false;
   const date = new Date(Date.UTC(year, month - 1, day));
   return (
-    date.getUTCFullYear() === year
-    && date.getUTCMonth() === month - 1
-    && date.getUTCDate() === day
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   );
 };
 
@@ -100,6 +98,3 @@ export const sortDeletedRecordsForDisplay = (records, primaryId) => {
   };
   return list.sort(primaryFirst);
 };
-
-
-

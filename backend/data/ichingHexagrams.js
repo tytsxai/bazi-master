@@ -6,7 +6,7 @@ const TRIGRAMS = [
   { id: 5, name: 'Xun', element: 'Wind', lines: [0, 1, 1] },
   { id: 6, name: 'Kan', element: 'Water', lines: [0, 1, 0] },
   { id: 7, name: 'Gen', element: 'Mountain', lines: [0, 0, 1] },
-  { id: 8, name: 'Kun', element: 'Earth', lines: [0, 0, 0] }
+  { id: 8, name: 'Kun', element: 'Earth', lines: [0, 0, 0] },
 ];
 
 const hexagrams = [];
@@ -27,7 +27,7 @@ TRIGRAMS.forEach((upper) => {
       summary,
       upperTrigram: upper,
       lowerTrigram: lower,
-      lines
+      lines,
     };
     hexagrams.push(hexagram);
     hexagramByTrigrams.set(`${upper.id}-${lower.id}`, hexagram);

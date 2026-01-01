@@ -4,23 +4,81 @@ import { useAuth } from '../auth/AuthContext';
 import { useAuthFetch } from '../auth/useAuthFetch';
 import { getClientId } from '../utils/clientId';
 import { readApiErrorMessage } from '../utils/apiError';
+import logger from '../utils/logger';
 import {
   SEARCH_DEBOUNCE_MS,
   PAGE_SIZE,
   MAX_SORT_PAGE_SIZE,
   DEFAULT_FILTERS,
   PENDING_SAVE_KEY,
-  RECENT_SAVE_KEY
+  RECENT_SAVE_KEY,
 } from './historyConstants';
 import {
   isWhitespaceOnly,
   isValidCalendarDate,
   sortRecordsForDisplay,
-  sortDeletedRecordsForDisplay
+  sortDeletedRecordsForDisplay,
 } from './historyUtils';
 
+const readErrorMessage = (response, fallback) => readApiErrorMessage(response, fallback);
+
+const readPendingSave = () => {
+  try {
+    const raw = sessionStorage.getItem(PENDING_SAVE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.payload || null;
+  } catch {
+    return null;
+  }
+};
+
+const clearPendingSave = () => {
+  try {
+    sessionStorage.removeItem(PENDING_SAVE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const readRecentSave = () => {
+  try {
+    const raw = sessionStorage.getItem(RECENT_SAVE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.payload || null;
+  } catch {
+    return null;
+  }
+};
+
+const clearRecentSave = () => {
+  try {
+    sessionStorage.removeItem(RECENT_SAVE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const normalizeText = (value) => (typeof value === 'string' ? value.trim() : '');
+
+const recordMatchesPending = (record, payload) => {
+  if (!record || !payload) return false;
+  if (Number(record.birthYear) !== Number(payload.birthYear)) return false;
+  if (Number(record.birthMonth) !== Number(payload.birthMonth)) return false;
+  if (Number(record.birthDay) !== Number(payload.birthDay)) return false;
+  if (Number(record.birthHour) !== Number(payload.birthHour)) return false;
+  if (normalizeText(record.gender).toLowerCase() !== normalizeText(payload.gender).toLowerCase()) {
+    return false;
+  }
+  if (normalizeText(record.birthLocation || '') !== normalizeText(payload.birthLocation || ''))
+    return false;
+  if (normalizeText(record.timezone || '') !== normalizeText(payload.timezone || '')) return false;
+  return true;
+};
+
 export default function useHistoryData({ t }) {
-  const { token } = useAuth();
+  const { isAuthenticated } = useAuth();
   const authFetch = useAuthFetch();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -76,27 +134,27 @@ export default function useHistoryData({ t }) {
   const lastDeletedIdRef = useRef(null);
   const lastDeletedRecord = lastDeletedRecordRef.current?.record || null;
   const shouldExpandPageSize =
-    sortOption.startsWith('birth-')
-    && debouncedQuery.trim() === ''
-    && genderFilter === DEFAULT_FILTERS.genderFilter
-    && rangeFilter === DEFAULT_FILTERS.rangeFilter;
+    sortOption.startsWith('birth-') &&
+    debouncedQuery.trim() === '' &&
+    genderFilter === DEFAULT_FILTERS.genderFilter &&
+    rangeFilter === DEFAULT_FILTERS.rangeFilter;
   const effectivePageSize = useMemo(
-    () => (
+    () =>
       shouldExpandPageSize
         ? Math.min(Math.max(PAGE_SIZE, totalCount || PAGE_SIZE), MAX_SORT_PAGE_SIZE)
-        : PAGE_SIZE
-    ),
-    [shouldExpandPageSize, totalCount],
+        : PAGE_SIZE,
+    [shouldExpandPageSize, totalCount]
   );
   const filterKey = useMemo(
-    () => [debouncedQuery.trim(), genderFilter, rangeFilter, sortOption, effectivePageSize].join('|'),
-    [debouncedQuery, genderFilter, rangeFilter, sortOption, effectivePageSize],
+    () =>
+      [debouncedQuery.trim(), genderFilter, rangeFilter, sortOption, effectivePageSize].join('|'),
+    [debouncedQuery, genderFilter, rangeFilter, sortOption, effectivePageSize]
   );
   const showDeletedLocation =
-    Boolean(debouncedQuery.trim())
-    || genderFilter !== DEFAULT_FILTERS.genderFilter
-    || rangeFilter !== DEFAULT_FILTERS.rangeFilter
-    || sortOption !== DEFAULT_FILTERS.sortOption;
+    Boolean(debouncedQuery.trim()) ||
+    genderFilter !== DEFAULT_FILTERS.genderFilter ||
+    rangeFilter !== DEFAULT_FILTERS.rangeFilter ||
+    sortOption !== DEFAULT_FILTERS.sortOption;
   const orderedDeletedRecords = useMemo(() => {
     const primaryId = lastDeletedId || lastDeletedRecord?.id || null;
     return sortDeletedRecordsForDisplay(deletedRecords, primaryId);
@@ -104,18 +162,16 @@ export default function useHistoryData({ t }) {
   const primaryRestoreId = orderedDeletedRecords[0]?.id ?? null;
   const shouldResetPage = filtersKeyRef.current !== filterKey && page !== 1;
 
-  const showStatus = (nextStatus) => {
+  const showStatus = useCallback((nextStatus) => {
     const nextId = statusIdRef.current + 1;
     statusIdRef.current = nextId;
     setStatus({ id: nextId, ...nextStatus });
-  };
+  }, []);
 
-  const clearStatus = () => {
+  const clearStatus = useCallback(() => {
     statusIdRef.current += 1;
     setStatus(null);
-  };
-
-  const readErrorMessage = (response, fallback) => readApiErrorMessage(response, fallback);
+  }, []);
 
   const handleIchingTimeDivine = async () => {
     setIchingTimeStatus(null);
@@ -147,45 +203,6 @@ export default function useHistoryData({ t }) {
       ? 'border-rose-400/40 bg-rose-500/10 text-rose-100'
       : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100';
 
-  const readPendingSave = () => {
-    try {
-      const raw = sessionStorage.getItem(PENDING_SAVE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed?.payload || null;
-    } catch {
-      return null;
-    }
-  };
-
-  const clearPendingSave = () => {
-    try {
-      sessionStorage.removeItem(PENDING_SAVE_KEY);
-    } catch {
-      // Ignore storage failures.
-    }
-  };
-
-  const readRecentSave = () => {
-    try {
-      const raw = sessionStorage.getItem(RECENT_SAVE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed?.payload || null;
-    } catch {
-      return null;
-    }
-  };
-
-  const clearRecentSave = () => {
-    try {
-      sessionStorage.removeItem(RECENT_SAVE_KEY);
-    } catch {
-      // Ignore storage failures.
-    }
-  };
-
-  const normalizeText = (value) => (typeof value === 'string' ? value.trim() : '');
   const buildEditDraft = (record) => ({
     birthYear: record?.birthYear ?? '',
     birthMonth: record?.birthMonth ?? '',
@@ -203,7 +220,8 @@ export default function useHistoryData({ t }) {
     const birthDay = Number(draft?.birthDay);
     const birthHour = Number(draft?.birthHour);
     const gender = typeof draft?.gender === 'string' ? draft.gender.trim() : '';
-    const birthLocation = typeof draft?.birthLocation === 'string' ? draft.birthLocation.trim() : '';
+    const birthLocation =
+      typeof draft?.birthLocation === 'string' ? draft.birthLocation.trim() : '';
     const timezone = typeof draft?.timezone === 'string' ? draft.timezone.trim() : '';
 
     if (!Number.isInteger(birthYear) || birthYear < 1 || birthYear > 9999) {
@@ -247,20 +265,6 @@ export default function useHistoryData({ t }) {
     };
   };
 
-  const recordMatchesPending = (record, payload) => {
-    if (!record || !payload) return false;
-    if (Number(record.birthYear) !== Number(payload.birthYear)) return false;
-    if (Number(record.birthMonth) !== Number(payload.birthMonth)) return false;
-    if (Number(record.birthDay) !== Number(payload.birthDay)) return false;
-    if (Number(record.birthHour) !== Number(payload.birthHour)) return false;
-    if (normalizeText(record.gender).toLowerCase() !== normalizeText(payload.gender).toLowerCase()) {
-      return false;
-    }
-    if (normalizeText(record.birthLocation || '') !== normalizeText(payload.birthLocation || '')) return false;
-    if (normalizeText(record.timezone || '') !== normalizeText(payload.timezone || '')) return false;
-    return true;
-  };
-
   const scheduleQueryDebounce = useCallback((nextQuery, { immediate = false } = {}) => {
     if (queryDebounceRef.current) {
       clearTimeout(queryDebounceRef.current);
@@ -276,20 +280,23 @@ export default function useHistoryData({ t }) {
     }, SEARCH_DEBOUNCE_MS);
   }, []);
 
-  const buildFilterParams = ({ page: targetPage, queryValue } = {}) => {
-    const params = new URLSearchParams();
-    const rawQuery = typeof queryValue === 'string' ? queryValue : debouncedQuery;
-    const trimmedQuery = rawQuery.trim();
-    if (trimmedQuery) params.set('q', trimmedQuery);
-    if (genderFilter !== 'all') params.set('gender', genderFilter);
-    if (rangeFilter !== 'all') params.set('rangeDays', rangeFilter);
-    if (rangeFilter === 'today' || rangeFilter === 'week') {
-      params.set('timezoneOffsetMinutes', String(-new Date().getTimezoneOffset()));
-    }
-    if (sortOption && sortOption !== DEFAULT_FILTERS.sortOption) params.set('sort', sortOption);
-    if (targetPage && targetPage > 1) params.set('page', String(targetPage));
-    return params;
-  };
+  const buildFilterParams = useCallback(
+    ({ page: targetPage, queryValue } = {}) => {
+      const params = new URLSearchParams();
+      const rawQuery = typeof queryValue === 'string' ? queryValue : debouncedQuery;
+      const trimmedQuery = rawQuery.trim();
+      if (trimmedQuery) params.set('q', trimmedQuery);
+      if (genderFilter !== 'all') params.set('gender', genderFilter);
+      if (rangeFilter !== 'all') params.set('rangeDays', rangeFilter);
+      if (rangeFilter === 'today' || rangeFilter === 'week') {
+        params.set('timezoneOffsetMinutes', String(-new Date().getTimezoneOffset()));
+      }
+      if (sortOption && sortOption !== DEFAULT_FILTERS.sortOption) params.set('sort', sortOption);
+      if (targetPage && targetPage > 1) params.set('page', String(targetPage));
+      return params;
+    },
+    [debouncedQuery, genderFilter, rangeFilter, sortOption]
+  );
 
   const buildPageHref = (targetPage) => {
     const params = buildFilterParams({ page: targetPage, queryValue: query });
@@ -300,100 +307,108 @@ export default function useHistoryData({ t }) {
     };
   };
 
-  const loadRecords = async ({ page: nextPage = 1 } = {}) => {
-    if (!token) return;
-    const requestId = recordsRequestIdRef.current + 1;
-    recordsRequestIdRef.current = requestId;
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+  const loadRecords = useCallback(
+    async ({ page: nextPage = 1 } = {}) => {
+      if (!isAuthenticated) return;
+      const requestId = recordsRequestIdRef.current + 1;
+      recordsRequestIdRef.current = requestId;
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-    const params = buildFilterParams({ page: nextPage });
-    params.set('pageSize', String(effectivePageSize));
+      const params = buildFilterParams({ page: nextPage });
+      params.set('pageSize', String(effectivePageSize));
 
-    try {
-      const res = await authFetch(`/api/bazi/records?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: controller.signal,
-      });
-      if (res.status === 401) {
-        return;
-      }
-      if (!res.ok) {
-        const message = await readErrorMessage(res, t('history.loadError'));
-        showStatus({ type: 'error', message });
-        return;
-      }
-      const data = await res.json();
-      if (recordsRequestIdRef.current !== requestId || controller.signal.aborted) {
-        return;
-      }
-      const rawRecords = Array.isArray(data.records) ? data.records : [];
-      const normalizedGenderFilter = genderFilter === 'male' || genderFilter === 'female' ? genderFilter : null;
-      const nextRecords = normalizedGenderFilter
-        ? rawRecords.filter((record) => normalizeText(record?.gender).toLowerCase() === normalizedGenderFilter)
-        : rawRecords;
-      let mergedRecords = nextRecords;
-      const pendingPayload = pendingSaveRef.current;
-      if (pendingPayload && Array.isArray(nextRecords)) {
-        const alreadyIncluded = nextRecords.some((record) => recordMatchesPending(record, pendingPayload));
-        if (alreadyIncluded) {
-          pendingSaveRef.current = null;
-          clearRecentSave();
-        } else {
-          const locationQuery = normalizeText(pendingPayload.birthLocation);
-          if (locationQuery) {
-            try {
-              const lookupParams = new URLSearchParams();
-              lookupParams.set('q', locationQuery);
-              lookupParams.set('pageSize', '5');
-              const lookupRes = await authFetch(`/api/bazi/records?${lookupParams.toString()}`, {
-                headers: { Authorization: `Bearer ${token}` },
-                signal: controller.signal,
-              });
-              if (recordsRequestIdRef.current !== requestId || controller.signal.aborted) {
-                return;
-              }
-              if (lookupRes.ok) {
-                const lookupData = await lookupRes.json();
-                const lookupRecords = Array.isArray(lookupData.records) ? lookupData.records : [];
-                const match = lookupRecords.find((record) => recordMatchesPending(record, pendingPayload));
-                if (match) {
-                  mergedRecords = [
-                    match,
-                    ...nextRecords.filter((record) => record.id !== match.id),
-                  ];
-                  pendingSaveRef.current = null;
-                  clearRecentSave();
+      try {
+        const res = await authFetch(`/api/bazi/records?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        if (res.status === 401) {
+          return;
+        }
+        if (!res.ok) {
+          const message = await readErrorMessage(res, t('history.loadError'));
+          showStatus({ type: 'error', message });
+          return;
+        }
+        const data = await res.json();
+        if (recordsRequestIdRef.current !== requestId || controller.signal.aborted) {
+          return;
+        }
+        const rawRecords = Array.isArray(data.records) ? data.records : [];
+        const normalizedGenderFilter =
+          genderFilter === 'male' || genderFilter === 'female' ? genderFilter : null;
+        const nextRecords = normalizedGenderFilter
+          ? rawRecords.filter(
+              (record) => normalizeText(record?.gender).toLowerCase() === normalizedGenderFilter
+            )
+          : rawRecords;
+        let mergedRecords = nextRecords;
+        const pendingPayload = pendingSaveRef.current;
+        if (pendingPayload && Array.isArray(nextRecords)) {
+          const alreadyIncluded = nextRecords.some((record) =>
+            recordMatchesPending(record, pendingPayload)
+          );
+          if (alreadyIncluded) {
+            pendingSaveRef.current = null;
+            clearRecentSave();
+          } else {
+            const locationQuery = normalizeText(pendingPayload.birthLocation);
+            if (locationQuery) {
+              try {
+                const lookupParams = new URLSearchParams();
+                lookupParams.set('q', locationQuery);
+                lookupParams.set('pageSize', '5');
+                const lookupRes = await authFetch(`/api/bazi/records?${lookupParams.toString()}`, {
+                  signal: controller.signal,
+                });
+                if (recordsRequestIdRef.current !== requestId || controller.signal.aborted) {
+                  return;
                 }
-              }
-            } catch (error) {
-              if (error.name === 'AbortError') {
-                return;
+                if (lookupRes.ok) {
+                  const lookupData = await lookupRes.json();
+                  const lookupRecords = Array.isArray(lookupData.records) ? lookupData.records : [];
+                  const match = lookupRecords.find((record) =>
+                    recordMatchesPending(record, pendingPayload)
+                  );
+                  if (match) {
+                    mergedRecords = [
+                      match,
+                      ...nextRecords.filter((record) => record.id !== match.id),
+                    ];
+                    pendingSaveRef.current = null;
+                    clearRecentSave();
+                  }
+                }
+              } catch (error) {
+                if (error.name === 'AbortError') {
+                  return;
+                }
               }
             }
           }
         }
+        setRecords(mergedRecords);
+        setPage(nextPage);
+        setTotalCount(typeof data.totalCount === 'number' ? data.totalCount : nextRecords.length);
+        setFilteredCount(
+          typeof data.filteredCount === 'number' ? data.filteredCount : nextRecords.length
+        );
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          showStatus({ type: 'error', message: t('history.loadError') });
+        }
       }
-      setRecords(mergedRecords);
-      setPage(nextPage);
-      setTotalCount(typeof data.totalCount === 'number' ? data.totalCount : nextRecords.length);
-      setFilteredCount(typeof data.filteredCount === 'number' ? data.filteredCount : nextRecords.length);
-    } catch (error) {
-      if (error.name !== 'AbortError') {
-        showStatus({ type: 'error', message: t('history.loadError') });
-      }
-    }
-  };
+    },
+    [authFetch, buildFilterParams, effectivePageSize, genderFilter, isAuthenticated, showStatus, t]
+  );
 
   const loadTarotHistory = useCallback(async () => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     setTarotHistoryLoading(true);
     setTarotHistoryError('');
     try {
-      const res = await authFetch('/api/tarot/history', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch('/api/tarot/history', {});
       if (res.status === 401) return;
       if (!res.ok) {
         const message = await readErrorMessage(res, t('history.tarotLoadError'));
@@ -402,73 +417,75 @@ export default function useHistoryData({ t }) {
       const data = await res.json();
       setTarotHistory(Array.isArray(data.records) ? data.records : []);
     } catch (error) {
-      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      const isFetchFailure =
+        error instanceof TypeError && /failed to fetch/i.test(error.message || '');
       if (!isFetchFailure) {
-        console.error(error);
+        logger.error({ error }, 'Tarot history load failed');
       }
       setTarotHistoryError(error.message || t('history.tarotLoadError'));
     } finally {
       setTarotHistoryLoading(false);
     }
-  }, [authFetch, token]);
+  }, [authFetch, isAuthenticated, t]);
 
-  const loadDeletedRecords = async (fallbackRecord = null) => {
-    if (!token) return;
-    if (deletedAbortRef.current) deletedAbortRef.current.abort();
-    const controller = new AbortController();
-    deletedAbortRef.current = controller;
-    try {
-      const params = new URLSearchParams();
-      params.set('status', 'deleted');
-      params.set('pageSize', '50');
-      const res = await authFetch(`/api/bazi/records?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          ...(clientIdRef.current ? { 'X-Client-ID': clientIdRef.current } : {}),
-        },
-        signal: controller.signal,
-      });
-      if (res.status === 401) {
-        return;
-      }
-      if (!res.ok) {
-        const message = await readErrorMessage(res, t('history.deletedLoadError'));
-        setDeletedRecords([]);
-        showStatus({ type: 'error', message });
-        return;
-      }
-      const data = await res.json();
-      const serverRecords = Array.isArray(data.records) ? data.records : [];
-      const lastDeletedSnapshot = lastDeletedRecordRef.current;
-      const preferredRecord = fallbackRecord || lastDeletedSnapshot?.record || null;
-      let mergedRecords = serverRecords;
-      if (preferredRecord?.id) {
-        const exists = serverRecords.some((record) => record.id === preferredRecord.id);
-        const isFresh = Boolean(fallbackRecord)
-          || (Date.now() - (lastDeletedSnapshot?.deletedAt || 0) < 60000);
-        if (!exists && isFresh) {
-          mergedRecords = [preferredRecord, ...serverRecords];
-        } else if (exists && isFresh) {
-          mergedRecords = serverRecords.map((record) =>
-            record.id === preferredRecord.id ? { ...preferredRecord, ...record } : record
-          );
+  const loadDeletedRecords = useCallback(
+    async (fallbackRecord = null) => {
+      if (!isAuthenticated) return;
+      if (deletedAbortRef.current) deletedAbortRef.current.abort();
+      const controller = new AbortController();
+      deletedAbortRef.current = controller;
+      try {
+        const params = new URLSearchParams();
+        params.set('status', 'deleted');
+        params.set('pageSize', '50');
+        const res = await authFetch(`/api/bazi/records?${params.toString()}`, {
+          headers: { ...(clientIdRef.current ? { 'X-Client-ID': clientIdRef.current } : {}) },
+          signal: controller.signal,
+        });
+        if (res.status === 401) {
+          return;
+        }
+        if (!res.ok) {
+          const message = await readErrorMessage(res, t('history.deletedLoadError'));
+          setDeletedRecords([]);
+          showStatus({ type: 'error', message });
+          return;
+        }
+        const data = await res.json();
+        const serverRecords = Array.isArray(data.records) ? data.records : [];
+        const lastDeletedSnapshot = lastDeletedRecordRef.current;
+        const preferredRecord = fallbackRecord || lastDeletedSnapshot?.record || null;
+        let mergedRecords = serverRecords;
+        if (preferredRecord?.id) {
+          const exists = serverRecords.some((record) => record.id === preferredRecord.id);
+          const isFresh =
+            Boolean(fallbackRecord) || Date.now() - (lastDeletedSnapshot?.deletedAt || 0) < 60000;
+          if (!exists && isFresh) {
+            mergedRecords = [preferredRecord, ...serverRecords];
+          } else if (exists && isFresh) {
+            mergedRecords = serverRecords.map((record) =>
+              record.id === preferredRecord.id ? { ...preferredRecord, ...record } : record
+            );
+          }
+        }
+        const primaryId = lastDeletedIdRef.current || lastDeletedId || preferredRecord?.id || null;
+        setDeletedRecords(sortDeletedRecordsForDisplay(mergedRecords, primaryId));
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          setDeletedRecords([]);
         }
       }
-      const primaryId = lastDeletedIdRef.current || lastDeletedId || preferredRecord?.id || null;
-      setDeletedRecords(sortDeletedRecordsForDisplay(mergedRecords, primaryId));
-    } catch (error) {
-      if (error.name !== 'AbortError') {
-        setDeletedRecords([]);
-      }
-    }
-  };
+    },
+    [authFetch, isAuthenticated, lastDeletedId, showStatus, t]
+  );
 
   useEffect(() => {
     if (hasRestoredFiltersRef.current) return;
-    const hasRecordParam = searchParams.get('recordId')
-      || searchParams.get('id')
-      || searchParams.get('record');
-    const hasFilterParams = ['q', 'gender', 'rangeDays', 'sort', 'page'].some((param) => searchParams.has(param));
+    const hasRecordParam =
+      searchParams.get('recordId') || searchParams.get('id') || searchParams.get('record');
+    const hasFilterParams = ['q', 'gender', 'rangeDays', 'sort', 'page'].some((param) =>
+      searchParams.has(param)
+    );
     if (hasRecordParam || hasFilterParams) {
       hasRestoredFiltersRef.current = true;
       return;
@@ -492,11 +509,12 @@ export default function useHistoryData({ t }) {
     const nextSort = searchParams.get('sort') || DEFAULT_FILTERS.sortOption;
     const nextFilterKey = [nextQuery, nextGender, nextRange, nextSort, effectivePageSize].join('|');
     const parsedPage = Number(searchParams.get('page') || 1);
-    const nextPage = filtersKeyRef.current && filtersKeyRef.current !== nextFilterKey
-      ? 1
-      : Number.isFinite(parsedPage) && parsedPage > 0
-        ? parsedPage
-        : 1;
+    const nextPage =
+      filtersKeyRef.current && filtersKeyRef.current !== nextFilterKey
+        ? 1
+        : Number.isFinite(parsedPage) && parsedPage > 0
+          ? parsedPage
+          : 1;
     filtersKeyRef.current = nextFilterKey;
 
     setQuery((prev) => (prev !== nextQuery ? nextQuery : prev));
@@ -505,15 +523,26 @@ export default function useHistoryData({ t }) {
     setRangeFilter((prev) => (prev !== nextRange ? nextRange : prev));
     setSortOption((prev) => (prev !== nextSort ? nextSort : prev));
     setPage((prev) => (prev !== nextPage ? nextPage : prev));
-  }, [debouncedQuery, effectivePageSize, genderFilter, rangeFilter, scheduleQueryDebounce, searchParams, sortOption, t, token]);
+  }, [
+    debouncedQuery,
+    effectivePageSize,
+    genderFilter,
+    rangeFilter,
+    scheduleQueryDebounce,
+    searchParams,
+    sortOption,
+    t,
+    isAuthenticated,
+  ]);
 
   useEffect(() => {
-    if (!token) return;
-    const recordParam = searchParams.get('recordId')
-      || searchParams.get('id')
-      || searchParams.get('record');
+    if (!isAuthenticated) return;
+    const recordParam =
+      searchParams.get('recordId') || searchParams.get('id') || searchParams.get('record');
     if (!recordParam) {
-      setDeepLinkState((prev) => (prev.status === 'idle' ? prev : { status: 'idle', record: null, id: null }));
+      setDeepLinkState((prev) =>
+        prev.status === 'idle' ? prev : { status: 'idle', record: null, id: null }
+      );
       return;
     }
     const recordId = Number(recordParam);
@@ -526,7 +555,6 @@ export default function useHistoryData({ t }) {
     deepLinkAbortRef.current = controller;
     setDeepLinkState({ status: 'loading', record: null, id: recordId });
     authFetch(`/api/bazi/records/${recordId}`, {
-      headers: { Authorization: `Bearer ${token}` },
       signal: controller.signal,
     })
       .then(async (res) => {
@@ -549,10 +577,10 @@ export default function useHistoryData({ t }) {
           setDeepLinkState({ status: 'error', record: null, id: recordId });
         }
       });
-  }, [searchParams, token]);
+  }, [authFetch, searchParams, isAuthenticated]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     let cancelled = false;
     const flushPendingSave = async () => {
       const pendingPayload = readPendingSave();
@@ -570,13 +598,13 @@ export default function useHistoryData({ t }) {
           const params = new URLSearchParams();
           params.set('q', locationQuery);
           params.set('pageSize', '20');
-          const res = await authFetch(`/api/bazi/records?${params.toString()}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const res = await authFetch(`/api/bazi/records?${params.toString()}`, {});
           if (res.ok) {
             const data = await res.json();
             const records = Array.isArray(data.records) ? data.records : [];
-            matchesExisting = records.some((record) => recordMatchesPending(record, effectivePayload));
+            matchesExisting = records.some((record) =>
+              recordMatchesPending(record, effectivePayload)
+            );
           }
         } catch {
           // Ignore search errors.
@@ -586,7 +614,7 @@ export default function useHistoryData({ t }) {
         try {
           const res = await authFetch('/api/bazi/records', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(effectivePayload),
             keepalive: true,
           });
@@ -608,10 +636,10 @@ export default function useHistoryData({ t }) {
     return () => {
       cancelled = true;
     };
-  }, [authFetch, recordMatchesPending, token]);
+  }, [authFetch, isAuthenticated]);
 
   useEffect(() => {
-    if (!token || !pendingSaveChecked) return;
+    if (!isAuthenticated || !pendingSaveChecked) return;
     if (filtersKeyRef.current !== filterKey) {
       filtersKeyRef.current = filterKey;
       if (page !== 1) {
@@ -620,30 +648,30 @@ export default function useHistoryData({ t }) {
       }
     }
     loadRecords({ page });
-  }, [filterKey, page, pendingSaveChecked, token]);
+  }, [filterKey, page, pendingSaveChecked, isAuthenticated, loadRecords]);
 
   useEffect(() => {
-    if (!token || !pendingSaveChecked) return;
+    if (!isAuthenticated || !pendingSaveChecked) return;
     const recentSave = readRecentSave();
     if (!recentSave) return;
     const timer = setTimeout(() => {
       loadRecords({ page: 1 });
     }, 800);
     return () => clearTimeout(timer);
-  }, [pendingSaveChecked, token]);
+  }, [pendingSaveChecked, isAuthenticated, loadRecords]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     loadDeletedRecords();
-  }, [token]);
+  }, [isAuthenticated, loadDeletedRecords]);
 
   useEffect(() => {
-    if (!token) {
+    if (!isAuthenticated) {
       setTarotHistory([]);
       return;
     }
     loadTarotHistory();
-  }, [token, loadTarotHistory]);
+  }, [isAuthenticated, loadTarotHistory]);
 
   useEffect(() => {
     const params = buildFilterParams({ page, queryValue: query });
@@ -669,7 +697,7 @@ export default function useHistoryData({ t }) {
       lastSetSearchRef.current = nextSearch;
       setSearchParams(params, { replace: true });
     }
-  }, [page, filterKey, query, searchParams, setSearchParams, shouldResetPage]);
+  }, [buildFilterParams, page, filterKey, query, searchParams, setSearchParams, shouldResetPage]);
 
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => records.some((record) => record.id === id)));
@@ -700,12 +728,15 @@ export default function useHistoryData({ t }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [confirmState]);
 
-  useEffect(() => () => {
-    if (abortRef.current) abortRef.current.abort();
-    if (deletedAbortRef.current) deletedAbortRef.current.abort();
-    if (deepLinkAbortRef.current) deepLinkAbortRef.current.abort();
-    if (queryDebounceRef.current) clearTimeout(queryDebounceRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (abortRef.current) abortRef.current.abort();
+      if (deletedAbortRef.current) deletedAbortRef.current.abort();
+      if (deepLinkAbortRef.current) deepLinkAbortRef.current.abort();
+      if (queryDebounceRef.current) clearTimeout(queryDebounceRef.current);
+    },
+    []
+  );
 
   const clampCount = (value) => Math.max(0, value);
 
@@ -730,10 +761,7 @@ export default function useHistoryData({ t }) {
         : `/api/bazi/records/${record.id}`;
       const res = await authFetch(deleteUrl, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'X-Client-ID': clientIdRef.current,
-        },
+        headers: { 'X-Client-ID': clientIdRef.current },
       });
       if (res.status === 401) {
         setRecords((prev) => [record, ...prev]);
@@ -766,6 +794,7 @@ export default function useHistoryData({ t }) {
         return sortDeletedRecordsForDisplay(merged, record.id);
       });
       showStatus({ type: 'success', message: t('history.recordDeleted') });
+      deletingIdsRef.current.delete(record.id);
       await Promise.all([loadRecords({ page }), loadDeletedRecords(record)]);
     } finally {
       deletingIdsRef.current.delete(record.id);
@@ -786,10 +815,7 @@ export default function useHistoryData({ t }) {
         : `/api/bazi/records/${recordId}/restore`;
       const res = await authFetch(restoreUrl, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'X-Client-ID': clientIdRef.current,
-        },
+        headers: { 'X-Client-ID': clientIdRef.current },
       });
       if (res.status === 401) {
         return;
@@ -834,10 +860,7 @@ export default function useHistoryData({ t }) {
         : `/api/bazi/records/${recordId}/hard-delete`;
       const res = await authFetch(deleteUrl, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'X-Client-ID': clientIdRef.current,
-        },
+        headers: { 'X-Client-ID': clientIdRef.current },
       });
       if (res.status === 401) {
         return;
@@ -881,12 +904,12 @@ export default function useHistoryData({ t }) {
         params.set('clientId', clientIdRef.current);
       }
       const queryString = params.toString();
-      const res = await authFetch(`/api/bazi/records/export${queryString ? `?${queryString}` : ''}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          ...(clientIdRef.current ? { 'X-Client-ID': clientIdRef.current } : {}),
-        },
-      });
+      const res = await authFetch(
+        `/api/bazi/records/export${queryString ? `?${queryString}` : ''}`,
+        {
+          headers: { ...(clientIdRef.current ? { 'X-Client-ID': clientIdRef.current } : {}) },
+        }
+      );
       if (res.status === 401) {
         return;
       }
@@ -909,9 +932,10 @@ export default function useHistoryData({ t }) {
       anchor.click();
       showStatus({ type: 'success', message: t('history.exportSuccess') });
     } catch (error) {
-      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      const isFetchFailure =
+        error instanceof TypeError && /failed to fetch/i.test(error.message || '');
       if (!isFetchFailure) {
-        console.error(error);
+        logger.error({ error }, 'History export failed');
       }
       showStatus({ type: 'error', message: error.message || t('history.exportError') });
     } finally {
@@ -932,10 +956,7 @@ export default function useHistoryData({ t }) {
         params.set('clientId', clientIdRef.current);
       }
       const res = await authFetch(`/api/bazi/records/export?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          ...(clientIdRef.current ? { 'X-Client-ID': clientIdRef.current } : {}),
-        },
+        headers: { ...(clientIdRef.current ? { 'X-Client-ID': clientIdRef.current } : {}) },
       });
       if (res.status === 401) {
         return;
@@ -959,9 +980,10 @@ export default function useHistoryData({ t }) {
       anchor.click();
       showStatus({ type: 'success', message: t('history.exportAllSuccess') });
     } catch (error) {
-      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      const isFetchFailure =
+        error instanceof TypeError && /failed to fetch/i.test(error.message || '');
       if (!isFetchFailure) {
-        console.error(error);
+        logger.error({ error }, 'History export all failed');
       }
       showStatus({ type: 'error', message: error.message || t('history.exportError') });
     } finally {
@@ -986,7 +1008,6 @@ export default function useHistoryData({ t }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
           ...(clientIdRef.current ? { 'X-Client-ID': clientIdRef.current } : {}),
         },
         body: JSON.stringify({
@@ -1008,9 +1029,10 @@ export default function useHistoryData({ t }) {
       });
       await Promise.all([loadRecords({ page: 1 }), loadDeletedRecords()]);
     } catch (error) {
-      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      const isFetchFailure =
+        error instanceof TypeError && /failed to fetch/i.test(error.message || '');
       if (!isFetchFailure) {
-        console.error(error);
+        logger.error({ error }, 'History import failed');
       }
       showStatus({ type: 'error', message: error.message || t('history.importError') });
     } finally {
@@ -1020,42 +1042,44 @@ export default function useHistoryData({ t }) {
   };
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const filteredRecords = useMemo(
-    () => {
-      const normalizedQuery = normalizeText(query).toLowerCase();
-      const normalizedGenderFilter = genderFilter === 'male' || genderFilter === 'female' ? genderFilter : null;
-      const nextRecords = normalizedGenderFilter
-        ? records.filter((record) => normalizeText(record?.gender).toLowerCase() === normalizedGenderFilter)
-        : records;
+  const filteredRecords = useMemo(() => {
+    const normalizedQuery = normalizeText(query).toLowerCase();
+    const normalizedGenderFilter =
+      genderFilter === 'male' || genderFilter === 'female' ? genderFilter : null;
+    const nextRecords = normalizedGenderFilter
+      ? records.filter(
+          (record) => normalizeText(record?.gender).toLowerCase() === normalizedGenderFilter
+        )
+      : records;
 
-      const queryFilteredRecords = normalizedQuery
-        ? nextRecords.filter((record) => {
+    const queryFilteredRecords = normalizedQuery
+      ? nextRecords.filter((record) => {
           const birthLocation = normalizeText(record?.birthLocation || '').toLowerCase();
           const timezone = normalizeText(record?.timezone || '').toLowerCase();
           const pillars = record?.pillars;
           const pillarText = pillars
             ? normalizeText(
-              `${pillars?.year?.stem || ''}${pillars?.year?.branch || ''}`
-              + ` ${pillars?.month?.stem || ''}${pillars?.month?.branch || ''}`
-              + ` ${pillars?.day?.stem || ''}${pillars?.day?.branch || ''}`
-              + ` ${pillars?.hour?.stem || ''}${pillars?.hour?.branch || ''}`
-            ).toLowerCase()
+                `${pillars?.year?.stem || ''}${pillars?.year?.branch || ''}` +
+                  ` ${pillars?.month?.stem || ''}${pillars?.month?.branch || ''}` +
+                  ` ${pillars?.day?.stem || ''}${pillars?.day?.branch || ''}` +
+                  ` ${pillars?.hour?.stem || ''}${pillars?.hour?.branch || ''}`
+              ).toLowerCase()
             : '';
 
-          return birthLocation.includes(normalizedQuery)
-            || timezone.includes(normalizedQuery)
-            || pillarText.includes(normalizedQuery);
+          return (
+            birthLocation.includes(normalizedQuery) ||
+            timezone.includes(normalizedQuery) ||
+            pillarText.includes(normalizedQuery)
+          );
         })
-        : nextRecords;
+      : nextRecords;
 
-      return sortRecordsForDisplay(queryFilteredRecords, sortOption);
-    },
-    [records, sortOption, genderFilter, query],
-  );
+    return sortRecordsForDisplay(queryFilteredRecords, sortOption);
+  }, [records, sortOption, genderFilter, query]);
   const filteredIds = useMemo(() => filteredRecords.map((record) => record.id), [filteredRecords]);
   const filteredIdSet = useMemo(() => new Set(filteredIds), [filteredIds]);
-  const allFilteredSelected = filteredRecords.length > 0
-    && filteredRecords.every((record) => selectedSet.has(record.id));
+  const allFilteredSelected =
+    filteredRecords.length > 0 && filteredRecords.every((record) => selectedSet.has(record.id));
   const someFilteredSelected = filteredRecords.some((record) => selectedSet.has(record.id));
 
   useEffect(() => {
@@ -1072,9 +1096,9 @@ export default function useHistoryData({ t }) {
   };
 
   const toggleSelection = (recordId) => {
-    setSelectedIds((prev) => (
+    setSelectedIds((prev) =>
       prev.includes(recordId) ? prev.filter((id) => id !== recordId) : [...prev, recordId]
-    ));
+    );
   };
 
   const startEdit = (record) => {
@@ -1111,7 +1135,6 @@ export default function useHistoryData({ t }) {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
@@ -1126,11 +1149,11 @@ export default function useHistoryData({ t }) {
       const data = await res.json();
       if (data.record) {
         setRecords((prev) => prev.map((item) => (item.id === data.record.id ? data.record : item)));
-        setDeepLinkState((prev) => (
+        setDeepLinkState((prev) =>
           prev?.status === 'found' && prev?.id === data.record.id
             ? { ...prev, record: data.record }
             : prev
-        ));
+        );
       }
       cancelEdit();
     } catch (error) {
@@ -1156,11 +1179,7 @@ export default function useHistoryData({ t }) {
 
     const res = await authFetch('/api/bazi/records/bulk-delete', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'X-Client-ID': clientIdRef.current,
-      },
+      headers: { 'Content-Type': 'application/json', 'X-Client-ID': clientIdRef.current },
       body: JSON.stringify({ ids: idsToDelete, clientId: clientIdRef.current }),
     });
 

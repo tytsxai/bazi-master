@@ -8,7 +8,9 @@ const buildScreenshotPath = (name) => {
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-test('[A] Security: Zodiac monthly horoscope from /tarot matches backend data', async ({ page }) => {
+test('[A] Security: Zodiac monthly horoscope from /tarot matches backend data', async ({
+  page,
+}) => {
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));
@@ -24,8 +26,12 @@ test('[A] Security: Zodiac monthly horoscope from /tarot matches backend data', 
   });
 
   await page.goto('/tarot', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: 'Tarot Sanctuary' })).toBeVisible({ timeout: 15000 });
-  await page.screenshot({ path: buildScreenshotPath('security-zodiac-monthly-tarot-step-1-tarot') });
+  await expect(page.getByRole('heading', { name: 'Tarot Sanctuary' })).toBeVisible({
+    timeout: 15000,
+  });
+  await page.screenshot({
+    path: buildScreenshotPath('security-zodiac-monthly-tarot-step-1-tarot'),
+  });
 
   await page.getByLabel('Sign').selectOption('libra');
   await page.getByLabel('Period').selectOption('monthly');
@@ -44,7 +50,9 @@ test('[A] Security: Zodiac monthly horoscope from /tarot matches backend data', 
     .getByRole('heading', { name: /Weekly Zodiac Snapshot/i })
     .locator('xpath=ancestor::section[1]');
 
-  await expect(snapshotSection.getByRole('heading', { name: /Libra Monthly Horoscope/i })).toBeVisible();
+  await expect(
+    snapshotSection.getByRole('heading', { name: /Libra Monthly Horoscope/i })
+  ).toBeVisible();
 
   const horoscope = horoscopeData.horoscope || {};
   const fields = ['overview', 'love', 'career', 'wellness'];
@@ -56,23 +64,22 @@ test('[A] Security: Zodiac monthly horoscope from /tarot matches backend data', 
 
   if (horoscope.lucky?.colors?.length) {
     const colorsText = `Lucky colors: ${horoscope.lucky.colors.join(', ')}`;
-    await expect(snapshotSection.getByText(new RegExp(escapeRegExp(colorsText))))
-      .toBeVisible();
+    await expect(snapshotSection.getByText(new RegExp(escapeRegExp(colorsText)))).toBeVisible();
   }
 
   if (horoscope.lucky?.numbers?.length) {
     const numbersText = `Lucky numbers: ${horoscope.lucky.numbers.join(', ')}`;
-    await expect(snapshotSection.getByText(new RegExp(escapeRegExp(numbersText))))
-      .toBeVisible();
+    await expect(snapshotSection.getByText(new RegExp(escapeRegExp(numbersText)))).toBeVisible();
   }
 
   if (horoscope.mantra) {
     const mantraText = `Mantra: ${horoscope.mantra}`;
-    await expect(snapshotSection.getByText(new RegExp(escapeRegExp(mantraText))))
-      .toBeVisible();
+    await expect(snapshotSection.getByText(new RegExp(escapeRegExp(mantraText)))).toBeVisible();
   }
 
-  await page.screenshot({ path: buildScreenshotPath('security-zodiac-monthly-tarot-step-2-horoscope') });
+  await page.screenshot({
+    path: buildScreenshotPath('security-zodiac-monthly-tarot-step-2-horoscope'),
+  });
 
   expect(consoleErrors).toEqual([]);
 });

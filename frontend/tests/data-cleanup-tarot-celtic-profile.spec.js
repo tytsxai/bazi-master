@@ -8,7 +8,9 @@ const buildScreenshotPath = (name) => {
   return path.join(process.cwd(), 'verification', `${stamp}-${name}.png`);
 };
 
-test('[J] Data cleanup: Tarot Celtic cross from /profile matches backend data', async ({ page }) => {
+test('[J] Data cleanup: Tarot Celtic cross from /profile matches backend data', async ({
+  page,
+}) => {
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));
@@ -98,10 +100,14 @@ test('[J] Data cleanup: Tarot Celtic cross from /profile matches backend data', 
     const positionsSection = page
       .getByRole('heading', { name: 'Celtic Cross Positions' })
       .locator('xpath=ancestor::section[1]');
-    await expect(positionsSection.getByText(`Position ${first.position}`, { exact: true })).toBeVisible();
+    await expect(
+      positionsSection.getByText(`Position ${first.position}`, { exact: true })
+    ).toBeVisible();
     await expect(positionsSection.getByText(first.label, { exact: true })).toBeVisible();
     await expect(positionsSection.getByText(first.meaning, { exact: true })).toBeVisible();
-    await expect(positionsSection.getByText(`Position ${last.position}`, { exact: true })).toBeVisible();
+    await expect(
+      positionsSection.getByText(`Position ${last.position}`, { exact: true })
+    ).toBeVisible();
     await expect(positionsSection.getByText(last.label, { exact: true })).toBeVisible();
     await expect(positionsSection.getByText(last.meaning, { exact: true })).toBeVisible();
   }

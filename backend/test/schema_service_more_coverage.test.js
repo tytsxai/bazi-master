@@ -72,23 +72,34 @@ describe('schema.service more coverage', () => {
     assert.equal(calls.length, 2);
 
     await ensureBaziRecordTrashTable({
-      prismaClient: { $executeRaw: async () => { throw new Error('boom'); } },
+      prismaClient: {
+        $executeRaw: async () => {
+          throw new Error('boom');
+        },
+      },
       env: {},
       appConfig: { IS_PRODUCTION: false },
       prismaConfig: { IS_SQLITE: false, IS_POSTGRES: true },
       logger,
     });
-    assert.ok(logger.errors.some((line) => line.includes('Failed to ensure BaziRecordTrash table')));
+    assert.ok(
+      logger.errors.some((line) => line.includes('Failed to ensure BaziRecordTrash table'))
+    );
 
     await assert.rejects(
-      () => ensureBaziRecordTrashTable({
-        prismaClient: { $executeRaw: async () => { throw new Error('boom'); } },
-        env: {},
-        appConfig: { IS_PRODUCTION: true },
-        prismaConfig: { IS_SQLITE: false, IS_POSTGRES: true },
-        logger,
-      }),
-      /boom/,
+      () =>
+        ensureBaziRecordTrashTable({
+          prismaClient: {
+            $executeRaw: async () => {
+              throw new Error('boom');
+            },
+          },
+          env: {},
+          appConfig: { IS_PRODUCTION: true },
+          prismaConfig: { IS_SQLITE: false, IS_POSTGRES: true },
+          logger,
+        }),
+      /boom/
     );
   });
 
@@ -118,7 +129,11 @@ describe('schema.service more coverage', () => {
       };
 
       const ready = createEnsureSoftDeleteReady({
-        prismaClient: { $executeRaw: async () => { throw new Error('db'); } },
+        prismaClient: {
+          $executeRaw: async () => {
+            throw new Error('db');
+          },
+        },
         env: { ALLOW_RUNTIME_SCHEMA_SYNC: 'true' },
         appConfig: { IS_PRODUCTION: false },
         prismaConfig: { IS_SQLITE: true, IS_POSTGRES: false },
@@ -134,7 +149,12 @@ describe('schema.service more coverage', () => {
 
   it('ensureUserSettingsTable / ensureZiweiHistoryTable cover early return and catch', async () => {
     const calls = [];
-    const logger = { errors: [], error(...args) { this.errors.push(args.map(String).join(' ')); } };
+    const logger = {
+      errors: [],
+      error(...args) {
+        this.errors.push(args.map(String).join(' '));
+      },
+    };
 
     await ensureUserSettingsTable({
       prismaClient: { $executeRaw: async () => calls.push('exec') },
@@ -153,14 +173,22 @@ describe('schema.service more coverage', () => {
     assert.deepEqual(calls, []);
 
     await ensureUserSettingsTable({
-      prismaClient: { $executeRaw: async () => { throw new Error('boom'); } },
+      prismaClient: {
+        $executeRaw: async () => {
+          throw new Error('boom');
+        },
+      },
       env: { ALLOW_RUNTIME_SCHEMA_SYNC: 'true' },
       appConfig: { IS_PRODUCTION: false },
       prismaConfig: { IS_SQLITE: true, IS_POSTGRES: false },
       logger,
     });
     await ensureZiweiHistoryTable({
-      prismaClient: { $executeRaw: async () => { throw new Error('boom'); } },
+      prismaClient: {
+        $executeRaw: async () => {
+          throw new Error('boom');
+        },
+      },
       env: { ALLOW_RUNTIME_SCHEMA_SYNC: 'true' },
       appConfig: { IS_PRODUCTION: false },
       prismaConfig: { IS_SQLITE: true, IS_POSTGRES: false },
@@ -191,7 +219,12 @@ describe('schema.service more coverage', () => {
 
   it('ensureBaziRecordUpdatedAt covers sqlite/postgres paths and error catch', async () => {
     const execCalls = [];
-    const logger = { errors: [], error(...args) { this.errors.push(args.map(String).join(' ')); } };
+    const logger = {
+      errors: [],
+      error(...args) {
+        this.errors.push(args.map(String).join(' '));
+      },
+    };
 
     // sqlite: already has updatedAt -> no executeRaw
     await ensureBaziRecordUpdatedAt({
@@ -235,7 +268,9 @@ describe('schema.service more coverage', () => {
     // catch branch
     await ensureBaziRecordUpdatedAt({
       prismaClient: {
-        $queryRaw: async () => { throw new Error('boom'); },
+        $queryRaw: async () => {
+          throw new Error('boom');
+        },
         $executeRaw: async () => execCalls.push('exec'),
       },
       env: { ALLOW_RUNTIME_SCHEMA_SYNC: 'true' },
@@ -243,17 +278,39 @@ describe('schema.service more coverage', () => {
       prismaConfig: { IS_SQLITE: true, IS_POSTGRES: false },
       logger,
     });
-    assert.ok(logger.errors.some((line) => line.includes('Failed to ensure BaziRecord updatedAt column')));
+    assert.ok(
+      logger.errors.some((line) => line.includes('Failed to ensure BaziRecord updatedAt column'))
+    );
   });
 
   it('ensureDefaultUser covers no-op, create/update, hash failure, and catch', async () => {
     const calls = [];
-    const logger = { errors: [], warns: [], error(...args) { this.errors.push(args.map(String).join(' ')); }, warn(...args) { this.warns.push(args.map(String).join(' ')); } };
+    const logger = {
+      errors: [],
+      warns: [],
+      error(...args) {
+        this.errors.push(args.map(String).join(' '));
+      },
+      warn(...args) {
+        this.warns.push(args.map(String).join(' '));
+      },
+    };
 
     // Should seed false => no-op
     await ensureDefaultUser({
-      prismaClient: { user: { findUnique: async () => { throw new Error('should not hit'); } } },
-      env: { NODE_ENV: 'test', SEED_DEFAULT_USER: 'false', SEED_USER_EMAIL: 'a', SEED_USER_PASSWORD: 'b' },
+      prismaClient: {
+        user: {
+          findUnique: async () => {
+            throw new Error('should not hit');
+          },
+        },
+      },
+      env: {
+        NODE_ENV: 'test',
+        SEED_DEFAULT_USER: 'false',
+        SEED_USER_EMAIL: 'a',
+        SEED_USER_PASSWORD: 'b',
+      },
       logger,
     });
 
@@ -273,7 +330,13 @@ describe('schema.service more coverage', () => {
           create: async () => calls.push('create'),
         },
       },
-      env: { NODE_ENV: 'test', SEED_DEFAULT_USER: 'true', SEED_USER_EMAIL: 'u', SEED_USER_PASSWORD: 'p', SEED_USER_NAME: 'n' },
+      env: {
+        NODE_ENV: 'test',
+        SEED_DEFAULT_USER: 'true',
+        SEED_USER_EMAIL: 'u',
+        SEED_USER_PASSWORD: 'p',
+        SEED_USER_NAME: 'n',
+      },
       hashPasswordFn: async () => 'hashed',
       logger,
     });
@@ -286,7 +349,12 @@ describe('schema.service more coverage', () => {
           create: async () => calls.push('create2'),
         },
       },
-      env: { NODE_ENV: 'test', SEED_DEFAULT_USER: 'true', SEED_USER_EMAIL: 'u', SEED_USER_PASSWORD: 'p' },
+      env: {
+        NODE_ENV: 'test',
+        SEED_DEFAULT_USER: 'true',
+        SEED_USER_EMAIL: 'u',
+        SEED_USER_PASSWORD: 'p',
+      },
       hashPasswordFn: async () => null,
       logger,
     });
@@ -299,7 +367,13 @@ describe('schema.service more coverage', () => {
           update: async () => calls.push('update'),
         },
       },
-      env: { NODE_ENV: 'test', SEED_DEFAULT_USER: 'true', SEED_USER_EMAIL: 'u', SEED_USER_PASSWORD: 'p', SEED_USER_NAME: 'n' },
+      env: {
+        NODE_ENV: 'test',
+        SEED_DEFAULT_USER: 'true',
+        SEED_USER_EMAIL: 'u',
+        SEED_USER_PASSWORD: 'p',
+        SEED_USER_NAME: 'n',
+      },
       verifyPasswordFn: async () => false,
       isHashedPasswordFn: () => false,
       hashPasswordFn: async () => 'hashed',
@@ -308,8 +382,19 @@ describe('schema.service more coverage', () => {
 
     // Catch branch
     await ensureDefaultUser({
-      prismaClient: { user: { findUnique: async () => { throw new Error('boom'); } } },
-      env: { NODE_ENV: 'test', SEED_DEFAULT_USER: 'true', SEED_USER_EMAIL: 'u', SEED_USER_PASSWORD: 'p' },
+      prismaClient: {
+        user: {
+          findUnique: async () => {
+            throw new Error('boom');
+          },
+        },
+      },
+      env: {
+        NODE_ENV: 'test',
+        SEED_DEFAULT_USER: 'true',
+        SEED_USER_EMAIL: 'u',
+        SEED_USER_PASSWORD: 'p',
+      },
       logger,
     });
 

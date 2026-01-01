@@ -53,11 +53,14 @@ test('Full export/import preserves counts', async ({ page, request }, testInfo) 
   const countBefore = countBeforeData.totalCount;
   expect(countBefore).toBeGreaterThan(0);
 
-  await page.addInitScript(({ authToken, authUser }) => {
-    localStorage.setItem('bazi_token', authToken);
-    localStorage.setItem('bazi_user', JSON.stringify(authUser));
-    localStorage.setItem('bazi_last_activity', String(Date.now()));
-  }, { authToken: token, authUser: user });
+  await page.addInitScript(
+    ({ authToken, authUser }) => {
+      localStorage.setItem('bazi_token', authToken);
+      localStorage.setItem('bazi_user', JSON.stringify(authUser));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+    },
+    { authToken: token, authUser: user }
+  );
 
   await page.goto('/history');
   const exportAllButton = page.getByRole('button', { name: 'Export all' });
@@ -75,12 +78,15 @@ test('Full export/import preserves counts', async ({ page, request }, testInfo) 
   const exportedCount = exportedRecords.length;
   expect(exportedCount).toBeGreaterThan(0);
   expect(exportedRecords.some((record) => record?.softDeleted)).toBeTruthy();
-  expect(exportedRecords.some((record) => record?.birthLocation?.includes('E2E Full Export'))).toBeTruthy();
+  expect(
+    exportedRecords.some((record) => record?.birthLocation?.includes('E2E Full Export'))
+  ).toBeTruthy();
 
   const [importResponse] = await Promise.all([
-    page.waitForResponse((response) =>
-      response.url().includes('/api/bazi/records/import')
-      && response.request().method() === 'POST'
+    page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/bazi/records/import') &&
+        response.request().method() === 'POST'
     ),
     page.setInputFiles('input[type="file"]', downloadPath),
   ]);

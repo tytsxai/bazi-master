@@ -39,7 +39,13 @@ describe('cache.service coverage', () => {
     assert.equal(buildBaziCacheKey(null), null);
     assert.equal(buildBaziCacheKey({ birthYear: 1990 }), null);
     assert.equal(
-      buildBaziCacheKey({ birthYear: '1990', birthMonth: 1, birthDay: 2, birthHour: 3, gender: ' F ' }),
+      buildBaziCacheKey({
+        birthYear: '1990',
+        birthMonth: 1,
+        birthDay: 2,
+        birthHour: 3,
+        gender: ' F ',
+      }),
       '1990-1-2-3-f'
     );
   });
@@ -85,7 +91,10 @@ describe('cache.service coverage', () => {
 
     const out = await getCachedBaziCalculationAsync('k1');
     assert.equal(out, null);
-    assert.deepEqual(calls, [['get', 'k1'], ['delete', 'k1']]);
+    assert.deepEqual(calls, [
+      ['get', 'k1'],
+      ['delete', 'k1'],
+    ]);
   });
 
   it('mirror interactions: caches valid remote and supports invalidation/clear', async () => {

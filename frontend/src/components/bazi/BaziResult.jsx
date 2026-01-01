@@ -41,7 +41,11 @@ export default function BaziResult({
             <div className="mt-4 grid gap-x-10 gap-y-3 3xl:grid-cols-2" data-testid="ten-gods-list">
               {tenGodsList.length ? (
                 tenGodsList.map((item) => (
-                  <div key={item.name} className="flex items-center gap-4" data-testid="ten-god-item">
+                  <div
+                    key={item.name}
+                    className="flex items-center gap-4"
+                    data-testid="ten-god-item"
+                  >
                     <span className="w-32 text-sm text-white/80">{item.name}</span>
                     <div className="h-2 flex-1 rounded-full bg-white/10">
                       <div
@@ -67,7 +71,10 @@ export default function BaziResult({
             data-testid="luck-cycles-section"
           >
             <h2 className="font-display text-2xl text-gold-400">{t('bazi.luckCycles')}</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 3xl:grid-cols-3" data-testid="luck-cycles-list">
+            <div
+              className="mt-4 grid gap-3 sm:grid-cols-2 3xl:grid-cols-3"
+              data-testid="luck-cycles-list"
+            >
               {luckCyclesList.length ? (
                 luckCyclesList.map((cycle) => (
                   <div
@@ -75,7 +82,9 @@ export default function BaziResult({
                     className="rounded-2xl border border-white/10 bg-white/5 p-4"
                     data-testid="luck-cycle-item"
                   >
-                    <p className="text-xs uppercase tracking-[0.2em] text-white/60">{cycle.range}</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-white/60">
+                      {cycle.range}
+                    </p>
                     <p className="mt-2 text-lg text-white">
                       {cycle.stem} · {cycle.branch}
                     </p>
@@ -139,9 +148,7 @@ export default function BaziResult({
                 {t('bazi.trueSolarCorrection')}
               </span>
               <span data-testid="true-solar-correction">
-                {timeMeta.trueSolar?.applied
-                  ? `${timeMeta.trueSolar.correctionMinutes} min`
-                  : '—'}
+                {timeMeta.trueSolar?.applied ? `${timeMeta.trueSolar.correctionMinutes} min` : '—'}
               </span>
             </div>
             <div className="flex flex-col gap-1">
@@ -159,9 +166,7 @@ export default function BaziResult({
       </section>
       <section className="glass-card rounded-3xl border border-white/10 p-6 shadow-glass">
         <h2 className="font-display text-2xl text-gold-400">{t('nav.ziwei')} (V2)</h2>
-        <p className="mt-2 text-sm text-white/70">
-          {t('profile.ziweiQuickChartDesc')}
-        </p>
+        <p className="mt-2 text-sm text-white/70">{t('profile.ziweiQuickChartDesc')}</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -177,10 +182,12 @@ export default function BaziResult({
             data-testid="bazi-ziwei-status"
             role={ziweiStatus.type === 'error' ? 'alert' : 'status'}
             aria-live={ziweiStatus.type === 'error' ? 'assertive' : 'polite'}
-            className={`mt-4 text-sm ${ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
-              }`}
+            className={`mt-4 text-sm ${
+              ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
+            }`}
           >
-            {ziweiStatus.message || (ziweiStatus.type === 'loading' ? `${t('profile.calculating')}...` : '')}
+            {ziweiStatus.message ||
+              (ziweiStatus.type === 'loading' ? `${t('profile.calculating')}...` : '')}
           </p>
         )}
         {ziweiResult && (
@@ -201,17 +208,20 @@ export default function BaziResult({
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <h3 className="text-xs uppercase text-gold-400/80">{t('ziwei.keyPalaces')}</h3>
               <p className="mt-2 text-white">
-                命宫: {ziweiResult?.mingPalace?.palace?.cn} · {ziweiResult?.mingPalace?.branch?.name}
+                命宫: {ziweiResult?.mingPalace?.palace?.cn} ·{' '}
+                {ziweiResult?.mingPalace?.branch?.name}
               </p>
               <p className="mt-1 text-white">
-                身宫: {ziweiResult?.shenPalace?.palace?.cn} · {ziweiResult?.shenPalace?.branch?.name}
+                身宫: {ziweiResult?.shenPalace?.palace?.cn} ·{' '}
+                {ziweiResult?.shenPalace?.branch?.name}
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <h3 className="text-xs uppercase text-gold-400/80">{t('ziwei.birthTime')}</h3>
               <p className="mt-2 text-white">{ziweiResult?.birthIso || '—'}</p>
               <p className="mt-1 text-xs text-white/60">
-                {t('ziwei.utcOffset')}: {Number.isFinite(ziweiResult?.timezoneOffsetMinutes)
+                {t('ziwei.utcOffset')}:{' '}
+                {Number.isFinite(ziweiResult?.timezoneOffsetMinutes)
                   ? `${ziweiResult.timezoneOffsetMinutes} ${t('profile.mins')}`
                   : '—'}
               </p>
@@ -225,7 +235,9 @@ export default function BaziResult({
           {displayResult ? (
             Object.entries(displayResult.pillars).map(([key, pillar]) => (
               <div key={key} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-white/50">{t(`bazi.${key}`)}</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-white/50">
+                  {t(`bazi.${key}`)}
+                </p>
                 <p className="mt-2 text-lg text-white">
                   {pillar.stem} · {pillar.branch}
                 </p>
@@ -248,9 +260,14 @@ export default function BaziResult({
           {elements.length ? (
             elements.map(({ element, count, percent }) => (
               <div key={element} className="flex items-center gap-3">
-                <span className="w-20 text-xs uppercase tracking-[0.2em] text-white/70">{t(`bazi.elements.${element}`)}</span>
+                <span className="w-20 text-xs uppercase tracking-[0.2em] text-white/70">
+                  {t(`bazi.elements.${element}`)}
+                </span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full rounded-full bg-gold-400" style={{ width: `${percent}%` }} />
+                  <div
+                    className="h-full rounded-full bg-gold-400"
+                    style={{ width: `${percent}%` }}
+                  />
                 </div>
                 <span className="text-xs text-white/60">
                   {count} · {percent}%

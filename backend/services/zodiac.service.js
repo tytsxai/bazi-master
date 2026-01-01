@@ -1,7 +1,7 @@
 import {
   ELEMENT_COMPATIBILITY,
   MODALITY_COMPATIBILITY,
-  ZODIAC_PERIODS
+  ZODIAC_PERIODS,
 } from '../constants/zodiac.js';
 
 export { ZODIAC_PERIODS };
@@ -18,7 +18,7 @@ export const ZODIAC_ORDER = [
   'sagittarius',
   'capricorn',
   'aquarius',
-  'pisces'
+  'pisces',
 ];
 
 export const normalizeAngle = (deg) => ((deg % 360) + 360) % 360;
@@ -33,25 +33,17 @@ export const calculateRisingSign = ({
   birthMinute,
   latitude,
   longitude,
-  timezoneOffsetMinutes
+  timezoneOffsetMinutes,
 }) => {
   const offsetMinutes = Number.isFinite(timezoneOffsetMinutes) ? timezoneOffsetMinutes : 0;
-  const utcMillis = Date.UTC(
-    birthYear,
-    birthMonth - 1,
-    birthDay,
-    birthHour,
-    birthMinute || 0,
-    0
-  ) - offsetMinutes * 60 * 1000;
+  const utcMillis =
+    Date.UTC(birthYear, birthMonth - 1, birthDay, birthHour, birthMinute || 0, 0) -
+    offsetMinutes * 60 * 1000;
 
   const jd = utcMillis / 86400000 + 2440587.5;
   const t = (jd - 2451545.0) / 36525;
   const gmst = normalizeAngle(
-    280.46061837 +
-    360.98564736629 * (jd - 2451545.0) +
-    0.000387933 * t * t -
-    (t * t * t) / 38710000
+    280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * t * t - (t * t * t) / 38710000
   );
   const lst = normalizeAngle(gmst + longitude);
 
@@ -71,13 +63,12 @@ export const calculateRisingSign = ({
     signKey,
     ascendant: {
       longitude: Number(ascDeg.toFixed(2)),
-      localSiderealTime: Number((lst / 15).toFixed(2))
-    }
+      localSiderealTime: Number((lst / 15).toFixed(2)),
+    },
   };
 };
 
-export const formatDateLabel = (date, options) =>
-  date.toLocaleDateString('en-US', options);
+export const formatDateLabel = (date, options) => date.toLocaleDateString('en-US', options);
 
 export const getWeekRange = (date) => {
   const day = date.getDay();
@@ -99,25 +90,17 @@ export const sanitizeQueryParam = (raw) => {
 };
 
 export const buildHoroscope = (sign, period) => {
-  const now = new Date();
-  const range =
-    period === 'daily'
-      ? formatDateLabel(now, { month: 'short', day: 'numeric', year: 'numeric' })
-      : period === 'weekly'
-        ? getWeekRange(now)
-        : formatDateLabel(now, { month: 'long', year: 'numeric' });
-
   const focusMap = {
     daily: 'short, intentional steps',
     weekly: 'strategic momentum',
-    monthly: 'long-term alignment'
+    monthly: 'long-term alignment',
   };
 
   const energyMap = {
     Fire: 'spark and momentum',
     Earth: 'steadiness and structure',
     Air: 'clarity and connection',
-    Water: 'intuition and depth'
+    Water: 'intuition and depth',
   };
 
   return {
@@ -127,14 +110,13 @@ export const buildHoroscope = (sign, period) => {
     wellness: `Balance your drive with grounding rituals. Stretch, hydrate, and carve out a quiet reset.`,
     lucky: {
       colors: sign.luckyColors,
-      numbers: sign.luckyNumbers
+      numbers: sign.luckyNumbers,
     },
-    mantra: `I honor my ${sign.element.toLowerCase()} nature and move with ${sign.keywords[2]} confidence.`
+    mantra: `I honor my ${sign.element.toLowerCase()} nature and move with ${sign.keywords[2]} confidence.`,
   };
 };
 
-export const clampScore = (value, min = 0, max = 100) =>
-  Math.min(max, Math.max(min, value));
+export const clampScore = (value, min = 0, max = 100) => Math.min(max, Math.max(min, value));
 
 export const compatibilityLevel = (score) => {
   if (score >= 80) return 'Cosmic Spark';
@@ -162,7 +144,7 @@ export const buildZodiacCompatibility = (primary, secondary) => {
     score += elementInsight.score;
     breakdown.element = {
       score: elementInsight.score,
-      note: elementInsight.note
+      note: elementInsight.note,
     };
     highlights.push(elementInsight.note);
   }
@@ -172,28 +154,30 @@ export const buildZodiacCompatibility = (primary, secondary) => {
     score += modalityInsight.score;
     breakdown.modality = {
       score: modalityInsight.score,
-      note: modalityInsight.note
+      note: modalityInsight.note,
     };
     highlights.push(modalityInsight.note);
   }
 
   const mutualMatch =
-    primary.compatibility.includes(secondary.name) && secondary.compatibility.includes(primary.name);
+    primary.compatibility.includes(secondary.name) &&
+    secondary.compatibility.includes(primary.name);
   const oneWayMatch =
     !mutualMatch &&
-    (primary.compatibility.includes(secondary.name) || secondary.compatibility.includes(primary.name));
+    (primary.compatibility.includes(secondary.name) ||
+      secondary.compatibility.includes(primary.name));
   if (mutualMatch) {
     score += 12;
     breakdown.affinity = {
       score: 12,
-      note: 'Mutual favorite pairing boosts natural chemistry.'
+      note: 'Mutual favorite pairing boosts natural chemistry.',
     };
     highlights.push('Mutual favorite pairing boosts natural chemistry.');
   } else if (oneWayMatch) {
     score += 6;
     breakdown.affinity = {
       score: 6,
-      note: 'One sign naturally gravitates toward the other.'
+      note: 'One sign naturally gravitates toward the other.',
     };
     highlights.push('One sign naturally gravitates toward the other.');
   }
@@ -202,7 +186,7 @@ export const buildZodiacCompatibility = (primary, secondary) => {
     score += 4;
     breakdown.rulingPlanet = {
       score: 4,
-      note: `Shared ruling planet (${primary.rulingPlanet}) aligns motivations.`
+      note: `Shared ruling planet (${primary.rulingPlanet}) aligns motivations.`,
     };
     highlights.push(`Shared ruling planet (${primary.rulingPlanet}) aligns motivations.`);
   }
@@ -215,7 +199,7 @@ export const buildZodiacCompatibility = (primary, secondary) => {
     level,
     summary: buildCompatibilitySummary(primary, secondary, level),
     highlights,
-    breakdown
+    breakdown,
   };
 };
 

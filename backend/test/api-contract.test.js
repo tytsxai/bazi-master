@@ -31,7 +31,7 @@ describe('API Contract', () => {
     it('should have schemas', () => {
       assert.ok(spec.components.schemas);
       const requiredSchemas = ['Error', 'HealthCheck', 'BaziRecord', 'Favorite'];
-      requiredSchemas.forEach(schema => {
+      requiredSchemas.forEach((schema) => {
         assert.ok(spec.components.schemas[schema], `Missing schema: ${schema}`);
       });
     });
@@ -123,8 +123,16 @@ describe('API Contract', () => {
     it('should have valid BaziRecord schema', () => {
       const schema = spec.components.schemas.BaziRecord;
       assert.ok(schema.properties);
-      const requiredFields = ['id', 'userId', 'birthYear', 'birthMonth', 'birthDay', 'pillars', 'fiveElements'];
-      requiredFields.forEach(field => {
+      const requiredFields = [
+        'id',
+        'userId',
+        'birthYear',
+        'birthMonth',
+        'birthDay',
+        'pillars',
+        'fiveElements',
+      ];
+      requiredFields.forEach((field) => {
         assert.ok(schema.properties[field], `Missing field: ${field}`);
       });
     });
@@ -133,7 +141,7 @@ describe('API Contract', () => {
       const schema = spec.components.schemas.Favorite;
       assert.ok(schema.properties);
       const requiredFields = ['id', 'userId', 'recordId', 'record', 'createdAt'];
-      requiredFields.forEach(field => {
+      requiredFields.forEach((field) => {
         assert.ok(schema.properties[field], `Missing field: ${field}`);
       });
     });
@@ -175,14 +183,21 @@ describe('API Contract', () => {
         '/api/favorites/{id}',
       ];
 
-      protectedPaths.forEach(path => {
+      protectedPaths.forEach((path) => {
         const pathSpec = spec.paths[path];
-        const methods = ['get', 'post', 'put', 'delete'].filter(method => pathSpec[method]);
+        const methods = ['get', 'post', 'put', 'delete'].filter((method) => pathSpec[method]);
 
-        methods.forEach(method => {
-          if (path !== '/api/bazi/calculate') { // calculate is public
-            assert.ok(pathSpec[method].security, `Missing security for ${method.toUpperCase()} ${path}`);
-            assert.ok(pathSpec[method].security[0].bearerAuth, `Missing bearer auth for ${method.toUpperCase()} ${path}`);
+        methods.forEach((method) => {
+          if (path !== '/api/bazi/calculate') {
+            // calculate is public
+            assert.ok(
+              pathSpec[method].security,
+              `Missing security for ${method.toUpperCase()} ${path}`
+            );
+            assert.ok(
+              pathSpec[method].security[0].bearerAuth,
+              `Missing bearer auth for ${method.toUpperCase()} ${path}`
+            );
           }
         });
       });
@@ -197,17 +212,17 @@ describe('API Contract', () => {
         '/api/favorites/{id}',
       ];
 
-      protectedPaths.forEach(path => {
+      protectedPaths.forEach((path) => {
         const pathSpec = spec.paths[path];
-        const methods = ['get', 'post', 'put', 'delete'].filter(method => pathSpec[method]);
+        const methods = ['get', 'post', 'put', 'delete'].filter((method) => pathSpec[method]);
 
-        methods.forEach(method => {
-          assert.ok(pathSpec[method].responses['401'], `Missing 401 response for ${method.toUpperCase()} ${path}`);
+        methods.forEach((method) => {
+          assert.ok(
+            pathSpec[method].responses['401'],
+            `Missing 401 response for ${method.toUpperCase()} ${path}`
+          );
         });
       });
     });
   });
 });
-
-
-

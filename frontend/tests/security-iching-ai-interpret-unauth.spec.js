@@ -6,7 +6,10 @@ const buildScreenshotPath = (name) => {
   return path.join(process.cwd(), '..', 'verification', `${stamp}-${name}.png`);
 };
 
-test('Security: /api/iching/ai-interpret rejects unauthenticated requests with 401', async ({ page, request }) => {
+test('Security: /api/iching/ai-interpret rejects unauthenticated requests with 401', async ({
+  page,
+  request,
+}) => {
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));
@@ -24,7 +27,9 @@ test('Security: /api/iching/ai-interpret rejects unauthenticated requests with 4
 
   await page.goto('/iching', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'I Ching Oracle' })).toBeVisible();
-  await page.screenshot({ path: buildScreenshotPath('security-iching-ai-interpret-unauth-step-1-iching') });
+  await page.screenshot({
+    path: buildScreenshotPath('security-iching-ai-interpret-unauth-step-1-iching'),
+  });
 
   const response = await request.post('/api/iching/ai-interpret', {
     data: {
@@ -39,6 +44,8 @@ test('Security: /api/iching/ai-interpret rejects unauthenticated requests with 4
   const body = await response.json().catch(() => ({}));
   expect(body && typeof body).toBe('object');
 
-  await page.screenshot({ path: buildScreenshotPath('security-iching-ai-interpret-unauth-step-2-response') });
+  await page.screenshot({
+    path: buildScreenshotPath('security-iching-ai-interpret-unauth-step-2-response'),
+  });
   expect(consoleErrors).toEqual([]);
 });

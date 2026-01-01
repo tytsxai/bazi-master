@@ -1,5 +1,5 @@
-import { prisma } from '../config/prisma.js';
 import { logger } from '../config/logger.js';
+import { prisma } from '../config/prisma.js';
 import { revokeSession } from '../middleware/auth.js';
 import { deleteUserCascade } from '../userCleanup.js';
 
@@ -56,7 +56,7 @@ export const deleteAuthMe = async (req, res) => {
     });
     return res.json({ status: 'ok' });
   } catch (error) {
-    logger.error({ err: error }, 'User self-delete failed');
+    logger.error('User self-delete failed:', error);
     return res.status(500).json({ error: 'Unable to delete account' });
   }
 };
@@ -75,7 +75,7 @@ export const getUserSettings = async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error({ err: error }, 'Failed to load user settings');
+    logger.error('Failed to load user settings:', error);
     return res.status(500).json({ error: 'Failed to load settings' });
   }
 };
@@ -93,7 +93,12 @@ export const putUserSettings = async (req, res) => {
   if (hasLocale && body.locale !== null && body.locale !== undefined && locale === null) {
     return res.status(400).json({ error: 'Invalid locale' });
   }
-  if (hasPreferences && body.preferences !== null && body.preferences !== undefined && !preferences) {
+  if (
+    hasPreferences &&
+    body.preferences !== null &&
+    body.preferences !== undefined &&
+    !preferences
+  ) {
     return res.status(400).json({ error: 'Invalid preferences' });
   }
 
@@ -121,7 +126,7 @@ export const putUserSettings = async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error({ err: error }, 'Failed to update user settings');
+    logger.error('Failed to update user settings:', error);
     return res.status(500).json({ error: 'Failed to update settings' });
   }
 };
