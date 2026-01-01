@@ -41,7 +41,8 @@ if (!process.env.DATABASE_URL && (process.env.NODE_ENV || '') !== 'production') 
     const sqlitePath = path.join(repoRoot, 'prisma', 'dev.db');
     process.env.DATABASE_URL = `file:${sqlitePath}`;
   } else if (PRISMA_PROVIDER === 'postgresql') {
-    process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/bazi_master?schema=public';
+    process.env.DATABASE_URL =
+      'postgresql://postgres:postgres@localhost:5432/bazi_master?schema=public';
   }
 }
 const binName = process.platform === 'win32' ? 'prisma.cmd' : 'prisma';

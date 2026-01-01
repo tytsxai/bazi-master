@@ -61,10 +61,16 @@ const ensureDatabaseExists = ({ host, port, dbName }) => {
   const createResult = runCapture('createdb', ['-h', host, '-p', String(port), dbName]);
   if (createResult.status === 0) return;
 
-  const check = runCapture(
-    'psql',
-    ['-h', host, '-p', String(port), '-d', 'postgres', '-tAc', `SELECT 1 FROM pg_database WHERE datname='${dbName.replace(/'/g, "''")}'`]
-  );
+  const check = runCapture('psql', [
+    '-h',
+    host,
+    '-p',
+    String(port),
+    '-d',
+    'postgres',
+    '-tAc',
+    `SELECT 1 FROM pg_database WHERE datname='${dbName.replace(/'/g, "''")}'`,
+  ]);
   if (check.status !== 0 || check.stdout !== '1') {
     throw new Error(`Unable to create or detect database ${dbName}`);
   }
@@ -86,15 +92,7 @@ export const ensureLocalPostgres = async ({
   const alreadyRunning = await checkPort(port, host);
   if (!alreadyRunning) {
     const resolvedLogFile = logFile || path.join(dataDir, 'postgres.log');
-    run('pg_ctl', [
-      '-D',
-      dataDir,
-      '-o',
-      `-p ${port} -h ${host}`,
-      '-l',
-      resolvedLogFile,
-      'start',
-    ]);
+    run('pg_ctl', ['-D', dataDir, '-o', `-p ${port} -h ${host}`, '-l', resolvedLogFile, 'start']);
     const ready = await waitForPort(port, host, 20_000);
     if (!ready) {
       throw new Error(`PostgreSQL did not start listening on ${host}:${port}`);
