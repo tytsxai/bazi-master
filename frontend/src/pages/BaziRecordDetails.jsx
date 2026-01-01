@@ -50,7 +50,9 @@ export default function BaziRecordDetails() {
             return;
           }
           const data = await res.json().catch(() => ({}));
-          throw new Error(data?.error || t('history.recordLoadError', { defaultValue: 'Unable to load record.' }));
+          throw new Error(
+            data?.error || t('history.recordLoadError', { defaultValue: 'Unable to load record.' })
+          );
         }
         const data = await res.json();
         if (isActive) {
@@ -66,7 +68,10 @@ export default function BaziRecordDetails() {
         if (isActive) {
           setStatus('error');
           setRecord(null);
-          setErrorMessage(error?.message || t('history.recordLoadError', { defaultValue: 'Unable to load record.' }));
+          setErrorMessage(
+            error?.message ||
+              t('history.recordLoadError', { defaultValue: 'Unable to load record.' })
+          );
         }
       }
     };
@@ -100,7 +105,10 @@ export default function BaziRecordDetails() {
   }, [record, t]);
 
   const tenGods = useMemo(() => (Array.isArray(record?.tenGods) ? record.tenGods : []), [record]);
-  const luckCycles = useMemo(() => (Array.isArray(record?.luckCycles) ? record.luckCycles : []), [record]);
+  const luckCycles = useMemo(
+    () => (Array.isArray(record?.luckCycles) ? record.luckCycles : []),
+    [record]
+  );
   const offsetLabel = formatOffsetLabel(record?.timezoneOffsetMinutes);
   const createdAtLabel = formatDateTime(record?.createdAt);
   const updatedAtLabel = formatDateTime(record?.updatedAt);
@@ -122,7 +130,9 @@ export default function BaziRecordDetails() {
               })}
             </h1>
             <p className="mt-2 text-sm text-white/70">
-              {t('history.detailsSubtitle', { defaultValue: 'Review your saved chart details and time context.' })}
+              {t('history.detailsSubtitle', {
+                defaultValue: 'Review your saved chart details and time context.',
+              })}
             </p>
           </div>
           <Link
@@ -150,21 +160,26 @@ export default function BaziRecordDetails() {
         )}
         {status === 'error' && (
           <div className="mt-6 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
-            {errorMessage || t('history.recordLoadError', { defaultValue: 'Unable to load record.' })}
+            {errorMessage ||
+              t('history.recordLoadError', { defaultValue: 'Unable to load record.' })}
           </div>
         )}
         {status === 'ready' && record && (
           <div data-testid="bazi-record-details" className="mt-6 grid gap-6">
             <div className="grid gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80 sm:grid-cols-2">
               <div>
-                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-white/50">{t('bazi.birthUtc')}</p>
+                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-white/50">
+                  {t('bazi.birthUtc')}
+                </p>
                 <p className="mt-2 text-base text-white">
                   {record.birthYear}-{record.birthMonth}-{record.birthDay} · {record.birthHour}:00
                 </p>
                 <p className="mt-1 text-xs text-white/60">{record.gender}</p>
               </div>
               <div>
-                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-white/50">{t('bazi.timeContext')}</p>
+                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-white/50">
+                  {t('bazi.timeContext')}
+                </p>
                 <p className="mt-2 text-sm text-white/80">
                   {record.birthLocation || '—'} · {record.timezone || 'UTC'}
                 </p>
@@ -187,11 +202,15 @@ export default function BaziRecordDetails() {
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-white/50">{t('bazi.timezoneResolved')}</span>
-                    <span className="text-white/80">{offsetLabel || t('bazi.timezoneUnavailable')}</span>
+                    <span className="text-white/80">
+                      {offsetLabel || t('bazi.timezoneUnavailable')}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-white/50">{t('bazi.birthUtc')}</span>
-                    <span className="text-white/80">{birthUtcLabel || t('bazi.timezoneUnavailable')}</span>
+                    <span className="text-white/80">
+                      {birthUtcLabel || t('bazi.timezoneUnavailable')}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -218,8 +237,13 @@ export default function BaziRecordDetails() {
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {pillars.length ? (
                   pillars.map((pillar) => (
-                    <div key={pillar.key} className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p className="text-[0.65rem] uppercase tracking-[0.2em] text-white/50">{pillar.label}</p>
+                    <div
+                      key={pillar.key}
+                      className="rounded-2xl border border-white/10 bg-black/30 p-4"
+                    >
+                      <p className="text-[0.65rem] uppercase tracking-[0.2em] text-white/50">
+                        {pillar.label}
+                      </p>
                       <p className="mt-2 text-lg text-white">
                         {pillar.data?.stem || '—'} · {pillar.data?.branch || '—'}
                       </p>
@@ -256,8 +280,13 @@ export default function BaziRecordDetails() {
                 <div className="mt-4 grid gap-3 text-xs text-white/70 sm:grid-cols-2">
                   {luckCycles.length ? (
                     luckCycles.map((cycle) => (
-                      <div key={cycle.range} className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                        <p className="text-[0.65rem] uppercase tracking-[0.2em] text-white/50">{cycle.range}</p>
+                      <div
+                        key={cycle.range}
+                        className="rounded-2xl border border-white/10 bg-black/30 p-4"
+                      >
+                        <p className="text-[0.65rem] uppercase tracking-[0.2em] text-white/50">
+                          {cycle.range}
+                        </p>
                         <p className="mt-2 text-sm text-white">
                           {cycle.stem} · {cycle.branch}
                         </p>

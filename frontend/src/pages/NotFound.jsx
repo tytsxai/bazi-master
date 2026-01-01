@@ -7,11 +7,17 @@ export default function NotFound() {
   const missingPath = location?.pathname || '';
 
   return (
-    <main id="main-content" tabIndex={-1} className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center"
+    >
       <p className="text-sm uppercase tracking-[0.3em] text-gold-400/80">404</p>
-      <h1 className="mt-3 font-display text-3xl text-white">{t('404.title', { defaultValue: 'Page not found' })}</h1>
+      <h1 className="mt-3 font-display text-3xl text-white">
+        {t('404.title', { defaultValue: 'Page not found' })}
+      </h1>
       <p className="mt-2 text-sm text-slate-200/80">
-        {t('404.desc', { defaultValue: 'We couldn\'t find' })}
+        {t('404.desc', { defaultValue: "We couldn't find" })}
         <span className="mx-2 inline-block rounded-full bg-white/10 px-3 py-1 text-xs text-slate-100">
           {missingPath || t('404.thisPage', { defaultValue: 'this page' })}
         </span>

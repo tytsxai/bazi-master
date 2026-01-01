@@ -58,7 +58,8 @@ export default function HistoryList({
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200/20 bg-black/20 px-3 py-2"
                   >
                     <span className="text-xs">
-                      {record.birthYear}-{record.birthMonth}-{record.birthDay} · {record.birthHour}:00
+                      {record.birthYear}-{record.birthMonth}-{record.birthDay} · {record.birthHour}
+                      :00
                       {showDeletedLocation ? ` · ${record.birthLocation || '—'}` : ''}
                     </span>
                     <div className="flex flex-wrap items-center gap-2">
@@ -96,7 +97,9 @@ export default function HistoryList({
                 aria-label={t('history.selectAll')}
                 className="h-4 w-4 rounded border-white/30 bg-black/40 text-gold-400"
               />
-              <span className="uppercase tracking-[0.18em] text-white/60">{t('history.selectAll')}</span>
+              <span className="uppercase tracking-[0.18em] text-white/60">
+                {t('history.selectAll')}
+              </span>
               {selectedIds.length > 0 && (
                 <span className="rounded-full border border-white/10 px-2 py-0.5 text-[0.65rem] text-white/60">
                   {t('history.selectedCount', { count: selectedIds.length })}
@@ -149,27 +152,27 @@ export default function HistoryList({
           </div>
           {totalPages > 1 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/60">
-              <span>
-                {t('history.pageOf', { current: page, total: totalPages })}
-              </span>
+              <span>{t('history.pageOf', { current: page, total: totalPages })}</span>
               <div className="flex flex-wrap items-center gap-2">
                 <Link
                   to={buildPageHref(page - 1)}
                   aria-disabled={!canGoPrev}
-                  className={`rounded-full border px-3 py-1 text-[0.7rem] uppercase tracking-[0.2em] transition ${canGoPrev
-                    ? 'border-white/20 text-white/70 hover:border-white/50 hover:text-white'
-                    : 'pointer-events-none border-white/10 text-white/30'
-                    }`}
+                  className={`rounded-full border px-3 py-1 text-[0.7rem] uppercase tracking-[0.2em] transition ${
+                    canGoPrev
+                      ? 'border-white/20 text-white/70 hover:border-white/50 hover:text-white'
+                      : 'pointer-events-none border-white/10 text-white/30'
+                  }`}
                 >
                   {t('common.prev')}
                 </Link>
                 <Link
                   to={buildPageHref(page + 1)}
                   aria-disabled={!canGoNext}
-                  className={`rounded-full border px-3 py-1 text-[0.7rem] uppercase tracking-[0.2em] transition ${canGoNext
-                    ? 'border-white/20 text-white/70 hover:border-white/50 hover:text-white'
-                    : 'pointer-events-none border-white/10 text-white/30'
-                    }`}
+                  className={`rounded-full border px-3 py-1 text-[0.7rem] uppercase tracking-[0.2em] transition ${
+                    canGoNext
+                      ? 'border-white/20 text-white/70 hover:border-white/50 hover:text-white'
+                      : 'pointer-events-none border-white/10 text-white/30'
+                  }`}
                 >
                   {t('common.next')}
                 </Link>
@@ -183,9 +186,7 @@ export default function HistoryList({
             <div className="grid gap-2">
               <p className="text-sm font-semibold text-white">{t('history.noResults')}</p>
               <p className="text-white/60">
-                {hasActiveFilters
-                  ? t('history.noResultsDesc')
-                  : t('history.noRecordsYet')}
+                {hasActiveFilters ? t('history.noResultsDesc') : t('history.noRecordsYet')}
               </p>
             </div>
           ) : (

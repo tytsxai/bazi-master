@@ -19,7 +19,8 @@ const buildShareUrl = (record) => {
 
 const buildShareText = (record, t) => {
   if (!record) return '';
-  const { birthYear, birthMonth, birthDay, birthHour, gender, birthLocation, timezone, pillars } = record;
+  const { birthYear, birthMonth, birthDay, birthHour, gender, birthLocation, timezone, pillars } =
+    record;
   const shareUrl = buildShareUrl(record);
   const lines = [
     t('home.title') + ' ' + t('nav.favorites'),
@@ -35,7 +36,7 @@ const buildShareText = (record, t) => {
 
 export default function Favorites() {
   const { t } = useTranslation();
-  const { token } = useAuth();
+  const { isAuthenticated } = useAuth();
   const authFetch = useAuthFetch();
   const [favorites, setFavorites] = useState([]);
   const [records, setRecords] = useState([]);
@@ -48,9 +49,7 @@ export default function Favorites() {
   const readErrorMessage = (res, fallback) => readApiErrorMessage(res, fallback);
 
   const loadFavorites = async () => {
-    const res = await authFetch('/api/favorites', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await authFetch('/api/favorites');
     if (res.status === 401) {
       return;
     }
@@ -63,9 +62,7 @@ export default function Favorites() {
   };
 
   const loadRecords = async () => {
-    const res = await authFetch('/api/bazi/records', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await authFetch('/api/bazi/records');
     if (res.status === 401) {
       return;
     }
@@ -78,19 +75,19 @@ export default function Favorites() {
   };
 
   useEffect(() => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     loadFavorites();
     loadRecords();
-  }, [token]);
+  }, [isAuthenticated]);
 
   const favoriteRecordIds = useMemo(
     () => new Set(favorites.map((favorite) => favorite.recordId)),
-    [favorites],
+    [favorites]
   );
 
   const unfavoritedRecords = useMemo(
     () => records.filter((record) => !favoriteRecordIds.has(record.id)),
-    [records, favoriteRecordIds],
+    [records, favoriteRecordIds]
   );
 
   const handleDelete = async (favorite) => {
@@ -110,7 +107,6 @@ export default function Favorites() {
 
     const res = await authFetch(`/api/favorites/${favorite.id}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
       keepalive: true,
     });
     if (res.status === 401) {
@@ -177,7 +173,6 @@ export default function Favorites() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ recordId: record.id }),
     });
@@ -257,7 +252,8 @@ export default function Favorites() {
             <p className="mt-3 text-white/70">{t('favorites.subtitle')}</p>
           </div>
           <div className="text-xs text-white/60">
-            {t('favorites.savedCount', { count: favorites.length })} · {t('favorites.availableToAdd', { count: unfavoritedRecords.length })}
+            {t('favorites.savedCount', { count: favorites.length })} ·{' '}
+            {t('favorites.availableToAdd', { count: unfavoritedRecords.length })}
           </div>
         </div>
         {status && (
@@ -285,7 +281,8 @@ export default function Favorites() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-sm text-white">
-                        {record.birthYear}-{record.birthMonth}-{record.birthDay} · {record.birthHour}:00
+                        {record.birthYear}-{record.birthMonth}-{record.birthDay} ·{' '}
+                        {record.birthHour}:00
                       </p>
                       <p className="text-xs text-white/60">
                         {record.gender} · {record.birthLocation || '—'} · {record.timezone || 'UTC'}
@@ -313,40 +310,53 @@ export default function Favorites() {
                         disabled={pendingDeleteIds.has(favorite.id)}
                         className="rounded-full border border-white/20 px-3 py-1 text-xs text-white/70 transition hover:border-rose-400/60 hover:text-rose-200"
                       >
-                        {pendingDeleteIds.has(favorite.id) ? t('favorites.removing') : t('favorites.remove')}
+                        {pendingDeleteIds.has(favorite.id)
+                          ? t('favorites.removing')
+                          : t('favorites.remove')}
                       </button>
                     </div>
                   </div>
                   <div className="mt-3 grid gap-3 text-xs text-white/70 sm:grid-cols-2">
                     <div>
                       <p className="text-white/50">{t('bazi.month')}</p>
-                      <p>{record.pillars.month.stem} · {record.pillars.month.branch}</p>
+                      <p>
+                        {record.pillars.month.stem} · {record.pillars.month.branch}
+                      </p>
                     </div>
                     <div>
                       <p className="text-white/50">{t('bazi.hour')}</p>
-                      <p>{record.pillars.hour.stem} · {record.pillars.hour.branch}</p>
+                      <p>
+                        {record.pillars.hour.stem} · {record.pillars.hour.branch}
+                      </p>
                     </div>
                   </div>
                   {isExpanded && (
                     <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-white/10 p-4 text-xs text-white/70 sm:grid-cols-2">
                       <div>
                         <p className="text-white/50">{t('bazi.year')}</p>
-                        <p>{record.pillars.year.stem} · {record.pillars.year.branch}</p>
+                        <p>
+                          {record.pillars.year.stem} · {record.pillars.year.branch}
+                        </p>
                       </div>
                       <div>
                         <p className="text-white/50">{t('bazi.day')}</p>
-                        <p>{record.pillars.day.stem} · {record.pillars.day.branch}</p>
-                      </div>
-                      <div>
-                        <p className="text-white/50">{t('bazi.fiveElements')}</p>
                         <p>
-                          {t(`bazi.elements.Wood`)} {record.fiveElements.Wood} · {t(`bazi.elements.Fire`)} {record.fiveElements.Fire} · {t(`bazi.elements.Earth`)} {record.fiveElements.Earth}
+                          {record.pillars.day.stem} · {record.pillars.day.branch}
                         </p>
                       </div>
                       <div>
                         <p className="text-white/50">{t('bazi.fiveElements')}</p>
                         <p>
-                          {t(`bazi.elements.Metal`)} {record.fiveElements.Metal} · {t(`bazi.elements.Water`)} {record.fiveElements.Water}
+                          {t(`bazi.elements.Wood`)} {record.fiveElements.Wood} ·{' '}
+                          {t(`bazi.elements.Fire`)} {record.fiveElements.Fire} ·{' '}
+                          {t(`bazi.elements.Earth`)} {record.fiveElements.Earth}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-white/50">{t('bazi.fiveElements')}</p>
+                        <p>
+                          {t(`bazi.elements.Metal`)} {record.fiveElements.Metal} ·{' '}
+                          {t(`bazi.elements.Water`)} {record.fiveElements.Water}
                         </p>
                       </div>
                     </div>
@@ -378,7 +388,8 @@ export default function Favorites() {
                 >
                   <div>
                     <p className="text-sm text-white">
-                      {record.birthYear}-{record.birthMonth}-{record.birthDay} · {record.birthHour}:00
+                      {record.birthYear}-{record.birthMonth}-{record.birthDay} · {record.birthHour}
+                      :00
                     </p>
                     <p className="text-xs text-white/60">
                       {record.gender} · {record.birthLocation || '—'} · {record.timezone || 'UTC'}
@@ -403,7 +414,9 @@ export default function Favorites() {
                 </p>
                 <p className="text-white/60">
                   {records.length
-                    ? t('favorites.allFavoritedDesc', { defaultValue: 'You have already added every saved record to favorites.' })
+                    ? t('favorites.allFavoritedDesc', {
+                        defaultValue: 'You have already added every saved record to favorites.',
+                      })
                     : t('favorites.noHistoryYetDesc')}
                 </p>
               </div>

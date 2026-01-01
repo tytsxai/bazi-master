@@ -5,6 +5,8 @@ import { useAuth } from '../auth/AuthContext';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { getPreferredAiProvider } from '../utils/aiProvider';
 import { readApiErrorMessage } from '../utils/apiError';
+import logger from '../utils/logger';
+import { sanitizeRedirectPath } from '../utils/redirect';
 
 import TarotZodiac from '../components/tarot/TarotZodiac';
 import TarotControls from '../components/tarot/TarotControls';
@@ -18,7 +20,7 @@ import Button from '../components/ui/Button';
 export default function Tarot() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language?.startsWith('zh');
-  const { token, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -84,11 +86,11 @@ export default function Tarot() {
 
   // Load History
   const loadHistory = async () => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     setHistoryLoading(true);
     try {
       const res = await fetch('/api/tarot/history', {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
       });
       if (!res.ok) {
         const message = await readApiErrorMessage(res, t('history.recordLoadError'));
@@ -97,7 +99,7 @@ export default function Tarot() {
       const data = await res.json();
       setHistory(data.records || []);
     } catch (error) {
-      console.error(error);
+      logger.error({ error }, 'Tarot history load failed');
     } finally {
       setHistoryLoading(false);
     }
@@ -106,11 +108,13 @@ export default function Tarot() {
   useEffect(() => {
     if (isAuthenticated) loadHistory();
     else setHistory([]);
-  }, [isAuthenticated, token]);
+  }, [isAuthenticated]);
 
   const redirectToAuth = (mode) => {
     const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
-    const params = new URLSearchParams({ next: redirectPath });
+    const safeNext = sanitizeRedirectPath(redirectPath, null);
+    const params = new URLSearchParams();
+    if (safeNext) params.set('next', safeNext);
     const target = `/${mode}?${params.toString()}`;
     navigate(target, { state: { from: redirectPath } });
   };
@@ -123,19 +127,11 @@ export default function Tarot() {
     setAiResult(null);
 
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      let authToken = token;
-      if (!authToken) {
-        try {
-          authToken = localStorage.getItem('bazi_token');
-        } catch { /* ignore */ }
-      }
-      if (authToken) headers.Authorization = `Bearer ${authToken}`;
-
       const res = await fetch('/api/tarot/draw', {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ spreadType })
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ spreadType }),
       });
       if (!res.ok) {
         const message = await readApiErrorMessage(res, t('tarot.loadError'));
@@ -193,19 +189,14 @@ export default function Tarot() {
 
       ws.onopen = () => {
         const provider = getPreferredAiProvider();
-        let authToken = token;
-        if (!authToken) {
-          try { authToken = localStorage.getItem('bazi_token'); } catch { /* ignore */ }
-        }
         const message = {
           type: 'tarot_ai_request',
-          token: authToken,
           provider,
           payload: {
             spreadType: spread.spreadType,
             cards: spread.cards,
-            userQuestion
-          }
+            userQuestion,
+          },
         };
         ws.send(JSON.stringify(message));
       };
@@ -213,7 +204,11 @@ export default function Tarot() {
       ws.onmessage = (event) => {
         if (!isMountedRef.current) return;
         let message;
-        try { message = JSON.parse(event.data); } catch { return; }
+        try {
+          message = JSON.parse(event.data);
+        } catch {
+          return;
+        }
 
         if (message?.type === 'start') {
           setAiResult('');
@@ -273,20 +268,20 @@ export default function Tarot() {
   };
 
   const handleDeleteHistory = async (recordId) => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     const current = history.find((record) => record.id === recordId);
     setHistory((prev) => prev.filter((record) => record.id !== recordId));
     try {
       const res = await fetch(`/api/tarot/history/${recordId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
       });
       if (!res.ok) {
         const message = await readApiErrorMessage(res, t('history.recordLoadError'));
         throw new Error(message);
       }
     } catch (error) {
-      console.error(error);
+      logger.error({ error }, 'Tarot delete failed');
       if (current) setHistory((prev) => [current, ...prev]);
     }
   };
@@ -345,8 +340,8 @@ export default function Tarot() {
         message: t('tarot.horoscopeLoaded', {
           name: t(`zodiac.signs.${data.sign.name.toLowerCase()}`),
           period: t(`zodiac.periods.${data.period}`),
-          label: t('tarot.horoscope')
-        })
+          label: t('tarot.horoscope'),
+        }),
       });
     } catch (error) {
       if (requestId !== zodiacRequestRef.current) return;
@@ -359,9 +354,11 @@ export default function Tarot() {
   };
 
   const statusStyle =
-    status?.type === 'error' ? 'text-rose-200 bg-rose-900/50' :
-      status?.type === 'success' ? 'text-emerald-200 bg-emerald-900/50' :
-        'text-blue-200 bg-blue-900/50';
+    status?.type === 'error'
+      ? 'text-rose-200 bg-rose-900/50'
+      : status?.type === 'success'
+        ? 'text-emerald-200 bg-emerald-900/50'
+        : 'text-blue-200 bg-blue-900/50';
 
   return (
     <main id="main-content" tabIndex={-1} className="responsive-container pb-16">
@@ -408,10 +405,7 @@ export default function Tarot() {
             >
               {t('profile.cancel')}
             </Button>
-            <Button
-              variant="danger"
-              onClick={handleConfirmDelete}
-            >
+            <Button variant="danger" onClick={handleConfirmDelete}>
               {t('favorites.remove')}
             </Button>
           </>
@@ -419,7 +413,10 @@ export default function Tarot() {
       >
         <p className="mt-2 text-sm text-white/70">{t('tarot.deleteConfirmDesc')}</p>
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
-          {confirmDeleteRecord && (confirmDeleteRecord.userQuestion || confirmDeleteRecord.spreadType || t('tarot.generalReading'))}
+          {confirmDeleteRecord &&
+            (confirmDeleteRecord.userQuestion ||
+              confirmDeleteRecord.spreadType ||
+              t('tarot.generalReading'))}
         </div>
       </Modal>
 
@@ -442,9 +439,7 @@ export default function Tarot() {
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="font-display text-2xl text-white">{t('zodiac.compatibilityTitle')}</h2>
-              <p className="text-sm text-white/60">
-                {t('zodiac.compatibilitySubtitle')}
-              </p>
+              <p className="text-sm text-white/60">{t('zodiac.compatibilitySubtitle')}</p>
             </div>
             <a
               href="/zodiac#compatibility"
@@ -479,9 +474,7 @@ export default function Tarot() {
         {!isAuthenticated && (
           <section className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-6">
             <h2 className="font-display text-2xl text-white">{t('tarot.unlockDeck')}</h2>
-            <p className="mt-2 text-sm text-white/70">
-              {t('tarot.unlockDeckSubtitle')}
-            </p>
+            <p className="mt-2 text-sm text-white/70">{t('tarot.unlockDeckSubtitle')}</p>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"

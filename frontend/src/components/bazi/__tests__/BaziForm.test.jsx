@@ -184,6 +184,3 @@ describe('BaziForm', () => {
     expect(announcement).toHaveTextContent('Form validation error occurred');
   });
 });
-
-
-

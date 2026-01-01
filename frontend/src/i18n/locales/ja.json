@@ -1,28 +1,28 @@
 {
-    "nav": {
-        "home": "ホーム",
-        "bazi": "八字",
-        "tarot": "タロット",
-        "iching": "易経",
-        "zodiac": "十二星座",
-        "ziwei": "紫微斗数",
-        "history": "履歴",
-        "favorites": "お気に入り",
-        "login": "ログイン",
-        "logout": "ログアウト",
-        "profile": "プロフィール"
-    },
-    "common": {
-        "save": "保存",
-        "cancel": "キャンセル",
-        "next": "次へ",
-        "prev": "前へ",
-        "ok": "OK",
-        "delete": "削除",
-        "loading": "読み込み中...",
-        "calculating": "計算中...",
-        "back": "戻る",
-        "success": "成功",
-        "error": "エラー"
-    }
+  "nav": {
+    "home": "ホーム",
+    "bazi": "八字",
+    "tarot": "タロット",
+    "iching": "易経",
+    "zodiac": "十二星座",
+    "ziwei": "紫微斗数",
+    "history": "履歴",
+    "favorites": "お気に入り",
+    "login": "ログイン",
+    "logout": "ログアウト",
+    "profile": "プロフィール"
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "next": "次へ",
+    "prev": "前へ",
+    "ok": "OK",
+    "delete": "削除",
+    "loading": "読み込み中...",
+    "calculating": "計算中...",
+    "back": "戻る",
+    "success": "成功",
+    "error": "エラー"
+  }
 }

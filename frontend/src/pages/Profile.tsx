@@ -7,6 +7,8 @@ import { useAuthFetch } from '../auth/useAuthFetch';
 import { getPreferredAiProvider, setPreferredAiProvider } from '../utils/aiProvider';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { readApiErrorMessage } from '../utils/apiError';
+import logger from '../utils/logger';
+import { sanitizeRedirectPath } from '../utils/redirect';
 
 // Subcomponents
 import ProfileHeader from '../components/profile/ProfileHeader';
@@ -34,7 +36,7 @@ const useUnsavedChangesWarning = (shouldBlock: boolean, message = UNSAVED_WARNIN
 
 export default function Profile() {
   const { t, i18n } = useTranslation();
-  const { user, token, refreshUser, setProfileName, logout } = useAuth();
+  const { user, isAuthenticated, isAuthResolved, refreshUser, setProfileName, logout } = useAuth();
   const authFetch = useAuthFetch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -86,18 +88,24 @@ export default function Profile() {
   } | null>(null);
   const [ziweiLoading, setZiweiLoading] = useState(false);
 
-  const [recentHistory, setRecentHistory] = useState<{
-    id: string | number;
-    birthYear: number;
-    birthMonth: number;
-    birthDay: number;
-    birthHour: number;
-    gender: string;
-    birthLocation?: string;
-    timezone?: string;
-    createdAt: string;
-  }[]>([]);
-  const [historyMeta, setHistoryMeta] = useState({ totalCount: 0, filteredCount: 0, hasMore: false });
+  const [recentHistory, setRecentHistory] = useState<
+    {
+      id: string | number;
+      birthYear: number;
+      birthMonth: number;
+      birthDay: number;
+      birthHour: number;
+      gender: string;
+      birthLocation?: string;
+      timezone?: string;
+      createdAt: string;
+    }[]
+  >([]);
+  const [historyMeta, setHistoryMeta] = useState({
+    totalCount: 0,
+    filteredCount: 0,
+    hasMore: false,
+  });
   const [historyStatus, setHistoryStatus] = useState({ type: 'idle', message: '' });
   const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -106,13 +114,14 @@ export default function Profile() {
   const confirmDeleteCancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (token) return;
+    if (!isAuthResolved || isAuthenticated) return;
     const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
     const params = new URLSearchParams();
-    if (redirectPath) params.set('next', redirectPath);
+    const safeNext = sanitizeRedirectPath(redirectPath, null);
+    if (safeNext) params.set('next', safeNext);
     const target = params.size ? `/login?${params.toString()}` : '/login';
     navigate(target, { replace: true, state: { from: redirectPath } });
-  }, [token, location, navigate]);
+  }, [isAuthResolved, isAuthenticated, location, navigate]);
 
   useEffect(() => {
     let isMounted = true;
@@ -125,15 +134,15 @@ export default function Profile() {
         setAiProviders(Array.isArray(data?.providers) ? data.providers : []);
         setActiveProvider(data?.activeProvider || '');
       } catch (error) {
-        console.warn('Failed to load AI providers', error);
+        logger.warn({ error }, 'Failed to load AI providers');
       }
     };
     const loadSettings = async () => {
-      if (!token) return;
+      if (!isAuthenticated) return;
       try {
         const res = await fetch('/api/user/settings', {
           cache: 'no-store',
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: 'include',
         });
         if (!res.ok) return;
         const data = await res.json();
@@ -172,29 +181,36 @@ export default function Profile() {
           };
         }
       } catch (error) {
-        console.warn('Failed to load settings', error);
+        logger.warn({ error }, 'Failed to load settings');
       }
     };
 
     void loadProviders();
     void loadSettings();
     void refreshUser();
-    return () => { isMounted = false; };
-  }, [token, i18n, refreshUser, setProfileName]);
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, i18n, refreshUser, setProfileName]);
 
   useEffect(() => {
     let isMounted = true;
     const loadLatestBazi = async () => {
-      if (!token) return;
+      if (!isAuthenticated) return;
       setLatestBaziStatus({ type: 'loading', message: '' });
       try {
-        const res = await authFetch('/api/bazi/records?sort=created-desc&page=1&pageSize=1', { cache: 'no-store' });
+        const res = await authFetch('/api/bazi/records?sort=created-desc&page=1&pageSize=1', {
+          cache: 'no-store',
+        });
         if (!res.ok) throw new Error(await readApiErrorMessage(res, t('profile.recordsLoadError')));
         const data = await res.json();
         const record = Array.isArray(data?.records) ? data.records[0] : null;
         if (!isMounted) return;
         setLatestBaziRecord(record || null);
-        setLatestBaziStatus({ type: 'success', message: record ? '' : t('profile.noRecordAvailable') });
+        setLatestBaziStatus({
+          type: 'success',
+          message: record ? '' : t('profile.noRecordAvailable'),
+        });
       } catch (error: unknown) {
         if (!isMounted) return;
         const message = error instanceof Error ? error.message : t('profile.recordsLoadError');
@@ -202,17 +218,21 @@ export default function Profile() {
       }
     };
     void loadLatestBazi();
-    return () => { isMounted = false; };
-  }, [authFetch, token, t]);
+    return () => {
+      isMounted = false;
+    };
+  }, [authFetch, isAuthenticated, t]);
 
   useEffect(() => {
     let isMounted = true;
     const loadRecentHistory = async () => {
-      if (!token) return;
+      if (!isAuthenticated) return;
       setHistoryLoading(true);
       setHistoryStatus({ type: 'loading', message: '' });
       try {
-        const res = await authFetch('/api/bazi/records?sort=created-desc&page=1&pageSize=3', { cache: 'no-store' });
+        const res = await authFetch('/api/bazi/records?sort=created-desc&page=1&pageSize=3', {
+          cache: 'no-store',
+        });
         if (!res.ok) throw new Error(await readApiErrorMessage(res, t('profile.recordsLoadError')));
         const data = await res.json();
         if (!isMounted) return;
@@ -233,20 +253,26 @@ export default function Profile() {
       }
     };
     void loadRecentHistory();
-    return () => { isMounted = false; };
-  }, [authFetch, token, t]);
+    return () => {
+      isMounted = false;
+    };
+  }, [authFetch, isAuthenticated, t]);
 
-  const updatePreference = (key: keyof typeof preferences) => (event: ChangeEvent<HTMLInputElement>) => {
-    const checked = event.target.checked;
-    setPreferences((prev) => ({ ...prev, [key]: checked }));
-  };
+  const updatePreference =
+    (key: keyof typeof preferences) => (event: ChangeEvent<HTMLInputElement>) => {
+      const checked = event.target.checked;
+      setPreferences((prev) => ({ ...prev, [key]: checked }));
+    };
 
   const handleProfileNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setPreferences((prev) => ({ ...prev, profileName: value }));
     if (profileNameError) {
       const trimmedLength = value.trim().length;
-      if (trimmedLength === 0 || (trimmedLength >= PROFILE_NAME_MIN_LENGTH && trimmedLength <= PROFILE_NAME_MAX_LENGTH)) {
+      if (
+        trimmedLength === 0 ||
+        (trimmedLength >= PROFILE_NAME_MIN_LENGTH && trimmedLength <= PROFILE_NAME_MAX_LENGTH)
+      ) {
         setProfileNameError('');
       }
     }
@@ -254,7 +280,7 @@ export default function Profile() {
 
   const saveSettings = async (event: FormEvent) => {
     event.preventDefault();
-    if (!token) return;
+    if (!isAuthenticated) return;
     setAiProviderError('');
     const trimmedProfileName = (preferences.profileName || '').trim();
     const len = trimmedProfileName.length;
@@ -268,7 +294,8 @@ export default function Profile() {
     try {
       const res = await fetch('/api/user/settings', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ locale, preferences: nextPrefs }),
       });
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t('profile.loadError')));
@@ -287,12 +314,12 @@ export default function Profile() {
   const handleCancel = () => navigate(-1);
 
   const handleDeleteAccount = async () => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     setStatus({ type: 'saving', message: t('profile.removing') });
     try {
       const res = await fetch('/api/auth/me', {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
       });
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t('profile.removeError')));
       logout();
@@ -321,7 +348,8 @@ export default function Profile() {
           gender: latestBaziRecord.gender,
         }),
       });
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('ziwei.errors.calculateFailed')));
+      if (!res.ok)
+        throw new Error(await readApiErrorMessage(res, t('ziwei.errors.calculateFailed')));
       setZiweiResult(await res.json());
       setZiweiStatus({ type: 'success', message: t('profile.ziweiReady') });
     } catch (error: unknown) {
@@ -335,7 +363,9 @@ export default function Profile() {
   const hasUnsavedChanges = useMemo(() => {
     const saved = savedSettingsRef.current;
     if (saved.locale !== locale) return true;
-    return (Object.keys(preferences) as Array<keyof typeof preferences>).some(k => preferences[k] !== saved.preferences[k]);
+    return (Object.keys(preferences) as Array<keyof typeof preferences>).some(
+      (k) => preferences[k] !== saved.preferences[k]
+    );
   }, [locale, preferences]);
 
   useUnsavedChangesWarning(hasUnsavedChanges, t('errors.unsavedChanges'));
@@ -363,7 +393,7 @@ export default function Profile() {
         aiProviderError={aiProviderError}
         saveSettings={saveSettings}
         handleCancel={handleCancel}
-        onAiProviderSelect={(val) => setPreferences(p => ({ ...p, aiProvider: val }))}
+        onAiProviderSelect={(val) => setPreferences((p) => ({ ...p, aiProvider: val }))}
       />
 
       <HistorySnapshot

@@ -8,6 +8,8 @@ import { useBaziContext } from '../../context/BaziContext';
 import { getPreferredAiProvider } from '../../utils/aiProvider';
 import { getClientId } from '../../utils/clientId';
 import { readApiErrorMessage } from '../../utils/apiError';
+import logger from '../../utils/logger';
+import { sanitizeRedirectPath, safeAssignLocation } from '../../utils/redirect';
 
 // Import utilities
 import {
@@ -19,10 +21,7 @@ import {
   UNSAVED_WARNING_MESSAGE,
   NUMERIC_FIELD_LIMITS,
 } from './baziConstants';
-import {
-  formatOffsetMinutes,
-  parseTimezoneOffsetMinutes,
-} from './baziTimezoneUtils';
+import { formatOffsetMinutes, parseTimezoneOffsetMinutes } from './baziTimezoneUtils';
 import {
   buildDefaultFormData,
   normalizeOptionalText,
@@ -33,9 +32,7 @@ import {
   isSameFormData,
 } from './baziFormUtils';
 import { getDateInputLimits } from './baziDateUtils';
-import {
-  normalizeBaziApiResponse,
-} from './baziApiUtils';
+import { normalizeBaziApiResponse } from './baziApiUtils';
 import { getFieldErrors } from './baziValidationUtils';
 
 const useUnsavedChangesWarning = (shouldBlock, message = UNSAVED_WARNING_MESSAGE) => {
@@ -51,18 +48,10 @@ const useUnsavedChangesWarning = (shouldBlock, message = UNSAVED_WARNING_MESSAGE
   }, [message, shouldBlock]);
 };
 
-
 export default function useBaziCalculation() {
   const { t } = useTranslation();
   const { setBaziResult: setGlobalBaziResult } = useBaziContext(); // New Context Usage
-  const {
-    token,
-    isAuthenticated,
-    logout,
-    setRetryAction,
-    getRetryAction,
-    clearRetryAction,
-  } = useAuth();
+  const { isAuthenticated, logout, setRetryAction, getRetryAction, clearRetryAction } = useAuth();
   const authFetch = useAuthFetch();
   const location = useLocation();
   const navigate = useNavigate();
@@ -127,22 +116,25 @@ export default function useBaziCalculation() {
     }
   }, []);
 
-  const pushToast = useCallback((toast) => {
-    if (!isMountedRef.current) return null;
-    const id = toastIdRef.current + 1;
-    toastIdRef.current = id;
-    setToasts((prev) => [...prev, { id, ...toast }]);
-    if (toast.autoDismiss !== false) {
-      const timeoutMs = Number.isFinite(toast.durationMs)
-        ? toast.durationMs
-        : toast.type === 'error'
-          ? 6000
-          : 3500;
-      const timeoutId = window.setTimeout(() => removeToast(id), timeoutMs);
-      toastTimeoutsRef.current.set(id, timeoutId);
-    }
-    return id;
-  }, [removeToast]);
+  const pushToast = useCallback(
+    (toast) => {
+      if (!isMountedRef.current) return null;
+      const id = toastIdRef.current + 1;
+      toastIdRef.current = id;
+      setToasts((prev) => [...prev, { id, ...toast }]);
+      if (toast.autoDismiss !== false) {
+        const timeoutMs = Number.isFinite(toast.durationMs)
+          ? toast.durationMs
+          : toast.type === 'error'
+            ? 6000
+            : 3500;
+        const timeoutId = window.setTimeout(() => removeToast(id), timeoutMs);
+        toastTimeoutsRef.current.set(id, timeoutId);
+      }
+      return id;
+    },
+    [removeToast]
+  );
 
   const clearToasts = useCallback(() => {
     toastTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
@@ -157,56 +149,72 @@ export default function useBaziCalculation() {
     aiToastIdRef.current = null;
   }, [removeToast]);
 
-  const readErrorMessage = useCallback((response, fallback) => readApiErrorMessage(response, fallback), []);
+  const readErrorMessage = useCallback(
+    (response, fallback) => readApiErrorMessage(response, fallback),
+    []
+  );
 
-  const getNetworkErrorMessage = useCallback((error) => {
-    if (error instanceof Error && error.message) {
-      return error.message;
-    }
-    return t('errors.network');
-  }, [t]);
+  const getNetworkErrorMessage = useCallback(
+    (error) => {
+      if (error instanceof Error && error.message) {
+        return error.message;
+      }
+      return t('errors.network');
+    },
+    [t]
+  );
 
-  const getRetryLabel = useCallback((action) => {
-    switch (action) {
-      case 'bazi_calculate':
-        return t('bazi.retry.bazi_calculate');
-      case 'bazi_full_analysis':
-        return t('bazi.retry.bazi_full_analysis');
-      case 'bazi_save':
-        return t('bazi.retry.bazi_save');
-      case 'bazi_favorite':
-        return t('bazi.retry.bazi_favorite');
-      case 'bazi_ziwei':
-        return t('bazi.retry.bazi_ziwei');
-      default:
-        return t('common.action');
-    }
-  }, [t]);
+  const getRetryLabel = useCallback(
+    (action) => {
+      switch (action) {
+        case 'bazi_calculate':
+          return t('bazi.retry.bazi_calculate');
+        case 'bazi_full_analysis':
+          return t('bazi.retry.bazi_full_analysis');
+        case 'bazi_save':
+          return t('bazi.retry.bazi_save');
+        case 'bazi_favorite':
+          return t('bazi.retry.bazi_favorite');
+        case 'bazi_ziwei':
+          return t('bazi.retry.bazi_ziwei');
+        default:
+          return t('common.action');
+      }
+    },
+    [t]
+  );
 
-  const getCurrentPath = useCallback(() =>
-    `${location.pathname}${location.search || ''}${location.hash || ''}`, [location]);
+  const getCurrentPath = useCallback(
+    () => `${location.pathname}${location.search || ''}${location.hash || ''}`,
+    [location]
+  );
 
-  const queueNetworkRetry = useCallback((action, payload) => {
-    const redirectPath = getCurrentPath();
-    const retryPayload = {
-      action,
-      payload,
-      redirectPath,
-      reason: 'network_error',
-    };
-    try {
-      setRetryAction(retryPayload);
-    } catch {
-      // Ignore retry persistence failures.
-    }
-    const stored = getRetryAction();
-    setPendingRetry(stored && stored.action ? stored : { ...retryPayload, createdAt: Date.now() });
-    const label = getRetryLabel(action);
-    pushToast({
-      type: 'error',
-      message: t('errors.actionQueued', { label }),
-    });
-  }, [getCurrentPath, getRetryAction, getRetryLabel, pushToast, setRetryAction, t]);
+  const queueNetworkRetry = useCallback(
+    (action, payload) => {
+      const redirectPath = getCurrentPath();
+      const retryPayload = {
+        action,
+        payload,
+        redirectPath,
+        reason: 'network_error',
+      };
+      try {
+        setRetryAction(retryPayload);
+      } catch {
+        // Ignore retry persistence failures.
+      }
+      const stored = getRetryAction();
+      setPendingRetry(
+        stored && stored.action ? stored : { ...retryPayload, createdAt: Date.now() }
+      );
+      const label = getRetryLabel(action);
+      pushToast({
+        type: 'error',
+        message: t('errors.actionQueued', { label }),
+      });
+    },
+    [getCurrentPath, getRetryAction, getRetryLabel, pushToast, setRetryAction, t]
+  );
 
   const clearPendingRetry = useCallback(() => {
     clearRetryAction();
@@ -214,35 +222,45 @@ export default function useBaziCalculation() {
     retryAutoAttemptRef.current = null;
   }, [clearRetryAction]);
 
-  const redirectForSessionExpired = useCallback((action, payload) => {
-    const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
-    try {
-      if (action) {
-        setRetryAction({ action, payload, redirectPath, reason: 'session_expired' });
+  const redirectForSessionExpired = useCallback(
+    (action, payload) => {
+      const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
+      try {
+        if (action) {
+          setRetryAction({ action, payload, redirectPath, reason: 'session_expired' });
+        }
+      } catch {
+        // Ignore retry persistence failures.
       }
-    } catch {
-      // Ignore retry persistence failures.
-    }
-    try {
-      logout({ preserveRetry: true });
-    } catch {
-      // Ignore logout failures.
-    }
-    try {
-      localStorage.setItem('bazi_session_expired', '1');
-    } catch {
-      // Ignore storage failures.
-    }
-    const params = new URLSearchParams({ reason: 'session_expired', next: redirectPath });
-    const target = `/login?${params.toString()}`;
-    navigate(target, { replace: true, state: { from: redirectPath } });
-    window.setTimeout(() => {
-      const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
-      if (currentPath !== target) {
-        window.location.assign(target);
+      try {
+        logout({ preserveRetry: true });
+      } catch {
+        // Ignore logout failures.
       }
-    }, 50);
-  }, [location, logout, navigate, setRetryAction]);
+      try {
+        localStorage.setItem('bazi_session_expired', '1');
+      } catch {
+        // Ignore storage failures.
+      }
+      try {
+        sessionStorage.setItem('bazi_session_expired', '1');
+      } catch {
+        // Ignore storage failures.
+      }
+      const safeNext = sanitizeRedirectPath(redirectPath, null);
+      const params = new URLSearchParams({ reason: 'session_expired' });
+      if (safeNext) params.set('next', safeNext);
+      const target = `/login?${params.toString()}`;
+      navigate(target, { replace: true, state: { from: redirectPath } });
+      window.setTimeout(() => {
+        const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+        if (currentPath !== target) {
+          safeAssignLocation(target);
+        }
+      }, 50);
+    },
+    [location, logout, navigate, setRetryAction]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -257,7 +275,7 @@ export default function useBaziCalculation() {
         }
       } catch (error) {
         if (controller.signal.aborted) return;
-        console.warn('Failed to load locations:', error);
+        logger.warn({ error }, 'Failed to load locations');
         setLocationOptions([]);
       }
     };
@@ -374,9 +392,7 @@ export default function useBaziCalculation() {
   const hasUnsavedChanges =
     hasInitializedRef.current && !isSameFormData(formData, lastCommittedFormRef.current);
   const shouldBlockNavigation = hasUnsavedChanges || isSaving;
-  const navigationBlockMessage = isSaving
-    ? t('errors.saveInProgress')
-    : t('errors.unsavedChanges');
+  const navigationBlockMessage = isSaving ? t('errors.saveInProgress') : t('errors.unsavedChanges');
 
   useUnsavedChangesWarning(shouldBlockNavigation, navigationBlockMessage);
 
@@ -405,9 +421,10 @@ export default function useBaziCalculation() {
     const offsetMinutes = Number.isFinite(displayResult.timezoneOffsetMinutes)
       ? displayResult.timezoneOffsetMinutes
       : null;
-    const trueSolar = displayResult?.trueSolarTime && typeof displayResult.trueSolarTime === 'object'
-      ? displayResult.trueSolarTime
-      : null;
+    const trueSolar =
+      displayResult?.trueSolarTime && typeof displayResult.trueSolarTime === 'object'
+        ? displayResult.trueSolarTime
+        : null;
     return {
       offsetMinutes,
       offsetLabel: Number.isFinite(offsetMinutes) ? formatOffsetMinutes(offsetMinutes) : null,
@@ -483,10 +500,15 @@ export default function useBaziCalculation() {
 
   const dateInputLimits = getDateInputLimits(formData);
 
-  const getFirstErrorMessage = useCallback((nextErrors) => {
-    const firstMessage = Object.values(nextErrors).find((value) => typeof value === 'string' && value.trim());
-    return firstMessage || t('iching.errors.correctFields');
-  }, [t]);
+  const getFirstErrorMessage = useCallback(
+    (nextErrors) => {
+      const firstMessage = Object.values(nextErrors).find(
+        (value) => typeof value === 'string' && value.trim()
+      );
+      return firstMessage || t('iching.errors.correctFields');
+    },
+    [t]
+  );
   const errorAnnouncement = Object.keys(errors).length ? getFirstErrorMessage(errors) : '';
 
   const resolveTimezoneOffsetMinutesFor = useCallback((timezone) => {
@@ -497,63 +519,82 @@ export default function useBaziCalculation() {
     return -new Date().getTimezoneOffset();
   }, []);
 
-  const buildPayloadFrom = useCallback((data) => ({
-    ...data,
-    birthYear: Number(data.birthYear),
-    birthMonth: Number(data.birthMonth),
-    birthDay: Number(data.birthDay),
-    birthHour: Number(data.birthHour),
-    birthLocation: normalizeOptionalText(data.birthLocation),
-    timezone: normalizeOptionalText(data.timezone),
-    timezoneOffsetMinutes: resolveTimezoneOffsetMinutesFor(data.timezone),
-  }), [resolveTimezoneOffsetMinutesFor]);
+  const buildPayloadFrom = useCallback(
+    (data) => ({
+      ...data,
+      birthYear: Number(data.birthYear),
+      birthMonth: Number(data.birthMonth),
+      birthDay: Number(data.birthDay),
+      birthHour: Number(data.birthHour),
+      birthLocation: normalizeOptionalText(data.birthLocation),
+      timezone: normalizeOptionalText(data.timezone),
+      timezoneOffsetMinutes: resolveTimezoneOffsetMinutesFor(data.timezone),
+    }),
+    [resolveTimezoneOffsetMinutesFor]
+  );
 
   const buildPayload = useCallback(() => buildPayloadFrom(formData), [buildPayloadFrom, formData]);
 
-  const performCalculation = useCallback(async (payload, { skipValidation = false } = {}) => {
-    if (calculateInFlightRef.current || isCalculating) return;
-    if (!skipValidation) {
-      const nextErrors = validate();
-      setErrors(nextErrors);
-      if (Object.keys(nextErrors).length > 0) {
-        pushToast({ type: 'error', message: getFirstErrorMessage(nextErrors) });
-        return;
+  const performCalculation = useCallback(
+    async (payload, { skipValidation = false } = {}) => {
+      if (calculateInFlightRef.current || isCalculating) return;
+      if (!skipValidation) {
+        const nextErrors = validate();
+        setErrors(nextErrors);
+        if (Object.keys(nextErrors).length > 0) {
+          pushToast({ type: 'error', message: getFirstErrorMessage(nextErrors) });
+          return;
+        }
       }
-    }
-    setFullResult(null);
-    setSavedRecord(null);
-    setFavoriteStatus(null);
-    calculateInFlightRef.current = true;
-    setIsCalculating(true);
+      setFullResult(null);
+      setSavedRecord(null);
+      setFavoriteStatus(null);
+      calculateInFlightRef.current = true;
+      setIsCalculating(true);
 
-    try {
-      const res = await fetch('/api/bazi/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      try {
+        const res = await fetch('/api/bazi/calculate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-      if (!res.ok) {
-        const message = await readErrorMessage(res, t('bazi.errors.calculateFailed'));
-        runIfMounted(() => pushToast({ type: 'error', message }));
-        return;
+        if (!res.ok) {
+          const message = await readErrorMessage(res, t('bazi.errors.calculateFailed'));
+          runIfMounted(() => pushToast({ type: 'error', message }));
+          return;
+        }
+
+        const data = await res.json();
+        runIfMounted(() => {
+          setBaseResult(normalizeBaziApiResponse(data));
+          setGlobalBaziResult(normalizeBaziApiResponse(data)); // Set global context
+          pushToast({ type: 'success', message: t('bazi.calculated') });
+        });
+        lastCommittedFormRef.current = formData;
+      } catch (error) {
+        const message = getNetworkErrorMessage(error);
+        runIfMounted(() => queueNetworkRetry('bazi_calculate', payload, message));
+      } finally {
+        calculateInFlightRef.current = false;
+        runIfMounted(() => setIsCalculating(false));
       }
-
-      const data = await res.json();
-      runIfMounted(() => {
-        setBaseResult(normalizeBaziApiResponse(data));
-        setGlobalBaziResult(normalizeBaziApiResponse(data)); // Set global context
-        pushToast({ type: 'success', message: t('bazi.calculated') });
-      });
-      lastCommittedFormRef.current = formData;
-    } catch (error) {
-      const message = getNetworkErrorMessage(error);
-      runIfMounted(() => queueNetworkRetry('bazi_calculate', payload, message));
-    } finally {
-      calculateInFlightRef.current = false;
-      runIfMounted(() => setIsCalculating(false));
-    }
-  }, [calculateInFlightRef, formData, getFirstErrorMessage, getNetworkErrorMessage, isCalculating, pushToast, queueNetworkRetry, readErrorMessage, runIfMounted, setGlobalBaziResult, t, validate]);
+    },
+    [
+      calculateInFlightRef,
+      formData,
+      getFirstErrorMessage,
+      getNetworkErrorMessage,
+      isCalculating,
+      pushToast,
+      queueNetworkRetry,
+      readErrorMessage,
+      runIfMounted,
+      setGlobalBaziResult,
+      t,
+      validate,
+    ]
+  );
 
   const handleCalculate = async (event) => {
     event.preventDefault();
@@ -565,61 +606,78 @@ export default function useBaziCalculation() {
     await performCalculation(payload);
   };
 
-  const handleFullAnalysis = useCallback(async (overridePayload = null) => {
-    if (!isAuthenticated) {
-      pushToast({ type: 'error', message: t('bazi.loginRequired') });
-      return;
-    }
-    if (isFullLoading) return;
+  const handleFullAnalysis = useCallback(
+    async (overridePayload = null) => {
+      if (!isAuthenticated) {
+        pushToast({ type: 'error', message: t('bazi.loginRequired') });
+        return;
+      }
+      if (isFullLoading) return;
 
-    const nextErrors = getFieldErrors(formData, t);
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0 && !overridePayload) return;
+      const nextErrors = getFieldErrors(formData, t);
+      setErrors(nextErrors);
+      if (Object.keys(nextErrors).length > 0 && !overridePayload) return;
 
-    setAiResult(null);
-    flushSync(() => setIsFullLoading(true));
-    const payload = normalizeOverrideArg(overridePayload) || buildPayload();
+      setAiResult(null);
+      flushSync(() => setIsFullLoading(true));
+      const payload = normalizeOverrideArg(overridePayload) || buildPayload();
 
-    try {
-      const res = await authFetch(
-        '/api/bazi/full-analysis',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+      try {
+        const res = await authFetch(
+          '/api/bazi/full-analysis',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
           },
-          body: JSON.stringify(payload),
-        },
-        { action: 'bazi_full_analysis', payload }
-      );
+          { action: 'bazi_full_analysis', payload }
+        );
 
-      if (res.status === 401) {
-        redirectForSessionExpired('bazi_full_analysis', payload);
-        return;
+        if (res.status === 401) {
+          redirectForSessionExpired('bazi_full_analysis', payload);
+          return;
+        }
+
+        if (!res.ok) {
+          const message = await readErrorMessage(res, t('bazi.errors.calculateFailed'));
+          runIfMounted(() => pushToast({ type: 'error', message }));
+          return;
+        }
+
+        const data = await res.json();
+        runIfMounted(() => {
+          const normalized = normalizeBaziApiResponse(data);
+          setFullResult(normalized);
+          setBaseResult(normalized);
+          setGlobalBaziResult(normalized); // Set global context
+          pushToast({ type: 'success', message: t('bazi.fullReady') });
+        });
+        lastCommittedFormRef.current = formData;
+      } catch (error) {
+        const message = getNetworkErrorMessage(error);
+        runIfMounted(() => queueNetworkRetry('bazi_full_analysis', payload, message));
+      } finally {
+        runIfMounted(() => setIsFullLoading(false));
       }
-
-      if (!res.ok) {
-        const message = await readErrorMessage(res, t('bazi.errors.calculateFailed'));
-        runIfMounted(() => pushToast({ type: 'error', message }));
-        return;
-      }
-
-      const data = await res.json();
-      runIfMounted(() => {
-        const normalized = normalizeBaziApiResponse(data);
-        setFullResult(normalized);
-        setBaseResult(normalized);
-        setGlobalBaziResult(normalized); // Set global context
-        pushToast({ type: 'success', message: t('bazi.fullReady') });
-      });
-      lastCommittedFormRef.current = formData;
-    } catch (error) {
-      const message = getNetworkErrorMessage(error);
-      runIfMounted(() => queueNetworkRetry('bazi_full_analysis', payload, message));
-    } finally {
-      runIfMounted(() => setIsFullLoading(false));
-    }
-  }, [authFetch, buildPayload, formData, getNetworkErrorMessage, isAuthenticated, isFullLoading, pushToast, queueNetworkRetry, readErrorMessage, redirectForSessionExpired, runIfMounted, setGlobalBaziResult, t]);
+    },
+    [
+      authFetch,
+      buildPayload,
+      formData,
+      getNetworkErrorMessage,
+      isAuthenticated,
+      isFullLoading,
+      pushToast,
+      queueNetworkRetry,
+      readErrorMessage,
+      redirectForSessionExpired,
+      runIfMounted,
+      setGlobalBaziResult,
+      t,
+    ]
+  );
 
   useEffect(() => {
     if (prefillHandledRef.current) return;
@@ -664,232 +722,276 @@ export default function useBaziCalculation() {
     }
   }, [location.state, handleFullAnalysis, performCalculation, buildPayloadFrom]);
 
-  const handleSaveRecord = useCallback(async (overridePayload = null) => {
-    if (!isAuthenticated) {
-      pushToast({ type: 'error', message: t('bazi.loginRequired') });
-      return;
-    }
-    if (!baseResult && !overridePayload) {
-      pushToast({ type: 'error', message: t('bazi.errors.saveBeforeFavorite') });
-      return;
-    }
-    const payload =
-      normalizeOverrideArg(overridePayload) ||
-      {
+  const handleSaveRecord = useCallback(
+    async (overridePayload = null) => {
+      if (!isAuthenticated) {
+        pushToast({ type: 'error', message: t('bazi.loginRequired') });
+        return;
+      }
+      if (!baseResult && !overridePayload) {
+        pushToast({ type: 'error', message: t('bazi.errors.saveBeforeFavorite') });
+        return;
+      }
+      const payload = normalizeOverrideArg(overridePayload) || {
         ...buildPayload(),
         result: fullResult
           ? {
-            pillars: fullResult.pillars,
-            fiveElements: fullResult.fiveElements,
-            tenGods: fullResult.tenGods,
-            luckCycles: fullResult.luckCycles,
-          }
+              pillars: fullResult.pillars,
+              fiveElements: fullResult.fiveElements,
+              tenGods: fullResult.tenGods,
+              luckCycles: fullResult.luckCycles,
+            }
           : baseResult
             ? {
-              pillars: baseResult.pillars,
-              fiveElements: baseResult.fiveElements,
-            }
+                pillars: baseResult.pillars,
+                fiveElements: baseResult.fiveElements,
+              }
             : null,
       };
-    const fingerprint = JSON.stringify(payload);
-    if (lastSavedFingerprintRef.current === fingerprint) {
-      pushToast({ type: 'success', message: t('bazi.errors.alreadySaved') });
-      return;
-    }
-
-    const clientId = clientIdRef.current;
-    const requestPayload = clientId ? { ...payload, clientId } : payload;
-
-    if (saveInFlightRef.current || isSaving) return;
-    saveInFlightRef.current = true;
-    setIsSaving(true);
-    try {
-      sessionStorage.setItem(PENDING_SAVE_KEY, JSON.stringify({ payload: requestPayload }));
-      sessionStorage.setItem(
-        RECENT_SAVE_KEY,
-        JSON.stringify({ payload: requestPayload, createdAt: Date.now() })
-      );
-    } catch {
-      // Ignore storage failures.
-    }
-
-    try {
-      const res = await authFetch(
-        '/api/bazi/records',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(clientId ? { 'X-Client-ID': clientId } : {}),
-          },
-          body: JSON.stringify(requestPayload),
-        },
-        { action: 'bazi_save', payload }
-      );
-
-      if (res.status === 401) {
+      const fingerprint = JSON.stringify(payload);
+      if (lastSavedFingerprintRef.current === fingerprint) {
+        pushToast({ type: 'success', message: t('bazi.errors.alreadySaved') });
         return;
       }
 
-      if (!res.ok) {
-        if (res.status === 409) {
-          const data = await res.json().catch(() => ({}));
-          if (data.record) {
-            runIfMounted(() => {
-              setSavedRecord(data.record);
-              pushToast({ type: 'success', message: t('bazi.errors.alreadySaved') });
-            });
-            lastSavedFingerprintRef.current = fingerprint;
-            return;
-          }
-        }
-        const message = await readErrorMessage(res, t('ziwei.errors.saveFailed'));
-        runIfMounted(() => pushToast({ type: 'error', message }));
-        return;
-      }
+      const clientId = clientIdRef.current;
+      const requestPayload = clientId ? { ...payload, clientId } : payload;
 
-      const data = await res.json();
+      if (saveInFlightRef.current || isSaving) return;
+      saveInFlightRef.current = true;
+      setIsSaving(true);
       try {
-        sessionStorage.removeItem(PENDING_SAVE_KEY);
+        sessionStorage.setItem(PENDING_SAVE_KEY, JSON.stringify({ payload: requestPayload }));
+        sessionStorage.setItem(
+          RECENT_SAVE_KEY,
+          JSON.stringify({ payload: requestPayload, createdAt: Date.now() })
+        );
       } catch {
         // Ignore storage failures.
       }
-      runIfMounted(() => {
-        setSavedRecord(data.record);
-        pushToast({ type: 'success', message: t('bazi.saved') });
-      });
-      lastSavedFingerprintRef.current = fingerprint;
+
       try {
-        sessionStorage.setItem(LAST_SAVED_FINGERPRINT_KEY, fingerprint);
-      } catch {
-        // Ignore storage issues in private mode.
-      }
-    } catch (error) {
-      const message = getNetworkErrorMessage(error);
-      runIfMounted(() => queueNetworkRetry('bazi_save', payload, message));
-    } finally {
-      saveInFlightRef.current = false;
-      runIfMounted(() => setIsSaving(false));
-    }
-  }, [authFetch, baseResult, buildPayload, fullResult, getNetworkErrorMessage, isAuthenticated, isSaving, pushToast, queueNetworkRetry, readErrorMessage, runIfMounted, t]);
-
-  const handleAddFavorite = useCallback(async (overrideRecordId = null) => {
-    if (!isAuthenticated) {
-      pushToast({ type: 'error', message: t('bazi.loginRequired') });
-      return;
-    }
-    const recordId = normalizeOverrideArg(overrideRecordId) || savedRecord?.id;
-    if (!recordId) {
-      pushToast({ type: 'error', message: t('bazi.saveFirst') });
-      return;
-    }
-    if (isFavoriting) return;
-    setIsFavoriting(true);
-
-    try {
-      const res = await authFetch(
-        '/api/favorites',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        const res = await authFetch(
+          '/api/bazi/records',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(clientId ? { 'X-Client-ID': clientId } : {}),
+            },
+            body: JSON.stringify(requestPayload),
           },
-          body: JSON.stringify({ recordId }),
-        },
-        { action: 'bazi_favorite', payload: { recordId } }
-      );
+          { action: 'bazi_save', payload }
+        );
 
-      if (res.status === 401) {
-        return;
-      }
+        if (res.status === 401) {
+          return;
+        }
 
-      if (!res.ok) {
-        const message = await readErrorMessage(res, t('favorites.addError'));
-        runIfMounted(() => pushToast({ type: 'error', message }));
-        return;
-      }
+        if (!res.ok) {
+          if (res.status === 409) {
+            const data = await res.json().catch(() => ({}));
+            if (data.record) {
+              runIfMounted(() => {
+                setSavedRecord(data.record);
+                pushToast({ type: 'success', message: t('bazi.errors.alreadySaved') });
+              });
+              lastSavedFingerprintRef.current = fingerprint;
+              return;
+            }
+          }
+          const message = await readErrorMessage(res, t('ziwei.errors.saveFailed'));
+          runIfMounted(() => pushToast({ type: 'error', message }));
+          return;
+        }
 
-      const data = await res.json();
-      runIfMounted(() => {
-        setFavoriteStatus(data.favorite);
-        pushToast({ type: 'success', message: t('bazi.favorited') });
-      });
-    } catch (error) {
-      const message = getNetworkErrorMessage(error);
-      runIfMounted(() => queueNetworkRetry('bazi_favorite', { recordId }, message));
-    } finally {
-      runIfMounted(() => setIsFavoriting(false));
-    }
-  }, [authFetch, getNetworkErrorMessage, isAuthenticated, isFavoriting, pushToast, queueNetworkRetry, readErrorMessage, runIfMounted, savedRecord?.id, t]);
-
-  const handleZiweiGenerate = useCallback(async (overridePayload = null) => {
-    if (ziweiLoading) return;
-    if (!isAuthenticated) {
-      const message = t('bazi.loginRequired');
-      pushToast({ type: 'error', message });
-      setZiweiStatus({ type: 'error', message });
-      return;
-    }
-    const nextErrors = validate();
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
-      const message = getFirstErrorMessage(nextErrors);
-      pushToast({ type: 'error', message });
-      setZiweiStatus({ type: 'error', message });
-      return;
-    }
-
-    const payload = normalizeOverrideArg(overridePayload) || buildPayload();
-    const ziweiPayload = {
-      birthYear: payload.birthYear,
-      birthMonth: payload.birthMonth,
-      birthDay: payload.birthDay,
-      birthHour: payload.birthHour,
-      gender: payload.gender,
-    };
-
-    setZiweiLoading(true);
-    setZiweiStatus({ type: 'loading', message: '' });
-    setZiweiResult(null);
-    try {
-      const res = await authFetch(
-        '/api/ziwei/calculate',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(ziweiPayload),
-        },
-        { action: 'bazi_ziwei', payload: ziweiPayload }
-      );
-
-      if (res.status === 401) {
-        return;
-      }
-
-      if (!res.ok) {
-        const message = await readErrorMessage(res, t('ziwei.errors.calculateFailed'));
+        const data = await res.json();
+        try {
+          sessionStorage.removeItem(PENDING_SAVE_KEY);
+        } catch {
+          // Ignore storage failures.
+        }
         runIfMounted(() => {
-          pushToast({ type: 'error', message });
-          setZiweiStatus({ type: 'error', message });
+          setSavedRecord(data.record);
+          pushToast({ type: 'success', message: t('bazi.saved') });
         });
+        lastSavedFingerprintRef.current = fingerprint;
+        try {
+          sessionStorage.setItem(LAST_SAVED_FINGERPRINT_KEY, fingerprint);
+        } catch {
+          // Ignore storage issues in private mode.
+        }
+      } catch (error) {
+        const message = getNetworkErrorMessage(error);
+        runIfMounted(() => queueNetworkRetry('bazi_save', payload, message));
+      } finally {
+        saveInFlightRef.current = false;
+        runIfMounted(() => setIsSaving(false));
+      }
+    },
+    [
+      authFetch,
+      baseResult,
+      buildPayload,
+      fullResult,
+      getNetworkErrorMessage,
+      isAuthenticated,
+      isSaving,
+      pushToast,
+      queueNetworkRetry,
+      readErrorMessage,
+      runIfMounted,
+      t,
+    ]
+  );
+
+  const handleAddFavorite = useCallback(
+    async (overrideRecordId = null) => {
+      if (!isAuthenticated) {
+        pushToast({ type: 'error', message: t('bazi.loginRequired') });
+        return;
+      }
+      const recordId = normalizeOverrideArg(overrideRecordId) || savedRecord?.id;
+      if (!recordId) {
+        pushToast({ type: 'error', message: t('bazi.saveFirst') });
+        return;
+      }
+      if (isFavoriting) return;
+      setIsFavoriting(true);
+
+      try {
+        const res = await authFetch(
+          '/api/favorites',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ recordId }),
+          },
+          { action: 'bazi_favorite', payload: { recordId } }
+        );
+
+        if (res.status === 401) {
+          return;
+        }
+
+        if (!res.ok) {
+          const message = await readErrorMessage(res, t('favorites.addError'));
+          runIfMounted(() => pushToast({ type: 'error', message }));
+          return;
+        }
+
+        const data = await res.json();
+        runIfMounted(() => {
+          setFavoriteStatus(data.favorite);
+          pushToast({ type: 'success', message: t('bazi.favorited') });
+        });
+      } catch (error) {
+        const message = getNetworkErrorMessage(error);
+        runIfMounted(() => queueNetworkRetry('bazi_favorite', { recordId }, message));
+      } finally {
+        runIfMounted(() => setIsFavoriting(false));
+      }
+    },
+    [
+      authFetch,
+      getNetworkErrorMessage,
+      isAuthenticated,
+      isFavoriting,
+      pushToast,
+      queueNetworkRetry,
+      readErrorMessage,
+      runIfMounted,
+      savedRecord?.id,
+      t,
+    ]
+  );
+
+  const handleZiweiGenerate = useCallback(
+    async (overridePayload = null) => {
+      if (ziweiLoading) return;
+      if (!isAuthenticated) {
+        const message = t('bazi.loginRequired');
+        pushToast({ type: 'error', message });
+        setZiweiStatus({ type: 'error', message });
+        return;
+      }
+      const nextErrors = validate();
+      setErrors(nextErrors);
+      if (Object.keys(nextErrors).length > 0) {
+        const message = getFirstErrorMessage(nextErrors);
+        pushToast({ type: 'error', message });
+        setZiweiStatus({ type: 'error', message });
         return;
       }
 
-      const data = await res.json();
-      runIfMounted(() => {
-        setZiweiResult(data);
-        setZiweiStatus({ type: 'success', message: t('ziwei.chartReady') });
-      });
-    } catch (error) {
-      const message = getNetworkErrorMessage(error);
-      runIfMounted(() => {
-        setZiweiStatus({ type: 'error', message });
-        queueNetworkRetry('bazi_ziwei', ziweiPayload, message);
-      });
-    } finally {
-      runIfMounted(() => setZiweiLoading(false));
-    }
-  }, [authFetch, buildPayload, getFirstErrorMessage, getNetworkErrorMessage, isAuthenticated, pushToast, queueNetworkRetry, readErrorMessage, runIfMounted, t, validate, ziweiLoading]);
+      const payload = normalizeOverrideArg(overridePayload) || buildPayload();
+      const ziweiPayload = {
+        birthYear: payload.birthYear,
+        birthMonth: payload.birthMonth,
+        birthDay: payload.birthDay,
+        birthHour: payload.birthHour,
+        gender: payload.gender,
+      };
+
+      setZiweiLoading(true);
+      setZiweiStatus({ type: 'loading', message: '' });
+      setZiweiResult(null);
+      try {
+        const res = await authFetch(
+          '/api/ziwei/calculate',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(ziweiPayload),
+          },
+          { action: 'bazi_ziwei', payload: ziweiPayload }
+        );
+
+        if (res.status === 401) {
+          return;
+        }
+
+        if (!res.ok) {
+          const message = await readErrorMessage(res, t('ziwei.errors.calculateFailed'));
+          runIfMounted(() => {
+            pushToast({ type: 'error', message });
+            setZiweiStatus({ type: 'error', message });
+          });
+          return;
+        }
+
+        const data = await res.json();
+        runIfMounted(() => {
+          setZiweiResult(data);
+          setZiweiStatus({ type: 'success', message: t('ziwei.chartReady') });
+        });
+      } catch (error) {
+        const message = getNetworkErrorMessage(error);
+        runIfMounted(() => {
+          setZiweiStatus({ type: 'error', message });
+          queueNetworkRetry('bazi_ziwei', ziweiPayload, message);
+        });
+      } finally {
+        runIfMounted(() => setZiweiLoading(false));
+      }
+    },
+    [
+      authFetch,
+      buildPayload,
+      getFirstErrorMessage,
+      getNetworkErrorMessage,
+      isAuthenticated,
+      pushToast,
+      queueNetworkRetry,
+      readErrorMessage,
+      runIfMounted,
+      t,
+      validate,
+      ziweiLoading,
+    ]
+  );
 
   const attemptRetry = useCallback(() => {
     const retry = pendingRetry || getRetryAction();
@@ -925,7 +1027,20 @@ export default function useBaziCalculation() {
     if (retry.action === 'bazi_ziwei') {
       handleZiweiGenerate(retry.payload || null);
     }
-  }, [clearPendingRetry, getRetryAction, handleAddFavorite, handleFullAnalysis, handleSaveRecord, handleZiweiGenerate, isAuthenticated, isOnline, pendingRetry, performCalculation, pushToast, t]);
+  }, [
+    clearPendingRetry,
+    getRetryAction,
+    handleAddFavorite,
+    handleFullAnalysis,
+    handleSaveRecord,
+    handleZiweiGenerate,
+    isAuthenticated,
+    isOnline,
+    pendingRetry,
+    performCalculation,
+    pushToast,
+    t,
+  ]);
 
   const handleOpenHistory = () => {
     const recordId = savedRecord?.id;
@@ -1045,7 +1160,7 @@ export default function useBaziCalculation() {
       fiveElements: fullResult.fiveElements,
       tenGods: fullResult.tenGods,
       luckCycles: fullResult.luckCycles,
-      strength: fullResult.strength
+      strength: fullResult.strength,
     };
 
     try {
@@ -1056,9 +1171,8 @@ export default function useBaziCalculation() {
         const provider = getPreferredAiProvider();
         const message = {
           type: 'bazi_ai_request',
-          token,
           provider,
-          payload
+          payload,
         };
         ws.send(JSON.stringify(message));
       };
@@ -1092,7 +1206,10 @@ export default function useBaziCalculation() {
           wsStatusRef.current.errored = true;
           setIsAiLoading(false);
           clearAiToast();
-          pushToast({ type: 'error', message: message.message || t('bazi.errors.calculateFailed') });
+          pushToast({
+            type: 'error',
+            message: message.message || t('bazi.errors.calculateFailed'),
+          });
           closeAiSocket(1011, 'AI error');
         }
       };

@@ -29,13 +29,13 @@ export const normalizeBaziApiResponse = (payload) => {
   const root =
     payload.calculation && typeof payload.calculation === 'object'
       ? payload.calculation
-      :
-    payload.result && typeof payload.result === 'object'
-      ? payload.result
-      : payload.data && typeof payload.data === 'object'
-        ? payload.data
-        : payload;
-  const timeMeta = payload.timeMeta && typeof payload.timeMeta === 'object' ? payload.timeMeta : null;
+      : payload.result && typeof payload.result === 'object'
+        ? payload.result
+        : payload.data && typeof payload.data === 'object'
+          ? payload.data
+          : payload;
+  const timeMeta =
+    payload.timeMeta && typeof payload.timeMeta === 'object' ? payload.timeMeta : null;
   const merged = { ...root, ...(timeMeta || {}) };
   if (!merged.trueSolarTime && payload.trueSolarTime) {
     merged.trueSolarTime = payload.trueSolarTime;

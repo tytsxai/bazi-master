@@ -17,13 +17,16 @@ describe('ProtectedRoute', () => {
 
   it('redirects to login when not authenticated', () => {
     useAuth.mockReturnValue({
+      isAuthResolved: true,
       isAuthenticated: false,
       user: null,
-      refreshUser: vi.fn(),
     });
 
     render(
-      <MemoryRouter initialEntries={['/protected']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/protected']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/login" element={<div>Login Page</div>} />
           <Route
@@ -44,9 +47,9 @@ describe('ProtectedRoute', () => {
 
   it('renders children when authenticated and user exists', () => {
     useAuth.mockReturnValue({
+      isAuthResolved: true,
       isAuthenticated: true,
       user: { id: 1, email: 'test@example.com' },
-      refreshUser: vi.fn(),
     });
 
     render(
@@ -60,11 +63,11 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('Protected Content')).toBeInTheDocument();
   });
 
-  it('shows loading state when authenticated but user is missing (e.g. refreshing)', () => {
+  it('shows loading state when auth is not resolved', () => {
     useAuth.mockReturnValue({
-      isAuthenticated: true,
+      isAuthResolved: false,
+      isAuthenticated: false,
       user: null,
-      refreshUser: vi.fn(() => new Promise(() => { })), // Return promise that doesn't resolve immediately
     });
 
     render(

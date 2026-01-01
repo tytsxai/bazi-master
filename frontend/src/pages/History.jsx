@@ -88,10 +88,11 @@ export default function History() {
           <div
             role={status.type === 'error' ? 'alert' : 'status'}
             aria-live={status.type === 'error' ? 'assertive' : 'polite'}
-            className={`pointer-events-auto rounded-2xl border px-4 py-3 text-sm shadow-lg backdrop-blur ${status.type === 'error'
-              ? 'border-rose-400/40 bg-rose-500/10 text-rose-100'
-              : 'border-emerald-300/40 bg-emerald-500/10 text-emerald-100'
-              }`}
+            className={`pointer-events-auto rounded-2xl border px-4 py-3 text-sm shadow-lg backdrop-blur ${
+              status.type === 'error'
+                ? 'border-rose-400/40 bg-rose-500/10 text-rose-100'
+                : 'border-emerald-300/40 bg-emerald-500/10 text-emerald-100'
+            }`}
           >
             {status.message}
           </div>
@@ -114,16 +115,19 @@ export default function History() {
               {confirmState.title}
             </h2>
             <p className="mt-2 text-sm text-white/70">{confirmState.description}</p>
-            {(confirmState.type === 'single' || confirmState.type === 'hard') && confirmState.record && (
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
-                <p className="text-sm text-white">
-                  {confirmState.record.birthYear}-{confirmState.record.birthMonth}-{confirmState.record.birthDay} · {confirmState.record.birthHour}:00
-                </p>
-                <p className="mt-1 text-white/60">
-                  {confirmState.record.gender} · {confirmState.record.birthLocation || '—'} · {confirmState.record.timezone || 'UTC'}
-                </p>
-              </div>
-            )}
+            {(confirmState.type === 'single' || confirmState.type === 'hard') &&
+              confirmState.record && (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
+                  <p className="text-sm text-white">
+                    {confirmState.record.birthYear}-{confirmState.record.birthMonth}-
+                    {confirmState.record.birthDay} · {confirmState.record.birthHour}:00
+                  </p>
+                  <p className="mt-1 text-white/60">
+                    {confirmState.record.gender} · {confirmState.record.birthLocation || '—'} ·{' '}
+                    {confirmState.record.timezone || 'UTC'}
+                  </p>
+                </div>
+              )}
             <div className="mt-6 flex flex-wrap gap-3 sm:justify-end">
               <button
                 ref={confirmCancelRef}
@@ -151,9 +155,7 @@ export default function History() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-display text-xl text-white">{t('zodiac.timeOracleTitle')}</h2>
-              <p className="text-sm text-white/60">
-                {t('zodiac.timeOracleSubtitle')}
-              </p>
+              <p className="text-sm text-white/60">{t('zodiac.timeOracleSubtitle')}</p>
             </div>
             <button
               type="button"
@@ -178,7 +180,9 @@ export default function History() {
           {ichingTimeResult?.hexagram && (
             <div className="mt-6 grid gap-6 md:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/50">{t('iching.primaryHexagram')}</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-white/50">
+                  {t('iching.primaryHexagram')}
+                </div>
                 <div
                   data-testid="iching-time-hexagram-name"
                   className="mt-2 text-2xl text-gold-300"
@@ -187,7 +191,7 @@ export default function History() {
                 </div>
                 <div className="text-sm text-white/60">{ichingTimeResult.hexagram.title}</div>
                 <div className="mt-4 text-xs text-white/50">
-                  {t('iching.changingLines')}: {' '}
+                  {t('iching.changingLines')}:{' '}
                   <span data-testid="iching-time-changing-lines">
                     {ichingTimeResult.changingLines?.length
                       ? ichingTimeResult.changingLines.join(', ')
@@ -197,16 +201,20 @@ export default function History() {
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/40">{t('iching.resultingHexagram')}</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-white/40">
+                  {t('iching.resultingHexagram')}
+                </div>
                 <div
                   data-testid="iching-time-resulting-name"
                   className="mt-2 text-2xl text-indigo-200"
                 >
                   {ichingTimeResult.resultingHexagram?.name || '—'}
                 </div>
-                <div className="text-sm text-white/60">{ichingTimeResult.resultingHexagram?.title}</div>
+                <div className="text-sm text-white/60">
+                  {ichingTimeResult.resultingHexagram?.title}
+                </div>
                 <div className="mt-4 text-xs text-white/50">
-                  {t('bazi.timeContext')}: {' '}
+                  {t('bazi.timeContext')}:{' '}
                   <span data-testid="iching-time-iso">
                     {ichingTimeResult.timeContext?.iso || '—'}
                   </span>
@@ -223,9 +231,7 @@ export default function History() {
         {deepLinkState.status === 'missing' && (
           <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
             <p className="font-semibold text-rose-100">{t('history.recordMissing')}</p>
-            <p className="mt-1 text-rose-100/80">
-              {t('history.sharedMissingDesc')}
-            </p>
+            <p className="mt-1 text-rose-100/80">{t('history.sharedMissingDesc')}</p>
           </div>
         )}
         {deepLinkState.status === 'error' && (
@@ -242,9 +248,7 @@ export default function History() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-gold-100">{t('history.sharedLoaded')}</p>
-                <p className="mt-1 text-gold-100/80">
-                  {t('history.detailsSubtitle')}
-                </p>
+                <p className="mt-1 text-gold-100/80">{t('history.detailsSubtitle')}</p>
               </div>
               <button
                 type="button"
@@ -256,15 +260,21 @@ export default function History() {
             </div>
             <div className="mt-3 grid gap-2 text-xs text-gold-100/80 sm:grid-cols-2">
               <div>
-                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold-100/60">{t('history.birth')}</p>
+                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold-100/60">
+                  {t('history.birth')}
+                </p>
                 <p className="text-sm text-gold-100">
-                  {deepLinkState.record.birthYear}-{deepLinkState.record.birthMonth}-{deepLinkState.record.birthDay} · {deepLinkState.record.birthHour}:00
+                  {deepLinkState.record.birthYear}-{deepLinkState.record.birthMonth}-
+                  {deepLinkState.record.birthDay} · {deepLinkState.record.birthHour}:00
                 </p>
               </div>
               <div>
-                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold-100/60">{t('history.profile')}</p>
+                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold-100/60">
+                  {t('history.profile')}
+                </p>
                 <p className="text-sm text-gold-100">
-                  {deepLinkState.record.gender} · {deepLinkState.record.birthLocation || '—'} · {deepLinkState.record.timezone || 'UTC'}
+                  {deepLinkState.record.gender} · {deepLinkState.record.birthLocation || '—'} ·{' '}
+                  {deepLinkState.record.timezone || 'UTC'}
                 </p>
               </div>
             </div>
@@ -358,9 +368,7 @@ export default function History() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-2xl text-gold-300">{t('history.tarotArchive')}</h2>
-            <p className="mt-1 text-sm text-white/60">
-              {t('history.tarotSubtitle')}
-            </p>
+            <p className="mt-1 text-sm text-white/60">{t('history.tarotSubtitle')}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -398,7 +406,9 @@ export default function History() {
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-white/40">{record.spreadType}</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-white/40">
+                    {record.spreadType}
+                  </p>
                   <h3 className="text-lg font-semibold text-white">
                     {record.userQuestion || t('history.generalReading')}
                   </h3>
