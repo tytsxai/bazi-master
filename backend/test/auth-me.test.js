@@ -26,7 +26,7 @@ test('GET /api/auth/me returns 401 for invalid token', async () => {
     prisma: db,
     sessionStore,
     isAdminUser: () => false,
-    tokenSecret: TOKEN_SECRET
+    tokenSecret: TOKEN_SECRET,
   });
 
   // Test invalid token
@@ -48,7 +48,7 @@ test('GET /api/auth/me returns 401 for expired token', async () => {
     prisma: db,
     sessionStore,
     isAdminUser: () => false,
-    tokenSecret: TOKEN_SECRET
+    tokenSecret: TOKEN_SECRET,
   });
 
   // Test expired token

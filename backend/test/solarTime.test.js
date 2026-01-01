@@ -68,7 +68,7 @@ describe('solar time helpers', () => {
         timezoneOffsetMinutes: null,
         longitude: 30,
       }),
-      null,
+      null
     );
     assert.equal(
       computeTrueSolarTime({
@@ -79,7 +79,7 @@ describe('solar time helpers', () => {
         timezoneOffsetMinutes: 0,
         longitude: NaN,
       }),
-      null,
+      null
     );
   });
 });

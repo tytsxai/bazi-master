@@ -33,7 +33,7 @@ test('drawTarot returns three cards with correct position metadata', () => {
     TAROT_SPREADS.ThreeCard.positions.map((position, index) => ({
       position: index + 1,
       label: position.label,
-      meaning: position.meaning
+      meaning: position.meaning,
     }))
   );
 });

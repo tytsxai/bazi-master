@@ -9,22 +9,22 @@ export function createMockResponse() {
   res.headers = {};
   res.body = null;
 
-  res.status = function(code) {
+  res.status = function (code) {
     res.statusCode = code;
     return res;
   };
 
-  res.json = function(data) {
+  res.json = function (data) {
     res.body = data;
     return res;
   };
 
-  res.setHeader = function(name, value) {
+  res.setHeader = function (name, value) {
     res.headers[name.toLowerCase()] = value;
     return res;
   };
 
-  res.getHeader = function(name) {
+  res.getHeader = function (name) {
     return res.headers[name.toLowerCase()];
   };
 
@@ -43,7 +43,7 @@ export function createMockRequest(options = {}) {
     params: options.params || {},
     body: options.body || {},
     user: options.user || null,
-    ...options
+    ...options,
   };
 
   return req;
@@ -74,7 +74,7 @@ export async function runMiddleware(middleware, reqOptions = {}) {
         resolve({
           statusCode: res.statusCode,
           headers: res.headers,
-          body: res.body
+          body: res.body,
         });
       }
     };
@@ -112,7 +112,7 @@ export async function testAuthenticatedRoute(routeHandler, reqOptions = {}) {
       } else {
         resolve({
           statusCode: res.statusCode,
-          body: res.body
+          body: res.body,
         });
       }
     };
@@ -159,7 +159,7 @@ export async function testRequireAuth(reqOptions = {}) {
           statusCode: res.statusCode,
           body: res.body,
           error,
-          user: req.user // Check if user was set
+          user: req.user, // Check if user was set
         });
       });
     } catch (error) {

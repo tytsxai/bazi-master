@@ -51,7 +51,9 @@ describe('Rate limit middleware coverage', () => {
       });
 
       let nextCalls = 0;
-      await mwInitFail({ ip: '2.2.2.2', app: { get: () => false } }, createRes(), () => { nextCalls += 1; });
+      await mwInitFail({ ip: '2.2.2.2', app: { get: () => false } }, createRes(), () => {
+        nextCalls += 1;
+      });
       assert.equal(nextCalls, 1);
       assert.ok(warnLines.some((l) => l.includes('Redis init failed')));
       assert.ok(warnLines.some((l) => l.includes('Redis unavailable')));
@@ -63,9 +65,15 @@ describe('Rate limit middleware coverage', () => {
       const client = {
         multi() {
           return {
-            incr() { return this; },
-            pttl() { return this; },
-            async exec() { throw new Error('execfail'); },
+            incr() {
+              return this;
+            },
+            pttl() {
+              return this;
+            },
+            async exec() {
+              throw new Error('execfail');
+            },
           };
         },
       };
@@ -75,7 +83,9 @@ describe('Rate limit middleware coverage', () => {
         RATE_LIMIT_WINDOW_MS: 1000,
         initRedisClient: async () => client,
       });
-      await mwExecFail({ ip: '3.3.3.3', app: { get: () => false } }, createRes(), () => { nextCalls += 1; });
+      await mwExecFail({ ip: '3.3.3.3', app: { get: () => false } }, createRes(), () => {
+        nextCalls += 1;
+      });
       assert.ok(warnLines.some((l) => l.includes('Redis error')));
     } finally {
       console.warn = prevWarn;
@@ -93,9 +103,15 @@ describe('Rate limit middleware coverage', () => {
       const client = {
         multi() {
           return {
-            incr() { return this; },
-            pttl() { return this; },
-            async exec() { return [0, -1]; },
+            incr() {
+              return this;
+            },
+            pttl() {
+              return this;
+            },
+            async exec() {
+              return [0, -1];
+            },
           };
         },
         async pexpire() {
@@ -112,7 +128,9 @@ describe('Rate limit middleware coverage', () => {
 
       let nextCalls = 0;
       const res = createRes();
-      await mw({ ip: '4.4.4.4', app: { get: () => false } }, res, () => { nextCalls += 1; });
+      await mw({ ip: '4.4.4.4', app: { get: () => false } }, res, () => {
+        nextCalls += 1;
+      });
       assert.equal(nextCalls, 1);
       assert.ok(warnLines.some((l) => l.includes('Redis expire failed')));
       assert.equal(res.getHeader('X-RateLimit-Remaining'), 9);
@@ -137,7 +155,9 @@ describe('Rate limit middleware coverage', () => {
 
     let nextCalls = 0;
     const res = createRes();
-    await mw({ ip: '5.5.5.5', app: { get: () => false } }, res, () => { nextCalls += 1; });
+    await mw({ ip: '5.5.5.5', app: { get: () => false } }, res, () => {
+      nextCalls += 1;
+    });
     assert.equal(nextCalls, 1);
     assert.equal(res.getHeader('X-RateLimit-Remaining'), 9);
   });

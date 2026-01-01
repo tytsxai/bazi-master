@@ -5,7 +5,7 @@ import {
   normalizeAngle,
   degToRad,
   radToDeg,
-  calculateRisingSign
+  calculateRisingSign,
 } from '../services/zodiac.service.js';
 
 test('normalizeAngle wraps degrees into [0, 360)', () => {
@@ -28,13 +28,13 @@ test('calculateRisingSign returns expected values for a reference case', () => {
     birthMinute: 0,
     latitude: 0,
     longitude: 0,
-    timezoneOffsetMinutes: 0
+    timezoneOffsetMinutes: 0,
   });
 
   assert.equal(result.signKey, 'libra');
   assert.deepEqual(result.ascendant, {
     longitude: 191.29,
-    localSiderealTime: 6.69
+    localSiderealTime: 6.69,
   });
 });
 
@@ -47,7 +47,7 @@ test('calculateRisingSign outputs a valid sign and ranges', () => {
     birthMinute: 30,
     latitude: 40.7128,
     longitude: -74.006,
-    timezoneOffsetMinutes: -300
+    timezoneOffsetMinutes: -300,
   });
 
   assert.ok(ZODIAC_ORDER.includes(result.signKey));
@@ -57,6 +57,6 @@ test('calculateRisingSign outputs a valid sign and ranges', () => {
   assert.ok(result.ascendant.localSiderealTime < 24);
   assert.deepEqual(result.ascendant, {
     longitude: 267.67,
-    localSiderealTime: 13.29
+    localSiderealTime: 13.29,
   });
 });

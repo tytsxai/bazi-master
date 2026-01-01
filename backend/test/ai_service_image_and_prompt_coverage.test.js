@@ -35,9 +35,15 @@ const withMockFetch = async (mock, run) => {
 describe('AI service image + prompt coverage', () => {
   it('buildBaziPrompt returns system/user/fallback strings', () => {
     const prompt = buildBaziPrompt({
-      pillars: { day: { stem: 'Jia', elementStem: 'Wood' }, month: { stem: 'Yi', branch: 'Chou', elementBranch: 'Earth' } },
+      pillars: {
+        day: { stem: 'Jia', elementStem: 'Wood' },
+        month: { stem: 'Yi', branch: 'Chou', elementBranch: 'Earth' },
+      },
       fiveElements: { Wood: 2, Fire: 1 },
-      tenGods: [{ name: 'Friend', strength: 2 }, { name: 'Wealth', strength: 0 }],
+      tenGods: [
+        { name: 'Friend', strength: 2 },
+        { name: 'Wealth', strength: 0 },
+      ],
       luckCycles: [{ range: '2020-2030', stem: 'Jia', branch: 'Zi' }],
       strength: 'ok',
     });
@@ -63,42 +69,47 @@ describe('AI service image + prompt coverage', () => {
   });
 
   it('generateImage calls OpenAI images endpoint and handles errors', async () => {
-    await withEnv(
-      { OPENAI_API_KEY: 'k', AI_TIMEOUT_MS: 0 },
-      async () => {
-        await withMockFetch(
-          async () => ({
-            ok: true,
-            status: 200,
-            async text() { return ''; },
-            async json() { return { data: [{ url: 'http://img' }] }; },
-          }),
-          async () => {
-            const out = await generateImage({ prompt: 'p', provider: 'openai' });
-            assert.equal(out, 'http://img');
+    await withEnv({ OPENAI_API_KEY: 'k', AI_TIMEOUT_MS: 0 }, async () => {
+      await withMockFetch(
+        async () => ({
+          ok: true,
+          status: 200,
+          async text() {
+            return '';
           },
-        );
-
-        await withMockFetch(
-          async () => ({
-            ok: false,
-            status: 400,
-            async text() { return 'bad'; },
-            async json() { return {}; },
-          }),
-          async () => {
-            await assert.rejects(
-              () => generateImage({ prompt: 'p', provider: 'openai' }),
-              /OpenAI Image API error: 400/, 
-            );
+          async json() {
+            return { data: [{ url: 'http://img' }] };
           },
-        );
+        }),
+        async () => {
+          const out = await generateImage({ prompt: 'p', provider: 'openai' });
+          assert.equal(out, 'http://img');
+        }
+      );
 
-        await assert.rejects(
-          () => generateImage({ prompt: 'p', provider: 'unknown' }),
-          /Unknown AI provider/i,
-        );
-      },
-    );
+      await withMockFetch(
+        async () => ({
+          ok: false,
+          status: 400,
+          async text() {
+            return 'bad';
+          },
+          async json() {
+            return {};
+          },
+        }),
+        async () => {
+          await assert.rejects(
+            () => generateImage({ prompt: 'p', provider: 'openai' }),
+            /OpenAI Image API error: 400/
+          );
+        }
+      );
+
+      await assert.rejects(
+        () => generateImage({ prompt: 'p', provider: 'unknown' }),
+        /Unknown AI provider/i
+      );
+    });
   });
 });

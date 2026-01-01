@@ -35,7 +35,7 @@ describe('app config more coverage', () => {
         const config = initAppConfig();
         assert.ok(config.allowedOrigins instanceof Set);
         assert.equal(config.allowedOrigins.has(''), true);
-      },
+      }
     );
   });
 
@@ -52,7 +52,7 @@ describe('app config more coverage', () => {
         assert.equal(config.allowedOrigins.has('http://localhost:3000'), true);
         assert.equal(config.allowedOrigins.has('http://127.0.0.1:3000'), true);
         assert.equal(config.allowedOrigins.has('not a url'), true);
-      },
+      }
     );
   });
 });
