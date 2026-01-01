@@ -123,7 +123,9 @@ try {
   await expect(page.getByTestId('retry-banner')).toHaveCount(0);
   await shot('retry-step-10-full-retried');
 
-  const saveResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/bazi/records'));
+  const saveResponsePromise = page.waitForResponse((resp) =>
+    resp.url().includes('/api/bazi/records')
+  );
   await page.getByRole('button', { name: 'Save to History' }).click();
   const saveResponse = await saveResponsePromise;
   if (saveResponse.status() !== 200) {

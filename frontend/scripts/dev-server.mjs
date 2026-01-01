@@ -11,11 +11,14 @@ const rootDir = path.resolve(__dirname, '..', '..');
 const backendDir = path.join(rootDir, 'backend');
 const frontendDir = path.join(rootDir, 'frontend');
 const prismaSourceSchemaPath = path.join(rootDir, 'prisma', 'schema.prisma');
-const prismaGeneratedSchemaPath = path.join(backendDir, 'node_modules', '.prisma', 'client', 'schema.prisma');
-const prismaSchemaCandidates = [
-  prismaGeneratedSchemaPath,
-  prismaSourceSchemaPath,
-];
+const prismaGeneratedSchemaPath = path.join(
+  backendDir,
+  'node_modules',
+  '.prisma',
+  'client',
+  'schema.prisma'
+);
+const prismaSchemaCandidates = [prismaGeneratedSchemaPath, prismaSourceSchemaPath];
 
 const readPrismaProvider = (schemaPath) => {
   try {
@@ -115,12 +118,13 @@ const pickBackendPort = async () => {
 };
 
 const backendPort =
-  explicitBackendPort ?? (forceRestart
-    ? await pickBackendPort()
-    : resolvePort(process.env.PORT) ?? 4000);
+  explicitBackendPort ??
+  (forceRestart ? await pickBackendPort() : (resolvePort(process.env.PORT) ?? 4000));
 
 if (backendPort === frontendPort) {
-  console.error(`[dev-server] Backend port ${backendPort} conflicts with frontend port ${frontendPort}.`);
+  console.error(
+    `[dev-server] Backend port ${backendPort} conflicts with frontend port ${frontendPort}.`
+  );
   console.error('[dev-server] Set E2E_API_PORT or E2E_WEB_PORT to avoid the collision.');
   process.exit(1);
 }
@@ -139,7 +143,9 @@ const checkBackendHealth = async () => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 1000);
   try {
-    const res = await fetch(`http://127.0.0.1:${backendPort}/api/health`, { signal: controller.signal });
+    const res = await fetch(`http://127.0.0.1:${backendPort}/api/health`, {
+      signal: controller.signal,
+    });
     if (!res.ok) return false;
     const data = await res.json().catch(() => null);
     return data?.status === 'ok';
@@ -188,7 +194,7 @@ const ensureE2EDefaultUser = async () => {
     });
     if (!res.ok) return false;
     const data = await res.json().catch(() => null);
-    return Boolean(data?.token);
+    return Boolean(data?.token || data?.user || res.ok);
   };
 
   if (await tryLogin()) return;
@@ -212,7 +218,9 @@ const ensureE2EDefaultUser = async () => {
 const killPort = (port) => {
   if (isWindows) return false;
   try {
-    const output = execSync(`lsof -tiTCP:${port} -sTCP:LISTEN`, { stdio: ['ignore', 'pipe', 'ignore'] })
+    const output = execSync(`lsof -tiTCP:${port} -sTCP:LISTEN`, {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
       .toString()
       .trim();
     if (!output) return false;
@@ -230,8 +238,7 @@ const killPort = (port) => {
   }
 };
 
-const run = (command, args, options) =>
-  spawn(command, args, { stdio: 'inherit', ...options });
+const run = (command, args, options) => spawn(command, args, { stdio: 'inherit', ...options });
 
 const waitForPort = async (port, timeoutMs = 15000) => {
   const start = Date.now();
@@ -285,7 +292,9 @@ const startBackendIfNeeded = async () => {
       if (killed) {
         console.warn(`[dev-server] Restarting unresponsive backend on port ${backendPort}.`);
       } else {
-        console.warn(`[dev-server] Port ${backendPort} in use; unable to terminate existing process.`);
+        console.warn(
+          `[dev-server] Port ${backendPort} in use; unable to terminate existing process.`
+        );
       }
     }
   }
@@ -310,18 +319,12 @@ const startFrontend = async () => {
       return null;
     }
   }
-  const viteCmd = path.join(
-    frontendDir,
-    'node_modules',
-    '.bin',
-    isWindows ? 'vite.cmd' : 'vite'
-  );
+  const viteCmd = path.join(frontendDir, 'node_modules', '.bin', isWindows ? 'vite.cmd' : 'vite');
   console.log('[dev-server] Starting frontend dev server...');
-  return run(
-    viteCmd,
-    ['--port', String(frontendPort), '--strictPort', '--host', '127.0.0.1'],
-    { cwd: frontendDir, env: process.env }
-  );
+  return run(viteCmd, ['--port', String(frontendPort), '--strictPort', '--host', '127.0.0.1'], {
+    cwd: frontendDir,
+    env: process.env,
+  });
 };
 
 let backendProcess = null;
@@ -362,7 +365,9 @@ const restartBackend = async (reason) => {
 
       const backendListening = await waitForPort(backendPort, 30_000);
       if (!backendListening) {
-        console.error(`[dev-server] Backend did not start listening on port ${backendPort} in time.`);
+        console.error(
+          `[dev-server] Backend did not start listening on port ${backendPort} in time.`
+        );
         continue;
       }
 
@@ -417,7 +422,9 @@ const restartFrontend = async (reason) => {
       frontendProcess = await startFrontend();
       const frontendListening = await waitForPort(frontendPort, 30_000);
       if (!frontendListening) {
-        console.error(`[dev-server] Frontend did not start listening on port ${frontendPort} in time.`);
+        console.error(
+          `[dev-server] Frontend did not start listening on port ${frontendPort} in time.`
+        );
         continue;
       }
 
@@ -454,10 +461,10 @@ process.on('SIGTERM', shutdownAndExit);
 process.on('exit', shutdown);
 
 if (
-  forceRestart
-  && process.env.E2E_SKIP_RESET !== '1'
-  && process.env.PW_SKIP_RESET !== '1'
-  && isPostgresProvider
+  forceRestart &&
+  process.env.E2E_SKIP_RESET !== '1' &&
+  process.env.PW_SKIP_RESET !== '1' &&
+  isPostgresProvider
 ) {
   const backendRunning = await checkPort(backendPort);
   if (backendRunning) {
@@ -466,7 +473,9 @@ if (
     }
     const closed = await waitForPortClosed(backendPort, 10_000);
     if (!closed) {
-      console.error(`[dev-server] Unable to stop existing backend on port ${backendPort} before DB reset.`);
+      console.error(
+        `[dev-server] Unable to stop existing backend on port ${backendPort} before DB reset.`
+      );
       process.exit(1);
     }
   }
@@ -501,7 +510,9 @@ if (
       // Ignore URL parsing failures; Prisma will report a connection error.
     }
   } else {
-    console.log(`[dev-server] Resetting E2E PostgreSQL database ${pgDbName} on 127.0.0.1:${pgPort}`);
+    console.log(
+      `[dev-server] Resetting E2E PostgreSQL database ${pgDbName} on 127.0.0.1:${pgPort}`
+    );
   }
   console.log('[dev-server] Resetting E2E database via Prisma migrations...');
   try {

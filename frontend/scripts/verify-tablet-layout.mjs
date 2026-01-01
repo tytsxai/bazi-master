@@ -13,7 +13,7 @@ const page = await browser.newPage();
 
 try {
   await page.setViewportSize({ width: 768, height: 1024 });
-  
+
   // Home Page
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.screenshot({ path: path.join(outDir, `${stamp}-tablet-home.png`), fullPage: true });
@@ -32,9 +32,11 @@ try {
   // Open menu
   await menuBtn.click();
   await page.waitForTimeout(500);
-  await page.screenshot({ path: path.join(outDir, `${stamp}-tablet-menu-open.png`), fullPage: false });
+  await page.screenshot({
+    path: path.join(outDir, `${stamp}-tablet-menu-open.png`),
+    fullPage: false,
+  });
   console.log('Captured tablet menu open.');
-
 } finally {
   await browser.close();
 }

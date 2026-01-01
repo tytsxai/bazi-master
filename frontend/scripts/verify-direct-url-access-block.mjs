@@ -130,8 +130,7 @@ try {
   if (consoleErrors.length) {
     throw new Error(`Console errors detected: ${consoleErrors.join(' | ')}`);
   }
-  console.log('Direct URL access to another user\'s record is blocked.');
-
+  console.log("Direct URL access to another user's record is blocked.");
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

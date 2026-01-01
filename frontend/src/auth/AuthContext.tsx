@@ -1,6 +1,18 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { readApiErrorMessage } from '../utils/apiError';
+import logger from '../utils/logger';
+import { sanitizeRedirectPath, safeAssignLocation } from '../utils/redirect';
 
 export interface User {
   id: string | number;
@@ -20,13 +32,12 @@ export interface RetryAction {
 }
 
 export interface AuthContextValue {
-  token: string | null;
   user: User | null;
   profileName: string;
   isAuthenticated: boolean;
+  isAuthResolved: boolean;
   login: (email: string, password?: string) => Promise<boolean>;
-  setSession: (token: string, user?: User | null) => void;
-  logout: (options?: { preserveRetry?: boolean }) => void;
+  logout: (options?: { preserveRetry?: boolean; preserveSessionExpired?: boolean }) => void;
   refreshUser: () => Promise<User | null>;
   refreshProfileName: () => Promise<string | null>;
   setProfileName: (value: string) => void;
@@ -37,21 +48,59 @@ export interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const TOKEN_KEY = 'bazi_token';
 const USER_KEY = 'bazi_user';
 const LAST_ACTIVITY_KEY = 'bazi_last_activity';
-const TOKEN_ORIGIN_KEY = 'bazi_token_origin';
 const RETRY_ACTION_KEY = 'bazi_retry_action';
 const SESSION_EXPIRED_KEY = 'bazi_session_expired';
 const PROFILE_NAME_KEY = 'bazi_profile_name';
 const SESSION_IDLE_MS = 30 * 60 * 1000;
+const LEGACY_TOKEN_KEYS = ['bazi_token', 'bazi_token_origin'];
+const shouldUseLegacyTokens = () =>
+  import.meta.env.MODE === 'test' || import.meta.env.VITE_E2E === '1';
 
-const isBackendToken = (value: string | null): boolean => {
-  if (typeof value !== 'string') return false;
-  return (
-    /^token_\d+_[A-Za-z0-9_-]+\.[a-f0-9]+$/i.test(value)
-    || /^token_\d+_\d+(?:_[A-Za-z0-9]+)?$/.test(value)
-  );
+const safeRemoveStorageItem = (storage: Storage, key: string) => {
+  try {
+    storage.removeItem(key);
+  } catch (error) {
+    void error;
+  }
+};
+
+const safeSetStorageItem = (storage: Storage, key: string, value: string) => {
+  try {
+    storage.setItem(key, value);
+  } catch (error) {
+    void error;
+  }
+};
+
+const clearLegacyTokens = () => {
+  for (const key of LEGACY_TOKEN_KEYS) {
+    safeRemoveStorageItem(localStorage, key);
+    safeRemoveStorageItem(sessionStorage, key);
+  }
+};
+
+const hasSessionExpiredFlag = () => {
+  try {
+    if (localStorage.getItem(SESSION_EXPIRED_KEY) === '1') return true;
+  } catch {
+    // Ignore storage failures.
+  }
+  try {
+    if (sessionStorage.getItem(SESSION_EXPIRED_KEY) === '1') return true;
+  } catch {
+    // Ignore storage failures.
+  }
+  return false;
+};
+
+const storeLegacyToken = (token: string | null | undefined, origin = 'backend') => {
+  if (!token || !shouldUseLegacyTokens()) return;
+  safeSetStorageItem(localStorage, 'bazi_token', token);
+  safeSetStorageItem(localStorage, 'bazi_token_origin', origin);
+  safeSetStorageItem(sessionStorage, 'bazi_token', token);
+  safeSetStorageItem(sessionStorage, 'bazi_token_origin', origin);
 };
 
 const readStoredValue = (key: string): string | null => {
@@ -96,11 +145,18 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const { t } = useTranslation();
-  const [token, setToken] = useState<string | null>(() => readStoredValue(TOKEN_KEY));
   const [user, setUser] = useState<User | null>(() => {
     const raw = readStoredValue(USER_KEY);
     return safeParseUser(raw);
   });
+  useEffect(() => {
+    const shouldClearLegacyTokens =
+      import.meta.env.MODE !== 'test' && import.meta.env.VITE_E2E !== '1';
+    if (shouldClearLegacyTokens) {
+      clearLegacyTokens();
+    }
+  }, []);
+  const [isAuthResolved, setAuthResolved] = useState(false);
   const [profileName, setProfileNameState] = useState<string>(() => {
     const stored = localStorage.getItem(PROFILE_NAME_KEY);
     return stored ? stored.trim() : '';
@@ -150,37 +206,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const clearSessionState = useCallback(() => {
     clearIdleTimeout();
-    setToken(null);
     setUser(null);
   }, [clearIdleTimeout]);
 
-  const logout = useCallback(({ preserveRetry = false } = {}) => {
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    if (storedToken) {
+  const logout = useCallback(
+    ({ preserveRetry = false, preserveSessionExpired = false } = {}) => {
       fetch('/api/auth/logout', {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          Authorization: `Bearer ${storedToken}`,
-          'Content-Type': 'application/json',
           'x-session-expired-silent': '1',
         },
-        body: JSON.stringify({ token: storedToken })
       }).catch(() => {
         // Ignore logout network errors.
       });
-    }
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(TOKEN_ORIGIN_KEY);
-    localStorage.removeItem(USER_KEY);
-    localStorage.removeItem(LAST_ACTIVITY_KEY);
-    localStorage.removeItem(SESSION_EXPIRED_KEY);
-    localStorage.removeItem(PROFILE_NAME_KEY);
-    sessionStorage.clear();
-    if (!preserveRetry) {
-      clearRetryAction();
-    }
-    clearSessionState();
-  }, [clearRetryAction, clearSessionState]);
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem(LAST_ACTIVITY_KEY);
+      if (!preserveSessionExpired) {
+        localStorage.removeItem(SESSION_EXPIRED_KEY);
+      }
+      localStorage.removeItem(PROFILE_NAME_KEY);
+      clearLegacyTokens();
+      sessionStorage.clear();
+      if (preserveSessionExpired) {
+        try {
+          sessionStorage.setItem(SESSION_EXPIRED_KEY, '1');
+        } catch {
+          // Ignore storage failures.
+        }
+      }
+      if (!preserveRetry) {
+        clearRetryAction();
+      }
+      clearSessionState();
+      setAuthResolved(true);
+    },
+    [clearRetryAction, clearSessionState]
+  );
 
   const setProfileName = useCallback((value: string) => {
     const next = typeof value === 'string' ? value.trim() : '';
@@ -198,14 +260,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch {
       // Ignore storage failures.
     }
-    logout();
+    try {
+      sessionStorage.setItem(SESSION_EXPIRED_KEY, '1');
+    } catch {
+      // Ignore storage failures.
+    }
+    clearLegacyTokens();
+    logout({ preserveRetry: true, preserveSessionExpired: true });
     if (typeof window !== 'undefined') {
       const redirectPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+      const safeNext = sanitizeRedirectPath(redirectPath, null);
       const params = new URLSearchParams({ reason: 'session_expired' });
-      if (redirectPath && redirectPath !== '/login') {
-        params.set('next', redirectPath);
+      if (safeNext && safeNext !== '/login') {
+        params.set('next', safeNext);
       }
-      window.location.assign(`/login?${params.toString()}`);
+      safeAssignLocation(`/login?${params.toString()}`);
     }
   }, [logout]);
 
@@ -215,7 +284,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       idleTimeoutRef.current = setTimeout(() => {
         expireSession();
       }, remainingMs);
-      if (idleTimeoutRef.current && typeof (idleTimeoutRef.current as unknown as { unref?: () => void }).unref === 'function') {
+      if (
+        idleTimeoutRef.current &&
+        typeof (idleTimeoutRef.current as unknown as { unref?: () => void }).unref === 'function'
+      ) {
         (idleTimeoutRef.current as unknown as { unref: () => void }).unref();
       }
     },
@@ -241,45 +313,63 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   const refreshUser = useCallback(async (): Promise<User | null> => {
-    const storedToken = token || localStorage.getItem(TOKEN_KEY);
-    if (!storedToken) return null;
-    const storedOrigin = localStorage.getItem(TOKEN_ORIGIN_KEY);
-    const shouldEnforceAuth = storedOrigin === 'backend' || isBackendToken(storedToken);
+    if (hasSessionExpiredFlag()) {
+      clearLegacyTokens();
+      clearSessionState();
+      setAuthResolved(true);
+      return null;
+    }
     try {
+      const headers = new Headers();
+      headers.set('x-session-expired-silent', '1');
+      if (shouldUseLegacyTokens()) {
+        headers.set('x-include-token', '1');
+      }
       const res = await fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${storedToken}` },
+        credentials: 'include',
         cache: 'no-store',
+        headers,
       });
+      if (res.headers.get('x-session-expired') === '1') {
+        clearSessionState();
+        setAuthResolved(true);
+        return null;
+      }
       if (res.status === 401) {
-        if (shouldEnforceAuth) {
-          logout();
-        }
+        clearSessionState();
+        setAuthResolved(true);
         return null;
       }
       if (!res.ok) {
+        setAuthResolved(true);
         return null;
       }
       const data = await res.json();
+      if (data?.token) {
+        storeLegacyToken(data.token, 'backend');
+      }
       if (data?.user) {
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));
         setUser(data.user);
+        setAuthResolved(true);
         return data.user as User;
       }
     } catch (error) {
-      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      const isFetchFailure =
+        error instanceof TypeError && /failed to fetch/i.test(error.message || '');
       if (!isFetchFailure) {
-        console.error('Failed to refresh user', error);
+        logger.error({ error }, 'Failed to refresh user');
       }
     }
+    setAuthResolved(true);
     return null;
-  }, [token, logout]);
+  }, [clearSessionState]);
 
   const refreshProfileName = useCallback(async (): Promise<string | null> => {
-    if (!token) return null;
     try {
       const res = await fetch('/api/user/settings', {
+        credentials: 'include',
         headers: {
-          Authorization: `Bearer ${token}`,
           'x-session-expired-silent': '1',
         },
       });
@@ -297,87 +387,58 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setProfileName(nextProfileName);
       return nextProfileName;
     } catch (error) {
-      const isFetchFailure = error instanceof TypeError && /failed to fetch/i.test(error.message || '');
+      const isFetchFailure =
+        error instanceof TypeError && /failed to fetch/i.test(error.message || '');
       if (!isFetchFailure) {
-        console.error('Failed to refresh profile name', error);
+        logger.error({ error }, 'Failed to refresh profile name');
       }
     }
     return null;
-  }, [setProfileName, token]);
+  }, [setProfileName]);
 
-  const login = useCallback(async (email: string, password = 'password'): Promise<boolean> => {
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+  const login = useCallback(
+    async (email: string, password = 'password'): Promise<boolean> => {
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
 
-      if (!res.ok) {
-        const message = await readApiErrorMessage(res, t('login.errors.loginFailed'));
+        if (!res.ok) {
+          const message = await readApiErrorMessage(res, t('login.errors.loginFailed'));
+          throw new Error(message);
+        }
+
+        const data = await res.json();
+        if (data?.token) {
+          storeLegacyToken(data.token, 'backend');
+        }
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        localStorage.removeItem('bazi_session_expired');
+        try {
+          sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
+          sessionStorage.removeItem('bazi_session_expired');
+        } catch {
+          // Ignore storage failures.
+        }
+        setUser(data.user);
+        setAuthResolved(true);
+        recordActivity();
+        return true;
+      } catch (error) {
+        logger.error({ error }, 'Login error:');
+        const message =
+          error instanceof Error && error.message ? error.message : t('errors.network');
         throw new Error(message);
       }
-
-      const data = await res.json();
-      localStorage.setItem(TOKEN_KEY, data.token);
-      localStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
-      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-      localStorage.removeItem('bazi_session_expired');
-      try {
-        sessionStorage.setItem(TOKEN_KEY, data.token);
-        sessionStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
-        sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
-        sessionStorage.removeItem('bazi_session_expired');
-      } catch {
-        // Ignore storage failures.
-      }
-      setToken(data.token);
-      setUser(data.user);
-      recordActivity();
-      return true;
-    } catch (error) {
-      console.error("Login error:", error);
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : t('errors.network');
-      throw new Error(message);
-    }
-  }, [recordActivity, t]);
-
-  const setSession = useCallback((nextToken: string, nextUser?: User | null) => {
-    if (!nextToken) return;
-    try {
-      localStorage.setItem(TOKEN_KEY, nextToken);
-      localStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
-      localStorage.removeItem(SESSION_EXPIRED_KEY);
-      if (nextUser) {
-        localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
-      } else {
-        localStorage.removeItem(USER_KEY);
-      }
-    } catch {
-      // Ignore storage failures.
-    }
-    try {
-      sessionStorage.setItem(TOKEN_KEY, nextToken);
-      sessionStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
-      sessionStorage.removeItem(SESSION_EXPIRED_KEY);
-      if (nextUser) {
-        sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser));
-      } else {
-        sessionStorage.removeItem(USER_KEY);
-      }
-    } catch {
-      // Ignore storage failures.
-    }
-    setToken(nextToken);
-    setUser(nextUser ?? null);
-    recordActivity();
-  }, [recordActivity]);
+    },
+    [recordActivity, t]
+  );
 
   useEffect(() => {
-    if (!token) {
+    if (!user) {
       clearIdleTimeout();
       setProfileName('');
       return;
@@ -403,28 +464,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
       events.forEach((eventName) => window.removeEventListener(eventName, handleActivity));
       clearIdleTimeout();
     };
-  }, [token, clearIdleTimeout, expireSession, recordActivity, scheduleIdleTimeout]);
+  }, [user, clearIdleTimeout, expireSession, recordActivity, scheduleIdleTimeout, setProfileName]);
 
   useEffect(() => {
     const syncFromStorage = () => {
-      const storedToken = localStorage.getItem(TOKEN_KEY);
-      const storedOrigin = localStorage.getItem(TOKEN_ORIGIN_KEY);
       const storedUserRaw = localStorage.getItem(USER_KEY);
       const storedUser = safeParseUser(storedUserRaw);
 
-      if (!storedToken) {
+      if (!storedUser) {
         clearSessionState();
         setProfileName('');
         return;
       }
-      if (!storedOrigin && isBackendToken(storedToken)) {
-        localStorage.setItem(TOKEN_ORIGIN_KEY, 'backend');
-      }
 
-      if (storedToken !== token) {
-        setToken(storedToken);
-      }
       setUser(storedUser);
+
       const storedProfileName = localStorage.getItem(PROFILE_NAME_KEY);
       setProfileNameState(storedProfileName ? storedProfileName.trim() : '');
 
@@ -440,7 +494,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const handleStorage = (event: StorageEvent) => {
       if (event.storageArea !== localStorage) return;
-      if (event.key && ![TOKEN_KEY, USER_KEY, LAST_ACTIVITY_KEY].includes(event.key)) return;
+      if (
+        event.key &&
+        ![USER_KEY, LAST_ACTIVITY_KEY, PROFILE_NAME_KEY, SESSION_EXPIRED_KEY].includes(event.key)
+      )
+        return;
       syncFromStorage();
     };
 
@@ -462,10 +520,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       window.removeEventListener('focus', syncFromStorage);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [clearSessionState, expireSession, scheduleIdleTimeout, token]);
+  }, [clearSessionState, expireSession, scheduleIdleTimeout, setProfileName, user]);
 
   useEffect(() => {
-    if (!token || user) return;
+    if (isAuthResolved) return;
     const loadUser = async () => {
       try {
         await refreshUser();
@@ -474,16 +532,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     };
     void loadUser();
-  }, [refreshUser, token, user]);
+  }, [refreshUser, isAuthResolved]);
 
   const value = useMemo(
     () => ({
-      token,
       user,
       profileName,
-      isAuthenticated: Boolean(token),
+      isAuthenticated: Boolean(user),
+      isAuthResolved,
       login,
-      setSession,
       logout,
       refreshUser,
       refreshProfileName,
@@ -493,11 +550,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearRetryAction,
     }),
     [
-      token,
       user,
       profileName,
+      isAuthResolved,
       login,
-      setSession,
       logout,
       refreshUser,
       refreshProfileName,

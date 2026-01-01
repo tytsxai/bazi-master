@@ -85,7 +85,9 @@ try {
   await page.getByLabel('Gender').selectOption(birthData.gender);
   await shot('ziwei-step-6-ziwei-filled');
 
-  const calcResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/ziwei/calculate'));
+  const calcResponsePromise = page.waitForResponse((resp) =>
+    resp.url().includes('/api/ziwei/calculate')
+  );
   await page.getByRole('button', { name: 'Generate Zi Wei Chart' }).click();
   const calcResponse = await calcResponsePromise;
   if (calcResponse.status() !== 200) {
@@ -94,7 +96,9 @@ try {
   await expect(page.getByRole('heading', { name: 'Four Transformations' })).toBeVisible();
   await shot('ziwei-step-7-chart');
 
-  const saveResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/ziwei/history'));
+  const saveResponsePromise = page.waitForResponse((resp) =>
+    resp.url().includes('/api/ziwei/history')
+  );
   await page.getByRole('button', { name: 'Save to History' }).click();
   const saveResponse = await saveResponsePromise;
   if (saveResponse.status() !== 200) {

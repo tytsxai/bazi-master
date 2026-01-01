@@ -89,7 +89,9 @@ try {
   await page.getByLabel('Timezone').fill(birthData.timezone);
   await shot('step-6-bazi-filled');
 
-  const calcResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/bazi/calculate'));
+  const calcResponsePromise = page.waitForResponse((resp) =>
+    resp.url().includes('/api/bazi/calculate')
+  );
   await page.getByRole('button', { name: 'Calculate' }).click();
   const calcResponse = await calcResponsePromise;
   if (calcResponse.status() !== 200) {
@@ -107,7 +109,9 @@ try {
   await expect(page.getByRole('heading', { name: 'Major Luck Cycles' })).toBeVisible();
   await shot('step-8-full-analysis');
 
-  const saveResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/bazi/records'));
+  const saveResponsePromise = page.waitForResponse((resp) =>
+    resp.url().includes('/api/bazi/records')
+  );
   await page.getByRole('button', { name: 'Save to History' }).click();
   const saveResponse = await saveResponsePromise;
   if (saveResponse.status() !== 200) {

@@ -92,7 +92,9 @@ try {
   await page.getByLabel('Timezone').fill(birthData.timezone);
   await shot('step-6-bazi-filled');
 
-  const calcResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/bazi/calculate'));
+  const calcResponsePromise = page.waitForResponse((resp) =>
+    resp.url().includes('/api/bazi/calculate')
+  );
   await page.getByRole('button', { name: 'Calculate' }).click();
   const calcResponse = await calcResponsePromise;
   if (calcResponse.status() !== 200) {
@@ -149,9 +151,11 @@ try {
   await wsPromise;
 
   await expect(page.getByText('AI BaZi Analysis')).toBeVisible();
-  await expect.poll(() => wsEvents.done || wsEvents.errored, {
-    timeout: 15000,
-  }).toBeTruthy();
+  await expect
+    .poll(() => wsEvents.done || wsEvents.errored, {
+      timeout: 15000,
+    })
+    .toBeTruthy();
   await expect.poll(() => wsEvents.closed, { timeout: 15000 }).toBeTruthy();
 
   if (!wsEvents.connected) {
@@ -173,7 +177,9 @@ try {
     throw new Error('WebSocket did not close after streaming.');
   }
 
-  const saveResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/bazi/records'));
+  const saveResponsePromise = page.waitForResponse((resp) =>
+    resp.url().includes('/api/bazi/records')
+  );
   await page.getByRole('button', { name: 'Save to History' }).click();
   const saveResponse = await saveResponsePromise;
   if (saveResponse.status() !== 200) {
@@ -193,7 +199,9 @@ try {
   await expect(page.getByText(birthData.birthLocation)).toBeVisible();
   await shot('step-13-history');
 
-  await expect(page.getByText(`${birthData.birthYear}-${birthData.birthMonth}-${birthData.birthDay}`)).toBeVisible();
+  await expect(
+    page.getByText(`${birthData.birthYear}-${birthData.birthMonth}-${birthData.birthDay}`)
+  ).toBeVisible();
   await expect(page.getByText(birthData.gender)).toBeVisible();
   await shot('step-14-history-metadata');
 
