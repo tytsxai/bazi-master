@@ -13,6 +13,22 @@ const AI_CONCURRENCY_ERROR = 'AI request already in progress. Please wait.';
 
 let wssInstance = null;
 
+const parseCookieHeader = (header) => {
+  if (!header || typeof header !== 'string') return {};
+  return header.split(';').reduce((acc, part) => {
+    const index = part.indexOf('=');
+    const key = index >= 0 ? part.slice(0, index).trim() : part.trim();
+    if (!key) return acc;
+    const rawValue = index >= 0 ? part.slice(index + 1).trim() : '';
+    try {
+      acc[key] = decodeURIComponent(rawValue);
+    } catch {
+      acc[key] = rawValue;
+    }
+    return acc;
+  }, {});
+};
+
 export const initWebsocketServer = (server) => {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
   wssInstance = wss;
@@ -32,6 +48,8 @@ export const initWebsocketServer = (server) => {
 
   wss.on('connection', (ws, req) => {
     const ip = req.socket.remoteAddress;
+    const cookies = parseCookieHeader(req.headers?.cookie);
+    ws.sessionToken = cookies?.bazi_session || null;
     logger.info({ ip }, '[ws] Client connected');
 
     ws.isAlive = true;
@@ -41,9 +59,8 @@ export const initWebsocketServer = (server) => {
 
     ws.on('message', async (message) => {
       try {
-        const size = typeof message === 'string'
-          ? Buffer.byteLength(message, 'utf8')
-          : (message?.length || 0);
+        const size =
+          typeof message === 'string' ? Buffer.byteLength(message, 'utf8') : message?.length || 0;
         if (size > MAX_MESSAGE_BYTES) {
           sendError(ws, 'Message too large');
           closeSocket(ws, 1009, 'Message too large');
@@ -84,6 +101,34 @@ export const initWebsocketServer = (server) => {
   return wss;
 };
 
+export const closeWebsocketServer = ({
+  code = 1001,
+  reason = 'Server shutdown',
+  loggerInstance = logger,
+} = {}) => {
+  if (!wssInstance) return;
+
+  try {
+    wssInstance.clients.forEach((ws) => {
+      try {
+        ws.close(code, reason);
+      } catch {
+        ws.terminate?.();
+      }
+    });
+  } catch (error) {
+    loggerInstance.warn?.({ err: error }, '[ws] Failed to close client connections');
+  }
+
+  try {
+    wssInstance.close();
+  } catch (error) {
+    loggerInstance.warn?.({ err: error }, '[ws] Failed to close server');
+  } finally {
+    wssInstance = null;
+  }
+};
+
 const sendError = (ws, message) => {
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'error', message }));
@@ -114,13 +159,15 @@ const closeSocket = (ws, code = 1000, reason = 'Complete') => {
 
 const authorizeWebsocket = async (ws, token) => {
   const normalized = typeof token === 'string' ? token.trim() : '';
-  if (!normalized) {
+  const sessionToken = typeof ws?.sessionToken === 'string' ? ws.sessionToken.trim() : '';
+  const candidate = normalized || sessionToken;
+  if (!candidate) {
     sendError(ws, 'Unauthorized');
     closeSocket(ws, 1008, 'Unauthorized');
     return null;
   }
   try {
-    const user = await authorizeToken(normalized);
+    const user = await authorizeToken(candidate);
     ws.user = user;
     return user;
   } catch {
@@ -227,9 +274,12 @@ const handleTarotRequest = async (ws, payload, providerInput) => {
     return;
   }
 
-  const cardDescriptions = cards.map((c, i) => (
-    `${i + 1}. ${c.name} (${c.positionLabel || `Position ${i + 1}`}): ${c.isReversed ? 'Reversed' : 'Upright'}`
-  )).join('\n');
+  const cardDescriptions = cards
+    .map(
+      (c, i) =>
+        `${i + 1}. ${c.name} (${c.positionLabel || `Position ${i + 1}`}): ${c.isReversed ? 'Reversed' : 'Upright'}`
+    )
+    .join('\n');
 
   const system = 'You are an expert Tarot reader. Provide a detailed, insightful interpretation.';
   const user = `
@@ -255,7 +305,8 @@ Interpret this spread, focusing on the question. connecting the cards together.
       await prisma.tarotRecord.create({
         data: {
           userId: ws.user?.id,
-          spreadType: typeof spreadType === 'string' && spreadType.trim() ? spreadType.trim() : 'SingleCard',
+          spreadType:
+            typeof spreadType === 'string' && spreadType.trim() ? spreadType.trim() : 'SingleCard',
           cards: JSON.stringify(cards),
           userQuestion: typeof userQuestion === 'string' ? userQuestion : null,
           aiInterpretation: content,
@@ -332,7 +383,10 @@ const handleZiweiRequest = async (ws, payload, providerInput) => {
     return;
   }
 
-  const { system, user, fallback } = buildZiweiPrompt({ chart: payload.chart, birth: payload.birth || payload });
+  const { system, user, fallback } = buildZiweiPrompt({
+    chart: payload.chart,
+    birth: payload.birth || payload,
+  });
 
   try {
     ws.send(JSON.stringify({ type: 'start' }));
@@ -368,7 +422,8 @@ const handleIchingRequest = async (ws, payload, providerInput) => {
     return;
   }
 
-  const system = 'You are an I Ching interpreter. Provide a concise reading in Markdown with sections: Overview, Changing Lines, Guidance. Keep under 220 words.';
+  const system =
+    'You are an I Ching interpreter. Provide a concise reading in Markdown with sections: Overview, Changing Lines, Guidance. Keep under 220 words.';
   const user = [
     `Hexagram: ${payload.hexagram?.name || payload.hexagram?.number || 'Unknown'}`,
     payload.resultingHexagram
@@ -380,9 +435,12 @@ const handleIchingRequest = async (ws, payload, providerInput) => {
     payload.method ? `Method: ${payload.method}` : null,
     payload.timeContext ? `Time Context: ${payload.timeContext}` : null,
     payload.userQuestion ? `Question: ${payload.userQuestion}` : null,
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
-  const fallback = () => '## ☯️ I Ching Reading\n\n**Overview:** The hexagram advises steady progress with mindful timing.\n\n**Guidance:** Act with clarity, avoid forcing outcomes, and align with the changing conditions.';
+  const fallback = () =>
+    '## ☯️ I Ching Reading\n\n**Overview:** The hexagram advises steady progress with mindful timing.\n\n**Guidance:** Act with clarity, avoid forcing outcomes, and align with the changing conditions.';
 
   try {
     ws.send(JSON.stringify({ type: 'start' }));

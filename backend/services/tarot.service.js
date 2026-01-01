@@ -3,17 +3,15 @@ import tarotDeck from '../data/tarotData.js';
 export const TAROT_SPREADS = {
   SingleCard: {
     count: 1,
-    positions: [
-      { label: 'Insight', meaning: 'The core message to focus on right now.' }
-    ]
+    positions: [{ label: 'Insight', meaning: 'The core message to focus on right now.' }],
   },
   ThreeCard: {
     count: 3,
     positions: [
       { label: 'Past', meaning: 'What led to this moment.' },
       { label: 'Present', meaning: 'The current energy or situation.' },
-      { label: 'Future', meaning: 'Likely direction if the path continues.' }
-    ]
+      { label: 'Future', meaning: 'Likely direction if the path continues.' },
+    ],
   },
   CelticCross: {
     count: 10,
@@ -27,9 +25,9 @@ export const TAROT_SPREADS = {
       { label: 'Advice', meaning: 'Guidance on how to respond or proceed.' },
       { label: 'External', meaning: 'Outside influences, people, or environment.' },
       { label: 'Hopes/Fears', meaning: 'Inner desires, anxieties, or expectations.' },
-      { label: 'Outcome', meaning: 'Likely outcome if current course continues.' }
-    ]
-  }
+      { label: 'Outcome', meaning: 'Likely outcome if current course continues.' },
+    ],
+  },
 };
 
 export const getTarotSpreadConfig = (spreadType) => {
@@ -61,7 +59,7 @@ export const drawTarot = ({ spreadType = 'SingleCard', rng = Math.random } = {})
     position: index + 1,
     positionLabel: positions[index]?.label || spreadConfig.labels?.[index] || null,
     positionMeaning: positions[index]?.meaning || null,
-    isReversed: rng() < 0.3
+    isReversed: rng() < 0.3,
   }));
 
   return {
@@ -71,8 +69,8 @@ export const drawTarot = ({ spreadType = 'SingleCard', rng = Math.random } = {})
       positions: positions.map((position, index) => ({
         position: index + 1,
         label: position.label,
-        meaning: position.meaning
-      }))
-    }
+        meaning: position.meaning,
+      })),
+    },
   };
 };

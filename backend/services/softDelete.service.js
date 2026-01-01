@@ -1,3 +1,4 @@
+import { logger } from '../config/logger.js';
 import { Prisma } from '@prisma/client';
 
 import { initAppConfig } from '../config/app.js';
@@ -50,7 +51,7 @@ const ensureBaziRecordTrashTable = async () => {
       ON "BaziRecordTrash" ("userId", "recordId");
     `);
   } catch (error) {
-    console.error('Failed to ensure BaziRecordTrash table:', error);
+    logger.error('Failed to ensure BaziRecordTrash table:', error);
     if (IS_PRODUCTION) {
       throw error;
     }
@@ -65,7 +66,7 @@ const ensureSoftDeleteReady = (() => {
         await ensureSoftDeleteTables();
         await ensureBaziRecordTrashTable();
       })().catch((error) => {
-        console.error('Failed to ensure soft delete tables:', error);
+        logger.error('Failed to ensure soft delete tables:', error);
         throw error;
       });
     }
@@ -96,7 +97,7 @@ const isRecordSoftDeleted = async (userId, recordId) => {
     });
     return Boolean(row);
   } catch (error) {
-    console.error('Soft delete check failed:', error);
+    logger.error('Soft delete check failed:', error);
     return false;
   }
 };

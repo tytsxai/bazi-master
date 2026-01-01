@@ -1,3 +1,4 @@
+import { logger } from '../config/logger.js';
 export const createSessionStore = ({ ttlMs = null } = {}) => {
   const store = new Map();
   let mirror = null;
@@ -6,7 +7,7 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
   const warnOnFallback = () => {
     if (mirror || warnedOnFallback) return;
     warnedOnFallback = true;
-    console.warn('[session-store] Redis unavailable; using in-memory session store.');
+    logger.warn('[session-store] Redis unavailable; using in-memory session store.');
   };
 
   const setMirror = (nextMirror) => {

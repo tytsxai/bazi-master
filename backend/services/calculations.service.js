@@ -1,45 +1,54 @@
 import { Solar } from 'lunar-javascript';
-import { normalizeLocationKey, resolveLocationCoordinates, computeTrueSolarTime, listKnownLocations } from './solarTime.service.js';
+import {
+  normalizeLocationKey,
+  resolveLocationCoordinates,
+  computeTrueSolarTime,
+  listKnownLocations,
+} from './solarTime.service.js';
 
-export { normalizeLocationKey, resolveLocationCoordinates, computeTrueSolarTime, listKnownLocations };
+export {
+  normalizeLocationKey,
+  resolveLocationCoordinates,
+  computeTrueSolarTime,
+  listKnownLocations,
+};
 
 import {
   buildBaziCacheKey,
   getCachedBaziCalculationAsync,
   setBaziCacheEntry,
   primeBaziCalculationCache,
-  normalizeBaziResult
 } from './cache.service.js';
 import { parseTimezoneOffsetMinutes, formatTimezoneOffset } from '../utils/timezone.js';
 
 // Pinyin and Element mappings for Stems (TianGan)
 export const STEMS_MAP = {
-  '甲': { name: 'Jia', element: 'Wood', polarity: '+' },
-  '乙': { name: 'Yi', element: 'Wood', polarity: '-' },
-  '丙': { name: 'Bing', element: 'Fire', polarity: '+' },
-  '丁': { name: 'Ding', element: 'Fire', polarity: '-' },
-  '戊': { name: 'Wu', element: 'Earth', polarity: '+' },
-  '己': { name: 'Ji', element: 'Earth', polarity: '-' },
-  '庚': { name: 'Geng', element: 'Metal', polarity: '+' },
-  '辛': { name: 'Xin', element: 'Metal', polarity: '-' },
-  '壬': { name: 'Ren', element: 'Water', polarity: '+' },
-  '癸': { name: 'Gui', element: 'Water', polarity: '-' },
+  甲: { name: 'Jia', element: 'Wood', polarity: '+' },
+  乙: { name: 'Yi', element: 'Wood', polarity: '-' },
+  丙: { name: 'Bing', element: 'Fire', polarity: '+' },
+  丁: { name: 'Ding', element: 'Fire', polarity: '-' },
+  戊: { name: 'Wu', element: 'Earth', polarity: '+' },
+  己: { name: 'Ji', element: 'Earth', polarity: '-' },
+  庚: { name: 'Geng', element: 'Metal', polarity: '+' },
+  辛: { name: 'Xin', element: 'Metal', polarity: '-' },
+  壬: { name: 'Ren', element: 'Water', polarity: '+' },
+  癸: { name: 'Gui', element: 'Water', polarity: '-' },
 };
 
 // Pinyin and Element mappings for Branches (DiZhi)
 export const BRANCHES_MAP = {
-  '子': { name: 'Zi', element: 'Water', polarity: '+' },
-  '丑': { name: 'Chou', element: 'Earth', polarity: '-' },
-  '寅': { name: 'Yin', element: 'Wood', polarity: '+' },
-  '卯': { name: 'Mao', element: 'Wood', polarity: '-' },
-  '辰': { name: 'Chen', element: 'Earth', polarity: '+' },
-  '巳': { name: 'Si', element: 'Fire', polarity: '-' },
-  '午': { name: 'Wu', element: 'Fire', polarity: '+' },
-  '未': { name: 'Wei', element: 'Earth', polarity: '-' },
-  '申': { name: 'Shen', element: 'Metal', polarity: '+' },
-  '酉': { name: 'You', element: 'Metal', polarity: '-' },
-  '戌': { name: 'Xu', element: 'Earth', polarity: '+' },
-  '亥': { name: 'Hai', element: 'Water', polarity: '-' },
+  子: { name: 'Zi', element: 'Water', polarity: '+' },
+  丑: { name: 'Chou', element: 'Earth', polarity: '-' },
+  寅: { name: 'Yin', element: 'Wood', polarity: '+' },
+  卯: { name: 'Mao', element: 'Wood', polarity: '-' },
+  辰: { name: 'Chen', element: 'Earth', polarity: '+' },
+  巳: { name: 'Si', element: 'Fire', polarity: '-' },
+  午: { name: 'Wu', element: 'Fire', polarity: '+' },
+  未: { name: 'Wei', element: 'Earth', polarity: '-' },
+  申: { name: 'Shen', element: 'Metal', polarity: '+' },
+  酉: { name: 'You', element: 'Metal', polarity: '-' },
+  戌: { name: 'Xu', element: 'Earth', polarity: '+' },
+  亥: { name: 'Hai', element: 'Water', polarity: '-' },
 };
 
 export const ELEMENTS = ['Wood', 'Fire', 'Earth', 'Metal', 'Water'];
@@ -103,7 +112,7 @@ export function buildPillar(ganChar, zhiChar) {
     elementStem: ganInfo.element,
     elementBranch: zhiInfo.element,
     charStem: ganChar,
-    charBranch: zhiChar
+    charBranch: zhiChar,
   };
 }
 
@@ -121,8 +130,10 @@ export const performCalculation = (data) => {
   const pillars = { year: yearPillar, month: monthPillar, day: dayPillar, hour: hourPillar };
 
   const counts = { Wood: 0, Fire: 0, Earth: 0, Metal: 0, Water: 0 };
-  const addCount = (el) => { if (counts[el] !== undefined) counts[el]++; };
-  [yearPillar, monthPillar, dayPillar, hourPillar].forEach(p => {
+  const addCount = (el) => {
+    if (counts[el] !== undefined) counts[el]++;
+  };
+  [yearPillar, monthPillar, dayPillar, hourPillar].forEach((p) => {
     addCount(p.elementStem);
     addCount(p.elementBranch);
   });
@@ -135,23 +146,47 @@ export const performCalculation = (data) => {
   const dayMasterChar = eightChar.getDayGan();
   const tenGodsCounts = {};
   const allTenGodsTypes = [
-    'Friend (Bi Jian)', 'Rob Wealth (Jie Cai)', 'Eating God (Shi Shen)', 'Hurting Officer (Shang Guan)',
-    'Indirect Wealth (Pian Cai)', 'Direct Wealth (Zheng Cai)', 'Seven Killings (Qi Sha)', 'Direct Officer (Zheng Guan)',
-    'Indirect Resource (Pian Yin)', 'Direct Resource (Zheng Yin)'
+    'Friend (Bi Jian)',
+    'Rob Wealth (Jie Cai)',
+    'Eating God (Shi Shen)',
+    'Hurting Officer (Shang Guan)',
+    'Indirect Wealth (Pian Cai)',
+    'Direct Wealth (Zheng Cai)',
+    'Seven Killings (Qi Sha)',
+    'Direct Officer (Zheng Guan)',
+    'Indirect Resource (Pian Yin)',
+    'Direct Resource (Zheng Yin)',
   ];
-  allTenGodsTypes.forEach(t => tenGodsCounts[t] = 0);
+  allTenGodsTypes.forEach((t) => (tenGodsCounts[t] = 0));
 
   const getCharStemEquivalent = (char) => {
     if (STEMS_MAP[char]) return char;
     const branchToMainQi = {
-      '子': '癸', '丑': '己', '寅': '甲', '卯': '乙', '辰': '戊', '巳': '丙',
-      '午': '丁', '未': '己', '申': '庚', '酉': '辛', '戌': '戊', '亥': '壬'
+      子: '癸',
+      丑: '己',
+      寅: '甲',
+      卯: '乙',
+      辰: '戊',
+      巳: '丙',
+      午: '丁',
+      未: '己',
+      申: '庚',
+      酉: '辛',
+      戌: '戊',
+      亥: '壬',
     };
     return branchToMainQi[char];
   };
 
-  [yearPillar.charStem, yearPillar.charBranch, monthPillar.charStem, monthPillar.charBranch,
-  dayPillar.charBranch, hourPillar.charStem, hourPillar.charBranch].forEach(char => {
+  [
+    yearPillar.charStem,
+    yearPillar.charBranch,
+    monthPillar.charStem,
+    monthPillar.charBranch,
+    dayPillar.charBranch,
+    hourPillar.charStem,
+    hourPillar.charBranch,
+  ].forEach((char) => {
     const stemVal = getCharStemEquivalent(char);
     if (stemVal) {
       const tg = calculateTenGod(dayMasterChar, stemVal);
@@ -178,7 +213,7 @@ export const performCalculation = (data) => {
       stem: STEMS_MAP[gan]?.name || gan,
       branch: BRANCHES_MAP[zhi]?.name || zhi,
       startYear,
-      endYear
+      endYear,
     };
   });
 
@@ -216,7 +251,13 @@ export const buildImportRecord = async (raw, userId) => {
   let luckCycles = parseJsonField(raw.luckCycles);
 
   if (!pillars || !fiveElements) {
-    const computed = await getBaziCalculation({ birthYear, birthMonth, birthDay, birthHour, gender });
+    const computed = await getBaziCalculation({
+      birthYear,
+      birthMonth,
+      birthDay,
+      birthHour,
+      gender,
+    });
     if (!pillars) pillars = computed.pillars;
     if (!fiveElements) fiveElements = computed.fiveElements;
     if (!tenGods) tenGods = computed.tenGods;
@@ -233,7 +274,9 @@ export const buildImportRecord = async (raw, userId) => {
   const updatedAt = updatedAtRaw && !Number.isNaN(updatedAtRaw.getTime()) ? updatedAtRaw : null;
 
   const timezoneOffset = parseTimezoneOffsetMinutes(raw.timezoneOffsetMinutes);
-  const timezoneFallback = Number.isFinite(timezoneOffset) ? formatTimezoneOffset(timezoneOffset) : null;
+  const timezoneFallback = Number.isFinite(timezoneOffset)
+    ? formatTimezoneOffset(timezoneOffset)
+    : null;
 
   return {
     userId,
@@ -268,7 +311,7 @@ export const calculateDailyPillars = (date = new Date()) => {
     elementStem: dayPillar.elementStem,
     elementBranch: dayPillar.elementBranch,
     charStem: dayPillar.charStem,
-    charBranch: dayPillar.charBranch
+    charBranch: dayPillar.charBranch,
   };
 };
 
@@ -304,12 +347,18 @@ export const calculateDailyScore = (userChart, dailyPillars) => {
 
   // Simple Branch Clash check (Zi-Wu, etc.) - Simplified list
   const clashes = {
-    'Zi': 'Wu', 'Wu': 'Zi',
-    'Chou': 'Wei', 'Wei': 'Chou',
-    'Yin': 'Shen', 'Shen': 'Yin',
-    'Mao': 'You', 'You': 'Mao',
-    'Chen': 'Xu', 'Xu': 'Chen',
-    'Si': 'Hai', 'Hai': 'Si'
+    Zi: 'Wu',
+    Wu: 'Zi',
+    Chou: 'Wei',
+    Wei: 'Chou',
+    Yin: 'Shen',
+    Shen: 'Yin',
+    Mao: 'You',
+    You: 'Mao',
+    Chen: 'Xu',
+    Xu: 'Chen',
+    Si: 'Hai',
+    Hai: 'Si',
   };
 
   const userBranch = userChart.pillars.day.branch;
@@ -326,6 +375,6 @@ export const calculateDailyScore = (userChart, dailyPillars) => {
   return {
     score,
     advice: advice.join(' '),
-    element: dayElement
+    element: dayElement,
   };
 };

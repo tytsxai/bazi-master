@@ -1,3 +1,4 @@
+import { logger } from '../config/logger.js';
 import express from 'express';
 import { prisma } from '../config/prisma.js';
 import { getServerConfig } from '../config/app.js';
@@ -10,6 +11,7 @@ import {
 } from '../middleware/auth.js';
 import { hashPassword } from '../utils/passwords.js';
 import { deleteUserCascade } from '../userCleanup.js';
+import { setSessionCookie } from '../utils/sessionCookie.js';
 import {
   handleRegister,
   handleLogin,
@@ -17,9 +19,13 @@ import {
   handlePasswordResetRequest,
   handlePasswordResetConfirm,
   handleGoogleCallback,
-  handleWeChatCallback
+  handleWeChatCallback,
 } from '../controllers/auth.controller.js';
-import { buildOauthRedirectUrl, buildOauthState, handleDevOauthLogin } from '../services/oauth.service.js';
+import {
+  buildOauthRedirectUrl,
+  buildOauthState,
+  handleDevOauthLogin,
+} from '../services/oauth.service.js';
 
 const router = express.Router();
 
@@ -55,12 +61,7 @@ router.post('/password/reset', handlePasswordResetConfirm);
 
 // OAuth redirect entry points
 router.get('/google', (req, res) => {
-  const {
-    googleClientId,
-    googleRedirectUri,
-    frontendUrl,
-    allowDevOauth,
-  } = getServerConfig();
+  const { googleClientId, googleRedirectUri, frontendUrl, allowDevOauth } = getServerConfig();
   const nextPath = sanitizeNextPath(req.query?.next) || null;
   const state = buildOauthState(nextPath);
 
@@ -76,6 +77,7 @@ router.get('/google', (req, res) => {
       sessionStore,
       isAdminUser,
       frontendUrl,
+      setSessionCookie,
     });
   }
 
@@ -96,13 +98,8 @@ router.get('/google', (req, res) => {
 });
 
 router.get('/wechat/redirect', (req, res) => {
-  const {
-    wechatAppId,
-    wechatRedirectUri,
-    wechatScope,
-    wechatFrontendUrl,
-    allowDevOauth,
-  } = getServerConfig();
+  const { wechatAppId, wechatRedirectUri, wechatScope, wechatFrontendUrl, allowDevOauth } =
+    getServerConfig();
   const nextPath = sanitizeNextPath(req.query?.next) || null;
   const state = buildOauthState(nextPath);
 
@@ -118,11 +115,16 @@ router.get('/wechat/redirect', (req, res) => {
       sessionStore,
       isAdminUser,
       frontendUrl: wechatFrontendUrl,
+      setSessionCookie,
     });
   }
 
   if (!wechatAppId || !wechatRedirectUri) {
-    const redirectUrl = buildOauthRedirectUrl({ error: 'wechat_not_configured', nextPath, frontendUrl: wechatFrontendUrl });
+    const redirectUrl = buildOauthRedirectUrl({
+      error: 'wechat_not_configured',
+      nextPath,
+      frontendUrl: wechatFrontendUrl,
+    });
     return res.redirect(redirectUrl);
   }
 
@@ -140,14 +142,21 @@ router.get('/google/callback', handleGoogleCallback);
 router.get('/wechat/callback', handleWeChatCallback);
 
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ user: req.user });
+  const includeToken =
+    req.headers['x-include-token'] === '1' && process.env.NODE_ENV !== 'production';
+  const token = includeToken ? req.cookies?.bazi_session || readBearerToken(req) : null;
+  res.json({
+    user: req.user,
+    ...(includeToken && token ? { token } : {}),
+  });
 });
 
 router.delete('/me', requireAuth, async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(400).json({ error: 'Invalid user' });
-    const token = readBearerToken(req);
+    const cookieToken = req.cookies?.bazi_session || null;
+    const token = cookieToken || readBearerToken(req);
     await deleteUserCascade({
       prisma,
       userId,
@@ -155,7 +164,7 @@ router.delete('/me', requireAuth, async (req, res) => {
     });
     res.json({ status: 'ok' });
   } catch (error) {
-    console.error('User self-delete failed:', error);
+    logger.error('User self-delete failed:', error);
     res.status(500).json({ error: 'Unable to delete account' });
   }
 });

@@ -33,7 +33,11 @@ const ensureSoftDeleteTables = async ({
   appConfig,
   prismaConfig,
 } = {}) => {
-  const { IS_PRODUCTION, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({ env, appConfig, prismaConfig });
+  const { IS_PRODUCTION, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({
+    env,
+    appConfig,
+    prismaConfig,
+  });
   if (IS_PRODUCTION || env.ALLOW_RUNTIME_SCHEMA_SYNC === 'false') return;
 
   if (IS_SQLITE) {
@@ -66,7 +70,11 @@ const ensureBaziRecordTrashTable = async ({
   prismaConfig,
   logger = console,
 } = {}) => {
-  const { IS_PRODUCTION, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({ env, appConfig, prismaConfig });
+  const { IS_PRODUCTION, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({
+    env,
+    appConfig,
+    prismaConfig,
+  });
   if (IS_SQLITE) return;
   if (!IS_POSTGRES) return;
   try {
@@ -116,7 +124,11 @@ const ensureUserSettingsTable = async ({
   prismaConfig,
   logger = console,
 } = {}) => {
-  const { ALLOW_RUNTIME_SCHEMA_SYNC, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({ env, appConfig, prismaConfig });
+  const { ALLOW_RUNTIME_SCHEMA_SYNC, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({
+    env,
+    appConfig,
+    prismaConfig,
+  });
   if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
     if (IS_SQLITE) {
@@ -154,7 +166,11 @@ const ensureZiweiHistoryTable = async ({
   prismaConfig,
   logger = console,
 } = {}) => {
-  const { ALLOW_RUNTIME_SCHEMA_SYNC, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({ env, appConfig, prismaConfig });
+  const { ALLOW_RUNTIME_SCHEMA_SYNC, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({
+    env,
+    appConfig,
+    prismaConfig,
+  });
   if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
     if (IS_SQLITE) {
@@ -198,15 +214,19 @@ const ensureBaziRecordUpdatedAt = async ({
   prismaConfig,
   logger = console,
 } = {}) => {
-  const { ALLOW_RUNTIME_SCHEMA_SYNC, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({ env, appConfig, prismaConfig });
+  const { ALLOW_RUNTIME_SCHEMA_SYNC, IS_SQLITE, IS_POSTGRES } = resolveSchemaFlags({
+    env,
+    appConfig,
+    prismaConfig,
+  });
   if (!ALLOW_RUNTIME_SCHEMA_SYNC) return;
   try {
     let hasUpdatedAt = false;
 
     if (IS_SQLITE) {
       const columns = await prismaClient.$queryRaw(Prisma.sql`PRAGMA table_info(BaziRecord);`);
-      hasUpdatedAt = Array.isArray(columns)
-        && columns.some((column) => column?.name === 'updatedAt');
+      hasUpdatedAt =
+        Array.isArray(columns) && columns.some((column) => column?.name === 'updatedAt');
     } else if (IS_POSTGRES) {
       const result = await prismaClient.$queryRaw(Prisma.sql`
         SELECT column_name 
@@ -219,11 +239,17 @@ const ensureBaziRecordUpdatedAt = async ({
     if (hasUpdatedAt) return;
 
     if (IS_SQLITE) {
-      await prismaClient.$executeRaw(Prisma.sql`ALTER TABLE BaziRecord ADD COLUMN updatedAt DATETIME`);
+      await prismaClient.$executeRaw(
+        Prisma.sql`ALTER TABLE BaziRecord ADD COLUMN updatedAt DATETIME`
+      );
     } else if (IS_POSTGRES) {
-      await prismaClient.$executeRaw(Prisma.sql`ALTER TABLE "BaziRecord" ADD COLUMN "updatedAt" TIMESTAMP(3)`);
+      await prismaClient.$executeRaw(
+        Prisma.sql`ALTER TABLE "BaziRecord" ADD COLUMN "updatedAt" TIMESTAMP(3)`
+      );
     }
-    await prismaClient.$executeRaw(Prisma.sql`UPDATE BaziRecord SET updatedAt = createdAt WHERE updatedAt IS NULL`);
+    await prismaClient.$executeRaw(
+      Prisma.sql`UPDATE BaziRecord SET updatedAt = createdAt WHERE updatedAt IS NULL`
+    );
   } catch (error) {
     logger.error('Failed to ensure BaziRecord updatedAt column:', error);
   }

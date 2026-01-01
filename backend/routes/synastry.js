@@ -1,6 +1,5 @@
 import express from 'express';
 import { analyzeSynastry } from '../controllers/synastry.controller.js';
-import { requireAuth } from '../middleware/index.js';
 
 const router = express.Router();
 

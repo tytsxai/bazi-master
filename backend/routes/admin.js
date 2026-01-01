@@ -1,12 +1,12 @@
 import express from 'express';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import { getWebsocketMetrics } from '../services/websocket.service.js';
 import { checkDatabase, checkRedis } from '../services/health.service.js';
 
 const router = express.Router();
 
 // Admin Health Check with WS Metrics
-router.get('/health', requireAdmin, async (req, res) => {
+router.get('/health', requireAuth, requireAdmin, async (req, res) => {
   const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
   const ws = getWebsocketMetrics();
 

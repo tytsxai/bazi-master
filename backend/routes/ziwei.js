@@ -1,3 +1,4 @@
+import { logger } from '../config/logger.js';
 import express from 'express';
 
 import { prisma } from '../config/prisma.js';
@@ -19,18 +20,18 @@ const parseZiweiPayload = (body) => {
   const hour = Number(birthHour);
 
   if (
-    !Number.isInteger(year)
-    || year < 1
-    || year > 9999
-    || !Number.isInteger(month)
-    || month < 1
-    || month > 12
-    || !Number.isInteger(day)
-    || day < 1
-    || day > 31
-    || !Number.isInteger(hour)
-    || hour < 0
-    || hour > 23
+    !Number.isInteger(year) ||
+    year < 1 ||
+    year > 9999 ||
+    !Number.isInteger(month) ||
+    month < 1 ||
+    month > 12 ||
+    !Number.isInteger(day) ||
+    day < 1 ||
+    day > 31 ||
+    !Number.isInteger(hour) ||
+    hour < 0 ||
+    hour > 23
   ) {
     return { ok: false, error: 'Missing required fields' };
   }
@@ -81,7 +82,7 @@ router.post('/calculate', requireAuth, (req, res) => {
     const timeMeta = buildBirthTimeMeta(parsed.payload);
     return res.json({ ...result, ...timeMeta });
   } catch (error) {
-    console.error('Ziwei calculation error:', error);
+    logger.error('Ziwei calculation error:', error);
     return res.status(500).json({ error: 'Calculation error' });
   }
 });
@@ -106,7 +107,7 @@ router.post('/history', requireAuth, async (req, res) => {
     });
     return res.json({ record: serializeZiweiRecord(record) });
   } catch (error) {
-    console.error('Failed to save Ziwei history:', error);
+    logger.error('Failed to save Ziwei history:', error);
     return res.status(500).json({ error: 'Unable to save history' });
   }
 });
@@ -122,7 +123,7 @@ router.get('/history', requireAuth, async (req, res) => {
     });
     return res.json({ records: records.map(serializeZiweiRecord) });
   } catch (error) {
-    console.error('Failed to load Ziwei history:', error);
+    logger.error('Failed to load Ziwei history:', error);
     return res.status(500).json({ error: 'Unable to load history' });
   }
 });
@@ -141,7 +142,7 @@ router.delete('/history/:id', requireAuth, async (req, res) => {
     await prisma.ziweiRecord.delete({ where: { id: recordId } });
     return res.json({ status: 'ok' });
   } catch (error) {
-    console.error('Failed to delete Ziwei history:', error);
+    logger.error('Failed to delete Ziwei history:', error);
     return res.status(500).json({ error: 'Unable to delete history' });
   }
 });

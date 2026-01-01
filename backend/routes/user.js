@@ -11,5 +11,3 @@ router.get('/settings', getUserSettings);
 router.put('/settings', putUserSettings);
 
 export default router;
-
-
