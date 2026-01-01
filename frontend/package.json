@@ -21,15 +21,16 @@
     "asbuild": "npm run asbuild:untouched && npm run asbuild:optimized"
   },
   "dependencies": {
+    "@assemblyscript/loader": "^0.19.23",
     "@sentry/react": "^10.32.1",
     "html2canvas": "^1.4.1",
     "i18next": "^23.11.5",
+    "pino": "^10.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-helmet-async": "^2.0.5",
     "react-i18next": "^14.1.1",
-    "react-router-dom": "^6.27.0",
-    "@assemblyscript/loader": "^0.19.23"
+    "react-router-dom": "^6.27.0"
   },
   "devDependencies": {
     "@lhci/cli": "^0.13.0",
@@ -62,5 +63,12 @@
     "vite": "^5.4.8",
     "vite-plugin-pwa": "^1.2.0",
     "vitest": "^1.6.1"
+  },
+  "overrides": {
+    "cookie": "0.7.2",
+    "esbuild": "0.25.0",
+    "tar-fs": "3.1.1",
+    "tmp": "0.2.5",
+    "ws": "8.18.3"
   }
 }

@@ -15,7 +15,7 @@ const logRequestStart = ({ req, requestId }) => {
         userAgent: req.get('User-Agent'),
         ip: req.ip,
       },
-      'Request started',
+      'Request started'
     );
     return;
   }
@@ -36,14 +36,14 @@ const logRequestFinish = ({ req, res, requestId, durationMs }) => {
         statusCode: res.statusCode,
         durationMs,
       },
-      'Request completed',
+      'Request completed'
     );
     return;
   }
 
   const statusIcon = res.statusCode >= 400 ? '!!' : '<-';
   logger[logLevel](
-    `${statusIcon} ${req.method} ${getRequestUrl(req)} ${res.statusCode} ${durationMs}ms [${requestId}]`,
+    `${statusIcon} ${req.method} ${getRequestUrl(req)} ${res.statusCode} ${durationMs}ms [${requestId}]`
   );
 };
 

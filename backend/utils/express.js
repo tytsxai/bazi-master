@@ -1,7 +1,7 @@
 export const isExpressRouter = (value) =>
-  typeof value === 'function'
-  && typeof value.handle === 'function'
-  && typeof value.use === 'function';
+  typeof value === 'function' &&
+  typeof value.handle === 'function' &&
+  typeof value.use === 'function';
 
 export const wrapAsyncMiddleware = (fn) => {
   return (req, res, next) => {
@@ -25,6 +25,3 @@ export const patchExpressAsync = (target) => {
     }
   }
 };
-
-
-

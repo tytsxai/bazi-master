@@ -20,7 +20,8 @@ export const parseTimezoneOffsetMinutes = (raw) => {
   const sign = match[1] === '-' ? -1 : 1;
   const hours = Number(match[2]);
   const minutes = Number(match[3] || 0);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 14 || minutes > 59) return null;
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 14 || minutes > 59)
+    return null;
   return sign * (hours * 60 + minutes);
 };
 
@@ -34,6 +35,3 @@ export const getBrowserTimezoneLabel = () => {
   const offsetMinutes = -new Date().getTimezoneOffset();
   return formatOffsetMinutes(offsetMinutes);
 };
-
-
-

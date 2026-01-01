@@ -33,7 +33,10 @@ describe('solarTime.service coverage', () => {
 
   it('computeTrueSolarTime returns null on invalid inputs and returns corrected result otherwise', () => {
     assert.equal(computeTrueSolarTime({ timezoneOffsetMinutes: NaN, longitude: 0 }), null);
-    assert.equal(computeTrueSolarTime({ timezoneOffsetMinutes: 0, longitude: 0, birthYear: 'x' }), null);
+    assert.equal(
+      computeTrueSolarTime({ timezoneOffsetMinutes: 0, longitude: 0, birthYear: 'x' }),
+      null
+    );
 
     const out = computeTrueSolarTime({
       birthYear: 2024,

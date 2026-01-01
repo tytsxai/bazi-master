@@ -15,7 +15,7 @@ test('User can update profile settings and see them persisted', async ({ page })
       resp.url().includes('/api/user/settings') &&
       resp.request().method() === 'GET' &&
       resp.status() === 200,
-    { timeout: 15000 },
+    { timeout: 15000 }
   );
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/profile/);
@@ -55,7 +55,7 @@ test('User can update profile settings and see them persisted', async ({ page })
     (resp) =>
       resp.url().includes('/api/user/settings') &&
       resp.request().method() === 'PUT' &&
-      resp.status() === 200,
+      resp.status() === 200
   );
   await page.getByRole('button', { name: 'Save settings' }).click();
   await saveResponse;
@@ -64,7 +64,7 @@ test('User can update profile settings and see them persisted', async ({ page })
   await expect(page.locator('#profile-name')).toHaveValue(uniqueName);
 
   const settingsResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/user/settings') && resp.status() === 200,
+    (resp) => resp.url().includes('/api/user/settings') && resp.status() === 200
   );
   await page.reload();
   await settingsResponse;

@@ -74,7 +74,10 @@ try {
   await shot('tarot-step-5-drawn');
 
   await page.getByRole('button', { name: /Reveal AI Meaning/ }).click();
-  await page.getByRole('dialog', { name: 'Request AI interpretation?' }).getByRole('button', { name: 'Request AI' }).click();
+  await page
+    .getByRole('dialog', { name: 'Request AI interpretation?' })
+    .getByRole('button', { name: 'Request AI' })
+    .click();
   await expect(page.getByRole('heading', { name: 'Often the cards whisper...' })).toBeVisible();
   await shot('tarot-step-6-ai');
 
@@ -82,7 +85,10 @@ try {
   await shot('tarot-step-7-history');
 
   await page.getByRole('button', { name: 'Remove' }).first().click();
-  await page.getByRole('dialog', { name: 'Delete this reading?' }).getByRole('button', { name: 'Delete' }).click();
+  await page
+    .getByRole('dialog', { name: 'Delete this reading?' })
+    .getByRole('button', { name: 'Delete' })
+    .click();
   await shot('tarot-step-8-history-deleted');
 
   await page.getByRole('button', { name: new RegExp('Logout') }).click();

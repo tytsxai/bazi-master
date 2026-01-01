@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useBaziContext } from '../context/BaziContext';
+import logger from '../utils/logger';
 
 const RECONNECT_DELAY = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
 export const useChat = () => {
-  const { token } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { baziResult } = useBaziContext();
   const [status, setStatus] = useState('disconnected');
   const [messages, setMessages] = useState([]);
@@ -17,7 +18,7 @@ export const useChat = () => {
   const reconnectAttempts = useRef(0);
   const reconnectTimer = useRef(null);
   const shouldReconnect = useRef(true);
-  const connectRef = useRef(() => { });
+  const connectRef = useRef(() => {});
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -75,7 +76,10 @@ export const useChat = () => {
         break;
       case 'error':
         setIsTyping(false);
-        setMessages((prev) => [...prev, { role: 'system', content: `Error: ${data.message}`, timestamp: Date.now() }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'system', content: `Error: ${data.message}`, timestamp: Date.now() },
+        ]);
         break;
       default:
         break;
@@ -83,7 +87,7 @@ export const useChat = () => {
   };
 
   const connect = useCallback(() => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     setStatus('connecting');
@@ -105,7 +109,7 @@ export const useChat = () => {
           const data = JSON.parse(event.data);
           handleMessage(data);
         } catch (err) {
-          console.error('WS parse error', err);
+          logger.error({ err }, 'WS parse error');
         }
       };
 
@@ -115,17 +119,17 @@ export const useChat = () => {
       };
 
       ws.onerror = (err) => {
-        console.warn('WS error', err);
+        logger.warn({ err }, 'WS error');
         setStatus('error');
         setError('Connection error');
       };
     } catch (err) {
-      console.error('Connection failed', err);
+      logger.error({ err }, 'Connection failed');
       setStatus('error');
       setError(err?.message || 'Connection failed');
       attemptReconnect();
     }
-  }, [attemptReconnect, resolveWsUrl, token]);
+  }, [attemptReconnect, resolveWsUrl, isAuthenticated]);
 
   useEffect(() => {
     connectRef.current = connect;
@@ -141,37 +145,41 @@ export const useChat = () => {
     }
   }, []);
 
-  const sendMessage = useCallback((text) => {
-    const normalized = typeof text === 'string' ? text.trim() : '';
-    if (!normalized || status !== 'connected') return;
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+  const sendMessage = useCallback(
+    (text) => {
+      const normalized = typeof text === 'string' ? text.trim() : '';
+      if (!normalized || status !== 'connected') return;
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
-    const userMsg = { role: 'user', content: normalized, timestamp: Date.now() };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsTyping(true);
+      const userMsg = { role: 'user', content: normalized, timestamp: Date.now() };
+      setMessages((prev) => [...prev, userMsg]);
+      setIsTyping(true);
 
-    const history = messagesRef.current
-      .filter((message) => message.role !== 'system')
-      .map((message) => ({ role: message.role, content: message.content }));
+      const history = messagesRef.current
+        .filter((message) => message.role !== 'system')
+        .map((message) => ({ role: message.role, content: message.content }));
 
-    const payload = {
-      type: 'chat_request',
-      token,
-      payload: {
-        messages: [...history, { role: 'user', content: normalized }],
-        context: baziResult ? {
-          pillars: baziResult.pillars,
-          fiveElements: baziResult.fiveElements,
-          tenGods: baziResult.tenGods,
-        } : null,
-      },
-    };
+      const payload = {
+        type: 'chat_request',
+        payload: {
+          messages: [...history, { role: 'user', content: normalized }],
+          context: baziResult
+            ? {
+                pillars: baziResult.pillars,
+                fiveElements: baziResult.fiveElements,
+                tenGods: baziResult.tenGods,
+              }
+            : null,
+        },
+      };
 
-    wsRef.current.send(JSON.stringify(payload));
-  }, [baziResult, status, token]);
+      wsRef.current.send(JSON.stringify(payload));
+    },
+    [baziResult, status]
+  );
 
   useEffect(() => {
-    if (!token) return () => { };
+    if (!isAuthenticated) return () => {};
     const timer = setTimeout(() => {
       connect();
     }, 0);
@@ -183,7 +191,7 @@ export const useChat = () => {
         reconnectTimer.current = null;
       }
     };
-  }, [connect, disconnect, token]);
+  }, [connect, disconnect, isAuthenticated]);
 
   return {
     status,

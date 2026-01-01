@@ -3,7 +3,7 @@ import {
   getZodiacCompatibility,
   getZodiacHoroscope,
   getZodiacSign,
-  postZodiacRising
+  postZodiacRising,
 } from '../controllers/zodiac.controller.js';
 
 const router = express.Router();

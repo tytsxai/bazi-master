@@ -18,7 +18,8 @@ const parseTimezoneOffsetMinutes = (value) => {
   const sign = match[1] === '-' ? -1 : 1;
   const hours = Number(match[2]);
   const minutes = Number(match[3] || 0);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 14 || minutes > 59) return null;
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 14 || minutes > 59)
+    return null;
   return sign * (hours * 60 + minutes);
 };
 
@@ -46,7 +47,7 @@ const getOffsetMinutesFromTimeZone = (timeZone, date) => {
       Number(values.day),
       Number(values.hour),
       Number(values.minute),
-      Number(values.second),
+      Number(values.second)
     );
     if (!Number.isFinite(asUtc)) return null;
     return Math.round((asUtc - date.getTime()) / 60000);
@@ -76,7 +77,8 @@ const buildBirthTimeMeta = ({
   const offsetFromPayload = parseTimezoneOffsetMinutes(timezoneOffsetMinutes);
   const offsetFromLabel = parseTimezoneOffsetMinutes(timezone);
   const baseUtcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
-  const offsetFromZone = offsetFromLabel === null ? getOffsetMinutesFromTimeZone(timezone, baseUtcDate) : null;
+  const offsetFromZone =
+    offsetFromLabel === null ? getOffsetMinutesFromTimeZone(timezone, baseUtcDate) : null;
   const resolvedOffset = Number.isFinite(offsetFromPayload)
     ? offsetFromPayload
     : Number.isFinite(offsetFromLabel)
@@ -87,7 +89,8 @@ const buildBirthTimeMeta = ({
     return { timezoneOffsetMinutes: null, birthTimestamp: null, birthIso: null };
   }
 
-  const birthTimestamp = Date.UTC(year, month - 1, day, hour, minute, 0) - resolvedOffset * 60 * 1000;
+  const birthTimestamp =
+    Date.UTC(year, month - 1, day, hour, minute, 0) - resolvedOffset * 60 * 1000;
   return {
     timezoneOffsetMinutes: resolvedOffset,
     birthTimestamp,

@@ -24,7 +24,7 @@ test('Mobile layout and navigation', async ({ page }) => {
   const mobileNav = page.locator('.mobile-nav');
   await expect(mobileNav).toBeVisible();
   await expect(mobileNav.getByRole('link', { name: 'BaZi', exact: true })).toBeVisible();
-  
+
   // Close menu
   await menuBtn.click();
   await expect(mobileNav).toBeHidden();

@@ -7,7 +7,9 @@ describe('error middleware coverage', () => {
   it('notFoundHandler forwards 404 error', () => {
     const req = { originalUrl: '/missing' };
     let captured;
-    notFoundHandler(req, {}, (err) => { captured = err; });
+    notFoundHandler(req, {}, (err) => {
+      captured = err;
+    });
     assert.equal(captured.statusCode, 404);
     assert.ok(String(captured.message).includes('/missing'));
   });
@@ -47,7 +49,10 @@ describe('error middleware coverage', () => {
       },
     };
 
-    const handler = createGlobalErrorHandler({ loggerInstance: logger, env: { NODE_ENV: 'production' } });
+    const handler = createGlobalErrorHandler({
+      loggerInstance: logger,
+      env: { NODE_ENV: 'production' },
+    });
     handler({ statusCode: 400, message: 'bad', stack: 'STACK' }, req, res, () => {});
 
     assert.equal(res.statusCode, 400);
@@ -70,8 +75,14 @@ describe('error middleware coverage', () => {
     const res = {
       statusCode: null,
       jsonBody: null,
-      status(code) { this.statusCode = code; return this; },
-      json(body) { this.jsonBody = body; return this; },
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(body) {
+        this.jsonBody = body;
+        return this;
+      },
     };
 
     const handler = createGlobalErrorHandler({ loggerInstance: logger, env: { NODE_ENV: 'test' } });

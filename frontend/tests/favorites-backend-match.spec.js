@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures.js';
 
-const formatDate = (record) => `${record.birthYear}-${record.birthMonth}-${record.birthDay} · ${record.birthHour}:00`;
+const formatDate = (record) =>
+  `${record.birthYear}-${record.birthMonth}-${record.birthDay} · ${record.birthHour}:00`;
 const formatProfile = (record) => {
   const location = record.birthLocation || '—';
   const timezone = record.timezone || 'UTC';
@@ -22,13 +23,16 @@ test('Error handling: favorites flow matches backend data', async ({ page, reque
   });
   expect(loginResponse.ok()).toBeTruthy();
   const loginData = await loginResponse.json();
-  await page.evaluate(({ token, user }) => {
-    localStorage.setItem('bazi_token', token);
-    localStorage.setItem('bazi_token_origin', 'backend');
-    localStorage.setItem('bazi_user', JSON.stringify(user));
-    localStorage.setItem('bazi_last_activity', String(Date.now()));
-    localStorage.removeItem('bazi_session_expired');
-  }, { token: loginData.token, user: loginData.user });
+  await page.evaluate(
+    ({ token, user }) => {
+      localStorage.setItem('bazi_token', token);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(user));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { token: loginData.token, user: loginData.user }
+  );
 
   try {
     await page.goto('/bazi');
@@ -74,7 +78,8 @@ test('Error handling: favorites flow matches backend data', async ({ page, reque
     expect(favoritesRes.ok()).toBeTruthy();
     const favoritesData = await favoritesRes.json();
     const backendFavorite = (favoritesData.favorites || []).find(
-      (favorite) => favorite.record?.birthLocation === uniqueLocation || favorite.recordId === recordId
+      (favorite) =>
+        favorite.record?.birthLocation === uniqueLocation || favorite.recordId === recordId
     );
 
     expect(backendFavorite).toBeTruthy();
@@ -90,10 +95,18 @@ test('Error handling: favorites flow matches backend data', async ({ page, reque
     await expect(favoriteCard).toContainText(formatProfile(record));
 
     await favoriteCard.getByRole('button', { name: 'View' }).click();
-    await expect(favoriteCard).toContainText(`${record.pillars.year.stem} · ${record.pillars.year.branch}`);
-    await expect(favoriteCard).toContainText(`${record.pillars.day.stem} · ${record.pillars.day.branch}`);
-    await expect(favoriteCard).toContainText(`${record.pillars.month.stem} · ${record.pillars.month.branch}`);
-    await expect(favoriteCard).toContainText(`${record.pillars.hour.stem} · ${record.pillars.hour.branch}`);
+    await expect(favoriteCard).toContainText(
+      `${record.pillars.year.stem} · ${record.pillars.year.branch}`
+    );
+    await expect(favoriteCard).toContainText(
+      `${record.pillars.day.stem} · ${record.pillars.day.branch}`
+    );
+    await expect(favoriteCard).toContainText(
+      `${record.pillars.month.stem} · ${record.pillars.month.branch}`
+    );
+    await expect(favoriteCard).toContainText(
+      `${record.pillars.hour.stem} · ${record.pillars.hour.branch}`
+    );
   } finally {
     const token = await page.evaluate(() => localStorage.getItem('bazi_token'));
     if (token && favoriteId) {

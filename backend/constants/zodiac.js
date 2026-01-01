@@ -11,7 +11,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['impatient', 'impulsive', 'restless'],
     luckyColors: ['Crimson', 'Gold'],
     luckyNumbers: [1, 9, 18],
-    compatibility: ['Leo', 'Sagittarius', 'Gemini', 'Aquarius']
+    compatibility: ['Leo', 'Sagittarius', 'Gemini', 'Aquarius'],
   },
   taurus: {
     name: 'Taurus',
@@ -25,7 +25,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['stubborn', 'possessive', 'slow to change'],
     luckyColors: ['Emerald', 'Forest Green'],
     luckyNumbers: [2, 6, 24],
-    compatibility: ['Virgo', 'Capricorn', 'Cancer', 'Pisces']
+    compatibility: ['Virgo', 'Capricorn', 'Cancer', 'Pisces'],
   },
   gemini: {
     name: 'Gemini',
@@ -39,7 +39,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['restless', 'inconsistent', 'scattered'],
     luckyColors: ['Yellow', 'Sky Blue'],
     luckyNumbers: [3, 5, 12],
-    compatibility: ['Libra', 'Aquarius', 'Aries', 'Leo']
+    compatibility: ['Libra', 'Aquarius', 'Aries', 'Leo'],
   },
   cancer: {
     name: 'Cancer',
@@ -53,7 +53,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['moody', 'guarded', 'overly cautious'],
     luckyColors: ['Silver', 'Sea Green'],
     luckyNumbers: [4, 7, 16],
-    compatibility: ['Scorpio', 'Pisces', 'Taurus', 'Virgo']
+    compatibility: ['Scorpio', 'Pisces', 'Taurus', 'Virgo'],
   },
   leo: {
     name: 'Leo',
@@ -67,7 +67,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['proud', 'dramatic', 'stubborn'],
     luckyColors: ['Gold', 'Amber'],
     luckyNumbers: [1, 10, 19],
-    compatibility: ['Aries', 'Sagittarius', 'Gemini', 'Libra']
+    compatibility: ['Aries', 'Sagittarius', 'Gemini', 'Libra'],
   },
   virgo: {
     name: 'Virgo',
@@ -81,7 +81,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['overcritical', 'anxious', 'perfectionist'],
     luckyColors: ['Olive', 'Ivory'],
     luckyNumbers: [5, 14, 23],
-    compatibility: ['Taurus', 'Capricorn', 'Cancer', 'Scorpio']
+    compatibility: ['Taurus', 'Capricorn', 'Cancer', 'Scorpio'],
   },
   libra: {
     name: 'Libra',
@@ -95,7 +95,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['indecisive', 'avoidant', 'people-pleasing'],
     luckyColors: ['Rose', 'Sapphire'],
     luckyNumbers: [6, 15, 24],
-    compatibility: ['Gemini', 'Aquarius', 'Leo', 'Sagittarius']
+    compatibility: ['Gemini', 'Aquarius', 'Leo', 'Sagittarius'],
   },
   scorpio: {
     name: 'Scorpio',
@@ -109,7 +109,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['secretive', 'jealous', 'all-or-nothing'],
     luckyColors: ['Burgundy', 'Black'],
     luckyNumbers: [8, 11, 22],
-    compatibility: ['Cancer', 'Pisces', 'Virgo', 'Capricorn']
+    compatibility: ['Cancer', 'Pisces', 'Virgo', 'Capricorn'],
   },
   sagittarius: {
     name: 'Sagittarius',
@@ -123,7 +123,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['impatient', 'tactless', 'overextended'],
     luckyColors: ['Violet', 'Indigo'],
     luckyNumbers: [3, 12, 21],
-    compatibility: ['Aries', 'Leo', 'Libra', 'Aquarius']
+    compatibility: ['Aries', 'Leo', 'Libra', 'Aquarius'],
   },
   capricorn: {
     name: 'Capricorn',
@@ -137,7 +137,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['rigid', 'pessimistic', 'workaholic'],
     luckyColors: ['Charcoal', 'Brown'],
     luckyNumbers: [4, 13, 22],
-    compatibility: ['Taurus', 'Virgo', 'Scorpio', 'Pisces']
+    compatibility: ['Taurus', 'Virgo', 'Scorpio', 'Pisces'],
   },
   aquarius: {
     name: 'Aquarius',
@@ -151,7 +151,7 @@ export const ZODIAC_SIGNS = {
     challenges: ['detached', 'unpredictable', 'stubborn'],
     luckyColors: ['Electric Blue', 'Silver'],
     luckyNumbers: [7, 11, 20],
-    compatibility: ['Gemini', 'Libra', 'Aries', 'Sagittarius']
+    compatibility: ['Gemini', 'Libra', 'Aries', 'Sagittarius'],
   },
   pisces: {
     name: 'Pisces',
@@ -165,8 +165,8 @@ export const ZODIAC_SIGNS = {
     challenges: ['escapist', 'overly sensitive', 'indecisive'],
     luckyColors: ['Seafoam', 'Lavender'],
     luckyNumbers: [2, 9, 18],
-    compatibility: ['Cancer', 'Scorpio', 'Taurus', 'Capricorn']
-  }
+    compatibility: ['Cancer', 'Scorpio', 'Taurus', 'Capricorn'],
+  },
 };
 
 export const ZODIAC_PERIODS = new Set(['daily', 'weekly', 'monthly']);
@@ -175,43 +175,43 @@ export const ELEMENT_COMPATIBILITY = {
   Fire: {
     Fire: { score: 12, note: 'Shared fire energy creates bold momentum.' },
     Air: { score: 15, note: 'Air feeds Fire, sparking inspiration and action.' },
-    Earth: { score: -3, note: 'Fire can feel contained by Earth\'s steady pace.' },
-    Water: { score: -6, note: 'Fire and Water can steam up communication.' }
+    Earth: { score: -3, note: "Fire can feel contained by Earth's steady pace." },
+    Water: { score: -6, note: 'Fire and Water can steam up communication.' },
   },
   Air: {
     Fire: { score: 15, note: 'Air fuels Fire, keeping ideas lively.' },
     Air: { score: 12, note: 'Shared air energy keeps things curious and social.' },
     Earth: { score: -4, note: 'Air may find Earth too fixed while Earth craves certainty.' },
-    Water: { score: -2, note: 'Air can feel abstract to Water\'s emotional depth.' }
+    Water: { score: -2, note: "Air can feel abstract to Water's emotional depth." },
   },
   Earth: {
     Fire: { score: -3, note: 'Earth prefers patience while Fire wants fast movement.' },
     Air: { score: -4, note: 'Earth seeks stability while Air seeks change.' },
     Earth: { score: 12, note: 'Shared earth energy builds reliability and trust.' },
-    Water: { score: 15, note: 'Water nourishes Earth, creating a supportive bond.' }
+    Water: { score: 15, note: 'Water nourishes Earth, creating a supportive bond.' },
   },
   Water: {
     Fire: { score: -6, note: 'Water can cool Fire, creating emotional distance.' },
     Air: { score: -2, note: 'Water looks for depth while Air wants space.' },
     Earth: { score: 15, note: 'Earth holds Water, creating steadiness and care.' },
-    Water: { score: 12, note: 'Shared water energy heightens empathy and intuition.' }
-  }
+    Water: { score: 12, note: 'Shared water energy heightens empathy and intuition.' },
+  },
 };
 
 export const MODALITY_COMPATIBILITY = {
   Cardinal: {
     Cardinal: { score: 4, note: 'Both initiate quickly, so pace-setting matters.' },
     Fixed: { score: 2, note: 'Cardinal sparks action while Fixed sustains it.' },
-    Mutable: { score: 3, note: 'Cardinal leads while Mutable adapts and refines.' }
+    Mutable: { score: 3, note: 'Cardinal leads while Mutable adapts and refines.' },
   },
   Fixed: {
-    Cardinal: { score: 2, note: 'Fixed steadies Cardinal\'s drive.' },
+    Cardinal: { score: 2, note: "Fixed steadies Cardinal's drive." },
     Fixed: { score: 4, note: 'Shared fixed energy creates loyalty and endurance.' },
-    Mutable: { score: 1, note: 'Fixed wants consistency while Mutable seeks variety.' }
+    Mutable: { score: 1, note: 'Fixed wants consistency while Mutable seeks variety.' },
   },
   Mutable: {
-    Cardinal: { score: 3, note: 'Mutable flexes to Cardinal\'s vision.' },
+    Cardinal: { score: 3, note: "Mutable flexes to Cardinal's vision." },
     Fixed: { score: 1, note: 'Mutable wants change while Fixed holds a line.' },
-    Mutable: { score: 4, note: 'Shared mutable energy keeps things adaptable.' }
-  }
+    Mutable: { score: 4, note: 'Shared mutable energy keeps things adaptable.' },
+  },
 };

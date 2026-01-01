@@ -5,18 +5,19 @@ import { MemoryRouter } from 'react-router-dom';
 // Mock dependencies
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({
-    token: null,
     isAuthenticated: false,
+    isAuthResolved: true,
     login: vi.fn(),
     logout: vi.fn(),
   }),
 }));
 
 vi.mock('../../auth/useAuthFetch', () => ({
-  useAuthFetch: () => vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve({}),
-  }),
+  useAuthFetch: () =>
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    }),
 }));
 
 vi.mock('../../utils/aiProvider', () => ({
@@ -111,7 +112,7 @@ describe('Tarot - Card Drawing', () => {
   });
 
   it('disables draw button while loading', async () => {
-    global.fetch.mockImplementation(() => new Promise(() => { })); // Never resolves
+    global.fetch.mockImplementation(() => new Promise(() => {})); // Never resolves
 
     renderWithRouter(<Tarot />);
 

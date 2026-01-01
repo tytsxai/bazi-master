@@ -30,8 +30,14 @@ describe('AI service more coverage', () => {
         RESET_REQUEST_MIN_DURATION_MS: 0,
       },
       async () => {
-        await assert.rejects(() => ai.callOpenAI({ system: 's', user: 'u' }), /OpenAI API key not configured/i);
-        await assert.rejects(() => ai.callAnthropic({ system: 's', user: 'u' }), /Anthropic API key not configured/i);
+        await assert.rejects(
+          () => ai.callOpenAI({ system: 's', user: 'u' }),
+          /OpenAI API key not configured/i
+        );
+        await assert.rejects(
+          () => ai.callAnthropic({ system: 's', user: 'u' }),
+          /Anthropic API key not configured/i
+        );
       }
     );
   });
@@ -42,9 +48,15 @@ describe('AI service more coverage', () => {
 
   it('buildBaziPrompt returns fallback markdown', async () => {
     const { system, user, fallback } = ai.buildBaziPrompt({
-      pillars: { day: { stem: '甲', elementStem: 'Wood' }, month: { stem: '乙', branch: '卯', elementBranch: 'Wood' } },
+      pillars: {
+        day: { stem: '甲', elementStem: 'Wood' },
+        month: { stem: '乙', branch: '卯', elementBranch: 'Wood' },
+      },
       fiveElements: { Wood: 3, Fire: 1 },
-      tenGods: [{ name: 'Friend', strength: 2 }, { name: 'Wealth', strength: 1 }],
+      tenGods: [
+        { name: 'Friend', strength: 2 },
+        { name: 'Wealth', strength: 1 },
+      ],
       luckCycles: [{ range: '2020-2030', stem: '丙', branch: '午' }],
       strength: 'Strong',
     });
@@ -56,5 +68,4 @@ describe('AI service more coverage', () => {
     assert.match(out, /BaZi Insight/);
     assert.match(out, /Summary/);
   });
-
 });

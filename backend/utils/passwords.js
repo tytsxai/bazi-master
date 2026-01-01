@@ -21,8 +21,7 @@ const safeEqual = (a, b) => {
   return crypto.timingSafeEqual(a, b);
 };
 
-export const isHashedPassword = (value) =>
-  typeof value === 'string' && value.startsWith('scrypt$');
+export const isHashedPassword = (value) => typeof value === 'string' && value.startsWith('scrypt$');
 
 export const hashPassword = async (password) => {
   if (typeof password !== 'string') return null;

@@ -22,7 +22,7 @@ test('POST /api/tarot/ai-interpret returns 401 when unauthenticated', async () =
     prisma: db,
     sessionStore,
     isAdminUser: () => false,
-    tokenSecret: 'test-secret'
+    tokenSecret: 'test-secret',
   });
 
   const requireAuth = createRequireAuth({ authorizeToken });
@@ -40,21 +40,29 @@ test('POST /api/tarot/ai-interpret returns 401 when unauthenticated', async () =
           name: 'The Fool',
           isReversed: false,
           meaningUp: 'Beginnings',
-          meaningRev: 'Hesitation'
-        }
-      ]
-    }
+          meaningRev: 'Hesitation',
+        },
+      ],
+    },
   };
 
   const res = {
     statusCode: 200,
     body: null,
-    status: function(code) { this.statusCode = code; return this; },
-    json: function(data) { this.body = data; return this; }
+    status: function (code) {
+      this.statusCode = code;
+      return this;
+    },
+    json: function (data) {
+      this.body = data;
+      return this;
+    },
   };
 
   let nextCalled = false;
-  const next = () => { nextCalled = true; };
+  const next = () => {
+    nextCalled = true;
+  };
 
   // Test that requireAuth fails without proper auth header
   await requireAuth(req, res, next);

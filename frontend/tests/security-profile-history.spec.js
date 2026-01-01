@@ -13,8 +13,9 @@ const resolvePort = (value) => {
 };
 
 const backendPort = resolvePort(process.env.E2E_API_PORT) ?? resolvePort(process.env.BACKEND_PORT);
-const apiBase = process.env.PW_API_BASE
-  || (backendPort ? `http://127.0.0.1:${backendPort}` : 'http://127.0.0.1:4000');
+const apiBase =
+  process.env.PW_API_BASE ||
+  (backendPort ? `http://127.0.0.1:${backendPort}` : 'http://127.0.0.1:4000');
 
 test('Security: Profile flow from /history matches backend data', async ({ page, request }) => {
   const consoleErrors = [];
@@ -77,9 +78,8 @@ test('Security: Profile flow from /history matches backend data', async ({ page,
   const settings = settingsData?.settings || {};
   const preferences = settings?.preferences || {};
 
-  const expectedProfileName = typeof preferences.profileName === 'string'
-    ? preferences.profileName.trim()
-    : '';
+  const expectedProfileName =
+    typeof preferences.profileName === 'string' ? preferences.profileName.trim() : '';
   await expect(page.getByLabel('Display name (optional)')).toHaveValue(expectedProfileName);
 
   const localeValue = await page.getByLabel('Locale').inputValue();
@@ -93,9 +93,18 @@ test('Security: Profile flow from /history matches backend data', async ({ page,
   const expectedRitual = preferences.ritualReminders ?? false;
   const expectedResearch = preferences.researchUpdates ?? true;
 
-  await expect(page.getByRole('checkbox', { name: 'Daily guidance' })).toHaveJSProperty('checked', expectedDaily);
-  await expect(page.getByRole('checkbox', { name: 'Ritual reminders' })).toHaveJSProperty('checked', expectedRitual);
-  await expect(page.getByRole('checkbox', { name: 'Research updates' })).toHaveJSProperty('checked', expectedResearch);
+  await expect(page.getByRole('checkbox', { name: 'Daily guidance' })).toHaveJSProperty(
+    'checked',
+    expectedDaily
+  );
+  await expect(page.getByRole('checkbox', { name: 'Ritual reminders' })).toHaveJSProperty(
+    'checked',
+    expectedRitual
+  );
+  await expect(page.getByRole('checkbox', { name: 'Research updates' })).toHaveJSProperty(
+    'checked',
+    expectedResearch
+  );
 
   expect(consoleErrors).toEqual([]);
 });

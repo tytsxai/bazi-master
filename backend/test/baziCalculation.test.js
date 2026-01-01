@@ -1,10 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  BRANCHES_MAP,
-  ELEMENTS,
-  STEMS_MAP,
-} from '../constants/stems.js';
+import { BRANCHES_MAP, ELEMENTS, STEMS_MAP } from '../constants/stems.js';
 import {
   buildBaziCacheKey,
   primeBaziCalculationCache,
@@ -12,7 +8,7 @@ import {
   invalidateBaziCalculationCache,
   getCachedBaziCalculation,
   buildFiveElementsPercent,
-  normalizeBaziResult
+  normalizeBaziResult,
 } from '../services/cache.service.js';
 import {
   buildPillar,
@@ -31,7 +27,7 @@ test('validateBaziInput trims inputs and rejects invalid dates', () => {
     birthHour: '10',
     gender: ' male ',
     birthLocation: '  New York ',
-    timezone: '  UTC '
+    timezone: '  UTC ',
   });
   assert.equal(ok.ok, true);
   assert.equal(ok.payload.gender, 'male');
@@ -49,7 +45,7 @@ test('validateBaziInput trims inputs and rejects invalid dates', () => {
     birthHour: 0,
     gender: '   ',
     birthLocation: 'LA',
-    timezone: 'UTC'
+    timezone: 'UTC',
   });
   assert.equal(whitespace.ok, false);
   assert.equal(whitespace.reason, 'whitespace');
@@ -59,7 +55,7 @@ test('validateBaziInput trims inputs and rejects invalid dates', () => {
     birthMonth: 2,
     birthDay: 30,
     birthHour: 12,
-    gender: 'female'
+    gender: 'female',
   });
   assert.equal(invalidDate.ok, false);
   assert.equal(invalidDate.reason, 'invalid');
@@ -71,7 +67,7 @@ test('buildBaziCacheKey normalizes inputs', () => {
     birthMonth: 12,
     birthDay: 15,
     birthHour: 10,
-    gender: ' Male '
+    gender: ' Male ',
   });
   assert.equal(key, '1990-12-15-10-male');
 
@@ -108,18 +104,18 @@ test('five element percent normalization is stable', () => {
     Fire: 1,
     Earth: 1,
     Metal: 0,
-    Water: 0
+    Water: 0,
   });
   assert.deepEqual(percent, {
     Wood: 50,
     Fire: 25,
     Earth: 25,
     Metal: 0,
-    Water: 0
+    Water: 0,
   });
 
   const normalized = normalizeBaziResult({
-    fiveElements: { Wood: 2, Fire: 1, Earth: 1, Metal: 0, Water: 0 }
+    fiveElements: { Wood: 2, Fire: 1, Earth: 1, Metal: 0, Water: 0 },
   });
   assert.deepEqual(normalized.fiveElementsPercent, percent);
 });
@@ -130,7 +126,7 @@ test('performCalculation produces internally consistent Bazi structures', () => 
     birthMonth: 1,
     birthDay: 1,
     birthHour: 0,
-    gender: 'male'
+    gender: 'male',
   };
   const result = performCalculation(data);
 
@@ -146,7 +142,10 @@ test('performCalculation produces internally consistent Bazi structures', () => 
   });
   assert.deepEqual(result.fiveElements, recomputed);
 
-  const percentSum = ELEMENTS.reduce((sum, element) => sum + result.fiveElementsPercent[element], 0);
+  const percentSum = ELEMENTS.reduce(
+    (sum, element) => sum + result.fiveElementsPercent[element],
+    0
+  );
   assert.ok(percentSum >= 99 && percentSum <= 101);
 
   assert.equal(result.tenGods.length, 10);
@@ -167,7 +166,7 @@ test('getBaziCalculation caches and normalizes results', async () => {
     birthMonth: 6,
     birthDay: 12,
     birthHour: 14,
-    gender: 'female'
+    gender: 'female',
   };
 
   const key = buildBaziCacheKey(data);

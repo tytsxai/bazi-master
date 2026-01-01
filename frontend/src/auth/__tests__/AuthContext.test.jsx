@@ -40,37 +40,54 @@ describe('AuthContext', () => {
     });
   });
 
-  it('provides initial unauthenticated state', () => {
+  it('provides initial unauthenticated state', async () => {
     render(
       <AuthProvider>
         <TestConsumer />
         <TestComponent />
       </AuthProvider>
     );
-    expect(screen.getByTestId('auth-status')).toHaveTextContent('Guest');
+    await waitFor(() => {
+      expect(screen.getByTestId('auth-status')).toHaveTextContent('Guest');
+    });
   });
 
-  it('initializes from localStorage', () => {
-    localStorage.setItem('bazi_token', 'mock-token');
+  it('initializes from localStorage', async () => {
     localStorage.setItem('bazi_user', JSON.stringify({ email: 'stored@example.com' }));
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ user: { email: 'stored@example.com' } }),
+    });
 
     render(
       <AuthProvider>
         <TestComponent />
       </AuthProvider>
     );
-    expect(screen.getByTestId('auth-status')).toHaveTextContent('Authenticated');
-    expect(screen.getByTestId('user-email')).toHaveTextContent('stored@example.com');
+    await waitFor(() => {
+      expect(screen.getByTestId('auth-status')).toHaveTextContent('Authenticated');
+      expect(screen.getByTestId('user-email')).toHaveTextContent('stored@example.com');
+    });
   });
 
   it('login updates state on success', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        token: 'new-token',
-        user: { email: 'new@example.com' }
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        headers: { get: () => null },
+        json: async () => ({}),
       })
-    });
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({
+          user: { email: 'new@example.com' },
+        }),
+      });
 
     render(
       <AuthProvider>
@@ -84,16 +101,24 @@ describe('AuthContext', () => {
 
     expect(window.authTest.isAuthenticated).toBe(true);
     expect(window.authTest.user.email).toBe('new@example.com');
-    expect(localStorage.getItem('bazi_token')).toBe('new-token');
+    expect(localStorage.getItem('bazi_user')).toContain('new@example.com');
   });
 
   it('logout clears state and storage', async () => {
-    localStorage.setItem('bazi_token', 'mock-token');
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      headers: { get: () => null },
-      json: () => Promise.resolve({})
-    }); // Logout API call
+    localStorage.setItem('bazi_user', JSON.stringify({ email: 'stored@example.com' }));
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ user: { email: 'stored@example.com' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve({}),
+      }); // Logout API call
 
     render(
       <AuthProvider>
@@ -101,7 +126,9 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    expect(window.authTest.isAuthenticated).toBe(true);
+    await waitFor(() => {
+      expect(window.authTest.isAuthenticated).toBe(true);
+    });
 
     await act(async () => {
       window.authTest.logout();
@@ -109,6 +136,6 @@ describe('AuthContext', () => {
 
     expect(window.authTest.isAuthenticated).toBe(false);
     expect(window.authTest.user).toBeNull();
-    expect(localStorage.getItem('bazi_token')).toBeNull();
+    expect(localStorage.getItem('bazi_user')).toBeNull();
   });
 });

@@ -147,4 +147,9 @@ const listKnownLocations = () => {
   return locations.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 };
 
-export { normalizeLocationKey, resolveLocationCoordinates, computeTrueSolarTime, listKnownLocations };
+export {
+  normalizeLocationKey,
+  resolveLocationCoordinates,
+  computeTrueSolarTime,
+  listKnownLocations,
+};

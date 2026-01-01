@@ -11,7 +11,7 @@ test('validateBaziInput accepts valid payload and trims fields', () => {
     gender: ' Female ',
     birthLocation: ' NYC ',
     timezone: ' America/New_York ',
-    extra: 'keep-me'
+    extra: 'keep-me',
   };
 
   const result = validateBaziInput(raw);
@@ -36,7 +36,7 @@ test('validateBaziInput rejects whitespace-only fields with whitespace reason', 
     birthHour: 13,
     gender: '   ',
     birthLocation: 'NYC',
-    timezone: 'UTC'
+    timezone: 'UTC',
   };
 
   const result = validateBaziInput(raw);
@@ -54,7 +54,7 @@ test('validateBaziInput rejects impossible calendar dates', () => {
     birthHour: 12,
     gender: 'male',
     birthLocation: 'NYC',
-    timezone: 'UTC'
+    timezone: 'UTC',
   };
 
   const result = validateBaziInput(raw);
@@ -72,7 +72,7 @@ test('validateBaziInput rejects out-of-range hours', () => {
     birthHour: 24,
     gender: 'female',
     birthLocation: 'NYC',
-    timezone: 'UTC'
+    timezone: 'UTC',
   };
 
   const result = validateBaziInput(raw);

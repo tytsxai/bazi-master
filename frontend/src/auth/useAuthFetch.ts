@@ -1,17 +1,15 @@
 import { useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, RetryAction } from './AuthContext';
+import { sanitizeRedirectPath, safeAssignLocation } from '../utils/redirect';
 
 export const SESSION_EXPIRED_REASON = 'session_expired';
 export const SESSION_EXPIRED_KEY = 'bazi_session_expired';
 
 export function useAuthFetch() {
-  const { token, logout, setRetryAction } = useAuth();
+  const { isAuthenticated, logout, setRetryAction } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
-  const isBackendToken = (value: string | null): boolean =>
-    typeof value === 'string' && /^token_\d+_\d+_[A-Za-z0-9]+$/.test(value);
 
   return useCallback(
     async (
@@ -20,7 +18,9 @@ export function useAuthFetch() {
       retryAction: Partial<RetryAction> | null = null
     ): Promise<Response> => {
       const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
-      const params = new URLSearchParams({ reason: SESSION_EXPIRED_REASON, next: redirectPath });
+      const safeNext = sanitizeRedirectPath(redirectPath, null);
+      const params = new URLSearchParams({ reason: SESSION_EXPIRED_REASON });
+      if (safeNext) params.set('next', safeNext);
       const target = `/login?${params.toString()}`;
 
       const redirectToLogin = () => {
@@ -31,40 +31,24 @@ export function useAuthFetch() {
         window.setTimeout(() => {
           const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
           if (currentPath !== target) {
-            window.location.assign(target);
+            safeAssignLocation(target);
           }
         }, 50);
       };
 
-      let effectiveToken = token;
-      try {
-        const storedToken = localStorage.getItem('bazi_token');
-        if (storedToken) {
-          effectiveToken = storedToken;
-        }
-      } catch {
-        // Ignore storage access errors.
-      }
-
       const headers = new Headers(init.headers || {});
       headers.set('x-session-expired-silent', '1');
-      if (effectiveToken) {
-        headers.set('Authorization', `Bearer ${effectiveToken}`);
-      }
 
-      const response = await fetch(input, { ...init, headers });
+      const response = await fetch(input, {
+        ...init,
+        headers,
+        credentials: 'include',
+      });
 
-      let tokenOrigin: string | null = null;
-      try {
-        tokenOrigin = localStorage.getItem('bazi_token_origin');
-      } catch {
-        tokenOrigin = null;
-      }
-
-      const shouldEnforceAuth = Boolean(effectiveToken)
-        && (tokenOrigin === 'backend' || isBackendToken(effectiveToken));
-
-      if ((response.headers.get('x-session-expired') === '1' || response.status === 401) && shouldEnforceAuth) {
+      if (
+        (response.headers.get('x-session-expired') === '1' || response.status === 401) &&
+        isAuthenticated
+      ) {
         if (retryAction) {
           setRetryAction({
             ...retryAction,
@@ -77,6 +61,11 @@ export function useAuthFetch() {
         } catch {
           // Ignore storage failures.
         }
+        try {
+          sessionStorage.setItem(SESSION_EXPIRED_KEY, '1');
+        } catch {
+          // Ignore storage failures.
+        }
         redirectToLogin();
         if (response.headers.get('x-session-expired') === '1') {
           return new Response(null, { status: 401, statusText: 'Session expired' });
@@ -84,6 +73,6 @@ export function useAuthFetch() {
       }
       return response;
     },
-    [token, logout, navigate, location, setRetryAction]
+    [isAuthenticated, logout, navigate, location, setRetryAction]
   );
 }

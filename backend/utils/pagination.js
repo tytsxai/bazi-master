@@ -43,10 +43,4 @@ const slicePage = (items, pageSize) => {
   return { pageItems, hasMore, safePageSize };
 };
 
-export {
-  normalizePageNumber,
-  normalizePageSize,
-  getPagination,
-  paginateArray,
-  slicePage,
-};
+export { normalizePageNumber, normalizePageSize, getPagination, paginateArray, slicePage };

@@ -19,7 +19,9 @@ vi.mock('react-i18next', () => ({
 vi.mock('../HistoryItem', () => ({
   default: ({ record, onToggleSelection, onStartEdit, onRequestDelete }) => (
     <div data-testid={`history-item-${record.id}`}>
-      <span>{record.birthYear}-{record.birthMonth}-{record.birthDay}</span>
+      <span>
+        {record.birthYear}-{record.birthMonth}-{record.birthDay}
+      </span>
       <button onClick={() => onToggleSelection(record.id)}>Select</button>
       <button onClick={() => onStartEdit(record.id)}>Edit</button>
       <button onClick={() => onRequestDelete(record.id)}>Delete</button>
@@ -264,6 +266,3 @@ describe('HistoryList', () => {
     expect(screen.getByText('common.prev')).toBeInTheDocument();
   });
 });
-
-
-

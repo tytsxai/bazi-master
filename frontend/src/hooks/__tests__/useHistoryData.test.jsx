@@ -4,8 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import useHistoryData from '../useHistoryData';
 
 const authState = {
-  token: null,
   isAuthenticated: false,
+  isAuthResolved: true,
 };
 
 const authFetchMock = vi.fn();

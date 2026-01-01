@@ -10,20 +10,33 @@ describe('redis config more coverage', () => {
 
   it('initRedis returns null when not configured and throws when required', async () => {
     assert.equal(await initRedis({ env: {}, require: false }), null);
-    await assert.rejects(
-      () => initRedis({ env: {}, require: true }),
-      /REDIS_URL is required/,
-    );
+    await assert.rejects(() => initRedis({ env: {}, require: true }), /REDIS_URL is required/);
   });
 
   it('initRedis connects using injected redis module and caches client', async () => {
     let createCalls = 0;
     const client = {
       onCalls: [],
-      on(event, fn) { this.onCalls.push(event); this._onError = fn; },
+      on(event, fn) {
+        this.onCalls.push(event);
+        this._onError = fn;
+      },
       async connect() {},
     };
-    const logger = { logs: [], warns: [], errors: [], log(...a) { this.logs.push(a.join(' ')); }, warn(...a) { this.warns.push(a.join(' ')); }, error(...a) { this.errors.push(a.join(' ')); } };
+    const logger = {
+      logs: [],
+      warns: [],
+      errors: [],
+      log(...a) {
+        this.logs.push(a.join(' '));
+      },
+      warn(...a) {
+        this.warns.push(a.join(' '));
+      },
+      error(...a) {
+        this.errors.push(a.join(' '));
+      },
+    };
     const importRedis = async () => ({
       createClient({ url }) {
         createCalls += 1;
@@ -43,13 +56,25 @@ describe('redis config more coverage', () => {
 
   it('initRedis handles connect failure and allows retry', async () => {
     let createCalls = 0;
-    const logger = { warns: [], errors: [], log() {}, warn(...a) { this.warns.push(a.join(' ')); }, error(...a) { this.errors.push(a.join(' ')); } };
+    const logger = {
+      warns: [],
+      errors: [],
+      log() {},
+      warn(...a) {
+        this.warns.push(a.join(' '));
+      },
+      error(...a) {
+        this.errors.push(a.join(' '));
+      },
+    };
     const importRedis = async () => ({
       createClient() {
         createCalls += 1;
         return {
           on() {},
-          async connect() { throw new Error('nope'); },
+          async connect() {
+            throw new Error('nope');
+          },
         };
       },
     });
@@ -64,7 +89,7 @@ describe('redis config more coverage', () => {
     resetRedisState();
     await assert.rejects(
       () => initRedis({ url: 'redis://x', importRedis, logger, require: true }),
-      /nope/,
+      /nope/
     );
   });
 
@@ -77,8 +102,13 @@ describe('redis config more coverage', () => {
         if (key.endsWith('throw')) throw new Error('getfail');
         return JSON.stringify({ ok: true });
       },
-      async set(...args) { calls.push(['set', ...args]); },
-      async del(...args) { calls.push(['del', ...args]); throw new Error('delfail'); },
+      async set(...args) {
+        calls.push(['set', ...args]);
+      },
+      async del(...args) {
+        calls.push(['del', ...args]);
+        throw new Error('delfail');
+      },
     };
     const mirror = createRedisMirror(client, { prefix: 'p:', ttlMs: 10 });
 
@@ -112,7 +142,9 @@ describe('redis config more coverage', () => {
     }
 
     const client = {
-      scanIterator: async function* () { yield* scanIterator(); },
+      scanIterator: async function* () {
+        yield* scanIterator();
+      },
       del: async (keys) => {
         delCalls.push(Array.isArray(keys) ? keys.length : 1);
       },

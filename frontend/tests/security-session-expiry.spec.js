@@ -53,7 +53,7 @@ test('Session expiry prompts re-authentication and retries the pending save', as
   await page.screenshot({ path: screenshotPath('security-step-4-form') });
 
   const calcResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/calculate') && resp.status() === 200,
+    (resp) => resp.url().includes('/api/bazi/calculate') && resp.status() === 200
   );
   await page.getByRole('button', { name: /Calculate|开始排盘/ }).click();
   await calcResponse;
@@ -99,7 +99,7 @@ test('Session expiry prompts re-authentication and retries the pending save', as
   await expect(saveButton).toBeEnabled();
   await saveButton.scrollIntoViewIfNeeded();
   const saveResponsePromise = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/records') && resp.request().method() === 'POST',
+    (resp) => resp.url().includes('/api/bazi/records') && resp.request().method() === 'POST'
   );
   await saveButton.click({ force: true });
   const saveResponseAttempt = await saveResponsePromise.catch(() => null);
@@ -108,7 +108,9 @@ test('Session expiry prompts re-authentication and retries the pending save', as
   }
   await expect(page).toHaveURL(/\/login\?reason=session_expired/);
   await expect(
-    page.getByText(/Your session expired\. Please sign in again to continue\.|登录已过期，请重新登录以继续操作。/)
+    page.getByText(
+      /Your session expired\. Please sign in again to continue\.|登录已过期，请重新登录以继续操作。/
+    )
   ).toBeVisible();
   await page.screenshot({ path: screenshotPath('security-step-7-session-expired') });
 
@@ -116,7 +118,7 @@ test('Session expiry prompts re-authentication and retries the pending save', as
     (resp) =>
       resp.url().includes('/api/bazi/records') &&
       resp.request().method() === 'POST' &&
-      resp.status() === 200,
+      resp.status() === 200
   );
   await page.fill('input[type="email"]', 'test@example.com');
   await page.fill('input[type="password"]', 'password123');
@@ -130,17 +132,19 @@ test('Session expiry prompts re-authentication and retries the pending save', as
     (resp) =>
       resp.url().includes('/api/favorites') &&
       resp.request().method() === 'POST' &&
-      resp.status() === 200,
+      resp.status() === 200
   );
   await page.getByRole('button', { name: /Add to Favorites|加入收藏/ }).click();
   await favoriteResponse;
-  await expect(page.getByText(/Favorite saved\. View it in Favorites\.|收藏成功，可在收藏页查看。/)).toBeVisible();
+  await expect(
+    page.getByText(/Favorite saved\. View it in Favorites\.|收藏成功，可在收藏页查看。/)
+  ).toBeVisible();
   await page.screenshot({ path: screenshotPath('security-step-9-favorited') });
 
   await page.goto('/history');
   await expect(page.getByRole('heading', { name: /^(History|历史)$/ })).toBeVisible();
   const historyFilterResponse = page.waitForResponse(
-    (resp) => resp.url().includes('/api/bazi/records') && resp.url().includes('q='),
+    (resp) => resp.url().includes('/api/bazi/records') && resp.url().includes('q=')
   );
   await page.getByPlaceholder('Location, timezone, pillar').fill(uniqueLocation);
   await historyFilterResponse;

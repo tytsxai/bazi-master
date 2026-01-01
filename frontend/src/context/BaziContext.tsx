@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { ReactNode, createContext, useContext, useMemo, useState } from 'react';
 
 export interface BaziResult {
@@ -20,17 +21,16 @@ export function BaziProvider({ children }: { children: ReactNode }) {
 
   const clearBaziResult = () => setBaziResult(null);
 
-  const value = useMemo(() => ({
-    baziResult,
-    setBaziResult,
-    clearBaziResult,
-  }), [baziResult]);
-
-  return (
-    <BaziContext.Provider value={value}>
-      {children}
-    </BaziContext.Provider>
+  const value = useMemo(
+    () => ({
+      baziResult,
+      setBaziResult,
+      clearBaziResult,
+    }),
+    [baziResult]
   );
+
+  return <BaziContext.Provider value={value}>{children}</BaziContext.Provider>;
 }
 
 export function useBaziContext() {

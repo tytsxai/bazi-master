@@ -6,7 +6,9 @@ const buildScreenshotPath = (name) => {
   return path.join(process.cwd(), 'verification', `${stamp}-${name}.png`);
 };
 
-test('[J] Data cleanup: I Ching time divination from /history matches backend data', async ({ page }) => {
+test('[J] Data cleanup: I Ching time divination from /history matches backend data', async ({
+  page,
+}) => {
   test.setTimeout(60_000);
   const consoleErrors = [];
 
@@ -35,13 +37,16 @@ test('[J] Data cleanup: I Ching time divination from /history matches backend da
   }
   expect(loginResponse.ok()).toBeTruthy();
   const loginData = await loginResponse.json();
-  await page.evaluate(({ token, user }) => {
-    localStorage.setItem('bazi_token', token);
-    localStorage.setItem('bazi_token_origin', 'backend');
-    localStorage.setItem('bazi_user', JSON.stringify(user));
-    localStorage.setItem('bazi_last_activity', String(Date.now()));
-    localStorage.removeItem('bazi_session_expired');
-  }, { token: loginData.token, user: loginData.user });
+  await page.evaluate(
+    ({ token, user }) => {
+      localStorage.setItem('bazi_token', token);
+      localStorage.setItem('bazi_token_origin', 'backend');
+      localStorage.setItem('bazi_user', JSON.stringify(user));
+      localStorage.setItem('bazi_last_activity', String(Date.now()));
+      localStorage.removeItem('bazi_session_expired');
+    },
+    { token: loginData.token, user: loginData.user }
+  );
 
   await page.goto('/history');
   await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();

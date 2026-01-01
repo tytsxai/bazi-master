@@ -61,9 +61,11 @@ test('Security: Ziwei V2 quick chart from /profile matches backend data', async 
   await expect(page).toHaveURL(/\/profile/, { timeout: 15000 });
   await page.screenshot({ path: buildScreenshotPath('security-ziwei-profile-step-1') });
 
-  await expect.poll(async () => page.evaluate(() => localStorage.getItem('bazi_token')), {
-    timeout: 5000,
-  }).toBeTruthy();
+  await expect
+    .poll(async () => page.evaluate(() => localStorage.getItem('bazi_token')), {
+      timeout: 5000,
+    })
+    .toBeTruthy();
 
   const recordPayload = {
     birthYear: 1991,
@@ -102,7 +104,7 @@ test('Security: Ziwei V2 quick chart from /profile matches backend data', async 
 
   const resultCard = page.getByTestId('profile-ziwei-result');
   await expect(page.getByTestId('profile-ziwei-status')).toContainText(
-    /Zi Wei chart generated|已根据你最近的八字记录生成紫微命盘/,
+    /Zi Wei chart generated|已根据你最近的八字记录生成紫微命盘/
   );
   await expect(resultCard).toContainText(buildLunarText(data.lunar));
   await expect(resultCard).toContainText(buildPalaceText('命宫', data.mingPalace));

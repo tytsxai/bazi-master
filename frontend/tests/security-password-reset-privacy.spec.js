@@ -6,7 +6,10 @@ const buildScreenshotPath = (name) => {
   return path.join(process.cwd(), '..', 'verification', `${stamp}-${name}.png`);
 };
 
-test('Security: password reset request does not reveal whether email exists', async ({ page, request }) => {
+test('Security: password reset request does not reveal whether email exists', async ({
+  page,
+  request,
+}) => {
   const consoleErrors = [];
   const email = `reset-privacy-${Date.now()}@example.com`;
   const password = 'Password123';
@@ -33,7 +36,9 @@ test('Security: password reset request does not reveal whether email exists', as
 
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
-  await page.screenshot({ path: buildScreenshotPath('security-password-reset-privacy-step-1-login') });
+  await page.screenshot({
+    path: buildScreenshotPath('security-password-reset-privacy-step-1-login'),
+  });
 
   await page.getByRole('button', { name: /forgot password/i }).click();
   await expect(page.getByRole('heading', { name: /reset password/i })).toBeVisible();
@@ -47,7 +52,9 @@ test('Security: password reset request does not reveal whether email exists', as
   const firstMessage = (await statusMessage.textContent())?.trim();
   expect(firstMessage).toMatch(/if an account exists/i);
 
-  await page.screenshot({ path: buildScreenshotPath('security-password-reset-privacy-step-2-existing') });
+  await page.screenshot({
+    path: buildScreenshotPath('security-password-reset-privacy-step-2-existing'),
+  });
 
   const unknownEmail = `unknown-${Date.now()}@example.com`;
   await resetEmail.fill(unknownEmail);
@@ -57,6 +64,8 @@ test('Security: password reset request does not reveal whether email exists', as
   const secondMessage = (await statusMessage.textContent())?.trim();
   expect(secondMessage).toBe(firstMessage);
 
-  await page.screenshot({ path: buildScreenshotPath('security-password-reset-privacy-step-3-unknown') });
+  await page.screenshot({
+    path: buildScreenshotPath('security-password-reset-privacy-step-3-unknown'),
+  });
   expect(consoleErrors).toEqual([]);
 });

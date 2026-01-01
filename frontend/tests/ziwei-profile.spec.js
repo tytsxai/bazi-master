@@ -34,8 +34,8 @@ test('Profile can trigger Zi Wei (V2) quick chart and render backend data', asyn
   await page.reload();
   await expect(page.getByText('Zi Wei (V2) quick chart')).toBeVisible();
 
-  const ziweiResponsePromise = page.waitForResponse((resp) =>
-    resp.url().includes('/api/ziwei/calculate') && resp.request().method() === 'POST'
+  const ziweiResponsePromise = page.waitForResponse(
+    (resp) => resp.url().includes('/api/ziwei/calculate') && resp.request().method() === 'POST'
   );
 
   await page.getByRole('button', { name: 'Generate Zi Wei Chart' }).click();

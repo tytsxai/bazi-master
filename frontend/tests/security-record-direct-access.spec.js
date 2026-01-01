@@ -80,7 +80,9 @@ test('Security: direct URL access to another user record is blocked', async ({ p
   const uniqueLocation = `ACCESS_RECORD_${now}`;
 
   await registerUser(page, userA);
-  await page.screenshot({ path: screenshotPath('security-record-access-step-1-registered-user-a') });
+  await page.screenshot({
+    path: screenshotPath('security-record-access-step-1-registered-user-a'),
+  });
 
   await createBaziRecord(page, uniqueLocation);
   await page.screenshot({ path: screenshotPath('security-record-access-step-2-bazi-saved') });
@@ -99,7 +101,9 @@ test('Security: direct URL access to another user record is blocked', async ({ p
   await page.screenshot({ path: screenshotPath('security-record-access-step-4-logout') });
 
   await registerUser(page, userB);
-  await page.screenshot({ path: screenshotPath('security-record-access-step-5-registered-user-b') });
+  await page.screenshot({
+    path: screenshotPath('security-record-access-step-5-registered-user-b'),
+  });
 
   await page.goto(`/history/${recordId}`);
   await expect(page.getByText('Record not found.', { exact: true })).toBeVisible();

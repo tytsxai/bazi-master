@@ -1,10 +1,15 @@
 # 运维监控指南
 
+> 版本: v0.1.3-dev | 更新: 2025-12-30
+>
+> 说明：当前项目未内置 Prometheus 指标或分布式追踪导出。本指南为推荐指标与工具栈，需要自行接入（如 prom-client / OpenTelemetry）。
+
 ## 监控指标体系
 
 ### 应用性能指标 (APM)
 
 #### HTTP请求指标
+
 ```
 请求量 (RPM - Requests per Minute)
 ├── 总请求数: rate(http_requests_total[5m])
@@ -23,6 +28,7 @@
 ```
 
 #### 业务指标
+
 ```
 用户活跃度
 ├── 每日活跃用户 (DAU)
@@ -39,6 +45,7 @@
 ### 基础设施指标
 
 #### 系统资源
+
 ```
 CPU使用率
 ├── 用户态: rate(cpu_usage_seconds_total{mode="user"}[5m])
@@ -57,6 +64,7 @@ CPU使用率
 ```
 
 #### 网络指标
+
 ```
 连接数
 ├── 活跃连接: net_conntrack_dialer_conn_established
@@ -72,6 +80,7 @@ CPU使用率
 ### 数据库指标
 
 #### PostgreSQL监控
+
 ```
 连接池状态
 ├── 活跃连接: pg_stat_activity_count{state="active"}
@@ -92,6 +101,7 @@ CPU使用率
 ```
 
 #### Redis监控
+
 ```
 内存使用
 ├── 已用内存: redis_memory_used_bytes
@@ -113,6 +123,7 @@ CPU使用率
 ### AI服务指标
 
 #### 请求统计
+
 ```
 并发控制
 ├── 活跃AI请求: ai_requests_in_flight
@@ -133,6 +144,7 @@ CPU使用率
 ## 监控工具栈
 
 ### 指标收集
+
 ```
 Prometheus (时序数据库)
 ├── Node.js应用: prom-client库
@@ -142,6 +154,7 @@ Prometheus (时序数据库)
 ```
 
 ### 可视化
+
 ```
 Grafana仪表板
 ├── 应用性能面板
@@ -151,6 +164,7 @@ Grafana仪表板
 ```
 
 ### 日志聚合
+
 ```
 ELK Stack
 ├── Elasticsearch: 日志存储
@@ -160,6 +174,7 @@ ELK Stack
 ```
 
 ### 分布式追踪
+
 ```
 Jaeger/OpenTelemetry
 ├── 请求追踪
@@ -171,6 +186,7 @@ Jaeger/OpenTelemetry
 ## 告警规则
 
 ### 严重告警 (P0 - 立即响应)
+
 ```
 🚨 服务不可用
 ├── 条件: up{job="bazi-master"} == 0 for 1m
@@ -190,6 +206,7 @@ Jaeger/OpenTelemetry
 ```
 
 ### 重要告警 (P1 - 1小时内响应)
+
 ```
 ⚠️ 响应时间变慢
 ├── 条件: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2.0
@@ -205,6 +222,7 @@ Jaeger/OpenTelemetry
 ```
 
 ### 一般告警 (P2 - 工作时间内响应)
+
 ```
 📢 缓存命中率降低
 ├── 条件: redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total) < 0.8
@@ -218,6 +236,7 @@ Jaeger/OpenTelemetry
 ## 容量规划
 
 ### 资源规划
+
 ```
 CPU规划
 ├── 当前使用率: 60%
@@ -236,6 +255,7 @@ CPU规划
 ```
 
 ### 自动扩展规则
+
 ```
 水平扩展触发条件
 ├── CPU使用率 > 70% for 10m
@@ -252,6 +272,7 @@ CPU规划
 ## 备份策略
 
 ### 数据库备份
+
 ```
 全量备份
 ├── 频率: 每日凌晨2:00
@@ -267,6 +288,7 @@ CPU规划
 ```
 
 ### 应用备份
+
 ```
 配置文件备份
 ├── 频率: 每次部署
@@ -281,6 +303,7 @@ CPU规划
 ```
 
 ### 备份验证
+
 ```
 自动化测试
 ├── 每日恢复测试
@@ -292,6 +315,7 @@ CPU规划
 ## 部署验证
 
 ### 冒烟测试 (Smoke Tests)
+
 ```bash
 # 部署后立即执行
 ✅ 健康检查通过: curl -f https://api.domain.com/health
@@ -302,6 +326,7 @@ CPU规划
 ```
 
 ### 功能测试
+
 ```bash
 # 核心功能验证
 ✅ 用户注册: 创建测试用户
@@ -312,6 +337,7 @@ CPU规划
 ```
 
 ### 性能测试
+
 ```bash
 # 负载测试
 ✅ 并发请求: ab -n 1000 -c 10 https://api.domain.com/api/health
@@ -321,6 +347,7 @@ CPU规划
 ```
 
 ### 回滚计划
+
 ```
 快速回滚
 ├── 蓝绿部署: 切换到上一版本
@@ -336,6 +363,7 @@ CPU规划
 ## 故障排查清单
 
 ### 服务启动失败
+
 ```
 1. 检查环境变量配置
 2. 验证数据库连接
@@ -345,6 +373,7 @@ CPU规划
 ```
 
 ### 高CPU使用率
+
 ```
 1. 分析线程堆栈 (kill -3 PID)
 2. 检查内存泄漏
@@ -354,6 +383,7 @@ CPU规划
 ```
 
 ### 数据库连接问题
+
 ```
 1. 检查连接池配置
 2. 验证网络连接
@@ -363,6 +393,7 @@ CPU规划
 ```
 
 ### 缓存性能问题
+
 ```
 1. 检查Redis内存使用
 2. 分析缓存命中率
@@ -370,5 +401,3 @@ CPU规划
 4. 调整TTL策略
 5. 考虑集群扩展
 ```
-
-

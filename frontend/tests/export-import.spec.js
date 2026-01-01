@@ -37,10 +37,7 @@ test('History export/import flow', async ({ page }, testInfo) => {
   await expect(page.getByText(uniqueLocation)).toBeVisible({ timeout: 20000 });
 
   const exportButton = page.getByRole('button', { name: 'Export filtered' });
-  const [download] = await Promise.all([
-    page.waitForEvent('download'),
-    exportButton.click(),
-  ]);
+  const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()]);
   const downloadPath = testInfo.outputPath(`history-export-${timestamp}.json`);
   await download.saveAs(downloadPath);
   await expect(page.getByText('History exported.')).toBeVisible();

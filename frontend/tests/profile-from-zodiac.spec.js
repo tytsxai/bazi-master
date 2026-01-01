@@ -52,9 +52,8 @@ test('Profile flow from zodiac matches backend data', async ({ page, request }) 
   const settings = settingsData?.settings || {};
   const preferences = settings?.preferences || {};
 
-  const expectedProfileName = typeof preferences.profileName === 'string'
-    ? preferences.profileName.trim()
-    : '';
+  const expectedProfileName =
+    typeof preferences.profileName === 'string' ? preferences.profileName.trim() : '';
   await expect(page.getByLabel('Display name (optional)')).toHaveValue(expectedProfileName);
 
   const localeValue = await page.getByLabel('Locale').inputValue();
@@ -68,7 +67,16 @@ test('Profile flow from zodiac matches backend data', async ({ page, request }) 
   const expectedRitual = preferences.ritualReminders ?? false;
   const expectedResearch = preferences.researchUpdates ?? true;
 
-  await expect(page.getByRole('checkbox', { name: 'Daily guidance' })).toHaveJSProperty('checked', expectedDaily);
-  await expect(page.getByRole('checkbox', { name: 'Ritual reminders' })).toHaveJSProperty('checked', expectedRitual);
-  await expect(page.getByRole('checkbox', { name: 'Research updates' })).toHaveJSProperty('checked', expectedResearch);
+  await expect(page.getByRole('checkbox', { name: 'Daily guidance' })).toHaveJSProperty(
+    'checked',
+    expectedDaily
+  );
+  await expect(page.getByRole('checkbox', { name: 'Ritual reminders' })).toHaveJSProperty(
+    'checked',
+    expectedRitual
+  );
+  await expect(page.getByRole('checkbox', { name: 'Research updates' })).toHaveJSProperty(
+    'checked',
+    expectedResearch
+  );
 });

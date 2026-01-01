@@ -10,12 +10,12 @@ export default {
         lg: '1024px',
         xl: '1280px',
         '2xl': '1536px',
-        '3xl': '1760px'
-      }
+        '3xl': '1760px',
+      },
     },
     extend: {
       screens: {
-        '3xl': '1920px'
+        '3xl': '1920px',
       },
       colors: {
         mystic: {
@@ -24,7 +24,7 @@ export default {
           800: '#1a0f34',
           700: '#2d1b4e',
           600: '#3b2465',
-          500: '#4b2f7a'
+          500: '#4b2f7a',
         },
         gold: {
           500: '#d4af37',
@@ -32,17 +32,17 @@ export default {
           300: '#edcf73',
           200: '#f5e2a6',
           100: '#fbf4d4',
-          50: '#fdfbe9'
-        }
+          50: '#fdfbe9',
+        },
       },
       fontFamily: {
         serif: ['"Noto Serif SC"', '"Times New Roman"', 'serif'],
-        display: ['Cinzel', '"Times New Roman"', 'serif']
+        display: ['Cinzel', '"Times New Roman"', 'serif'],
       },
       boxShadow: {
-        glass: '0 0 0 1px rgba(212,175,55,0.2), 0 20px 60px rgba(0,0,0,0.45)'
-      }
-    }
+        glass: '0 0 0 1px rgba(212,175,55,0.2), 0 20px 60px rgba(0,0,0,0.45)',
+      },
+    },
   },
-  plugins: []
+  plugins: [],
 };

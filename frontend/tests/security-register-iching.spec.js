@@ -2,7 +2,10 @@ import { test, expect } from './fixtures.js';
 
 const screenshotPath = (name) => `verification/security-register-iching-${name}.png`;
 
-test('Register flow from I Ching redirects back and matches backend user data', async ({ page, request }) => {
+test('Register flow from I Ching redirects back and matches backend user data', async ({
+  page,
+  request,
+}) => {
   const testId = `iching_register_${Date.now()}`;
   const name = `IChing User ${testId}`;
   const email = `${testId}@example.com`;

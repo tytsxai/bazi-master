@@ -77,7 +77,9 @@ test('[J] Data cleanup: Bazi full analysis from /iching matches backend data', a
   const fullRequest = await fullRequestPromise;
   const fullResponse = await fullRequest.response();
   if (!fullResponse) {
-    throw new Error(`Full analysis request failed: ${fullRequest.failure()?.errorText || 'no response'}`);
+    throw new Error(
+      `Full analysis request failed: ${fullRequest.failure()?.errorText || 'no response'}`
+    );
   }
   expect(fullResponse.ok()).toBeTruthy();
   const fullData = await fullResponse.json();

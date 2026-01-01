@@ -66,6 +66,27 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
           },
         },
       },
+      AliveCheck: {
+        type: 'object',
+        properties: {
+          service: {
+            type: 'string',
+            description: '服务名称',
+          },
+          status: {
+            type: 'string',
+            enum: ['alive'],
+          },
+          timestamp: {
+            type: 'string',
+            format: 'date-time',
+          },
+          uptime: {
+            type: 'number',
+            description: '运行时间（秒）',
+          },
+        },
+      },
       BaziRecord: {
         type: 'object',
         properties: {
@@ -190,7 +211,60 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
     },
   },
   paths: {
+    '/live': {
+      get: {
+        summary: '存活检查',
+        responses: {
+          200: {
+            description: '进程存活',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AliveCheck' },
+              },
+            },
+          },
+        },
+      },
+    },
     '/health': {
+      get: {
+        summary: '健康检查',
+        responses: {
+          200: {
+            description: '服务正常',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/HealthCheck' },
+              },
+            },
+          },
+          503: {
+            description: '服务不可用',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/HealthCheck' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/live': {
+      get: {
+        summary: '存活检查',
+        responses: {
+          200: {
+            description: '进程存活',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AliveCheck' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/health': {
       get: {
         summary: '健康检查',
         responses: {
@@ -622,7 +696,9 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
         responses: {
           200: {
             description: '状态信息',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/AdminHealth' } } },
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/AdminHealth' } },
+            },
           },
           403: { description: '权限不足' },
         },
@@ -648,7 +724,9 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/IchingRecord' } } },
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/IchingRecord' } },
+          },
         },
         responses: {
           200: { description: '保存成功' },

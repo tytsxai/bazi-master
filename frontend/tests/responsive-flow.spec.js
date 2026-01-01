@@ -54,7 +54,10 @@ test('Responsive layout verification across desktop/tablet/mobile in one run', a
   await page.getByRole('button', { name: /Sign In/i }).click();
   await expect(page).toHaveURL(/\/profile/, { timeout: 20000 });
   await expect(page.getByTestId('header-user-name')).toContainText('Test');
-  await page.screenshot({ path: 'verification/responsive-flow-01-profile-desktop.png', fullPage: true });
+  await page.screenshot({
+    path: 'verification/responsive-flow-01-profile-desktop.png',
+    fullPage: true,
+  });
 
   await openNavItem(/BaZi|Bazi/i, '/bazi');
   await page.getByLabel('Birth Year').fill('1993');
@@ -82,9 +85,10 @@ test('Responsive layout verification across desktop/tablet/mobile in one run', a
   const saveButton = page.getByRole('button', { name: /Save to History|保存到历史/i });
   await expect(saveButton).toBeEnabled({ timeout: 20000 });
   await Promise.all([
-    page.waitForResponse((res) => res.url().includes('/api/bazi/records')
-      && res.request().method() === 'POST'
-      && res.ok()),
+    page.waitForResponse(
+      (res) =>
+        res.url().includes('/api/bazi/records') && res.request().method() === 'POST' && res.ok()
+    ),
     saveButton.click(),
   ]);
 
@@ -92,19 +96,31 @@ test('Responsive layout verification across desktop/tablet/mobile in one run', a
     page.waitForResponse((res) => res.url().includes('/api/favorites') && res.ok()),
     page.getByRole('button', { name: /Add to Favorites|加入收藏/i }).click(),
   ]);
-  await page.screenshot({ path: 'verification/responsive-flow-02-bazi-desktop.png', fullPage: true });
+  await page.screenshot({
+    path: 'verification/responsive-flow-02-bazi-desktop.png',
+    fullPage: true,
+  });
 
   await page.setViewportSize({ width: 834, height: 1112 });
   await page.goto('/history');
   await expect(page.getByText(location)).toBeVisible({ timeout: 20000 });
-  await page.screenshot({ path: 'verification/responsive-flow-03-history-tablet.png', fullPage: true });
+  await page.screenshot({
+    path: 'verification/responsive-flow-03-history-tablet.png',
+    fullPage: true,
+  });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/favorites');
   await expect(page.getByText(location)).toBeVisible({ timeout: 20000 });
-  await page.screenshot({ path: 'verification/responsive-flow-04-favorites-mobile.png', fullPage: true });
+  await page.screenshot({
+    path: 'verification/responsive-flow-04-favorites-mobile.png',
+    fullPage: true,
+  });
 
   await clickLogout();
   await ensureLoginVisible();
-  await page.screenshot({ path: 'verification/responsive-flow-05-logout-mobile.png', fullPage: true });
+  await page.screenshot({
+    path: 'verification/responsive-flow-05-logout-mobile.png',
+    fullPage: true,
+  });
 });

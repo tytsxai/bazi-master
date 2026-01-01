@@ -3,8 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const authState = {
-  token: null,
   isAuthenticated: false,
+  isAuthResolved: true,
   login: vi.fn(),
   logout: vi.fn(),
 };
@@ -14,10 +14,11 @@ vi.mock('../../auth/AuthContext', () => ({
 }));
 
 vi.mock('../../auth/useAuthFetch', () => ({
-  useAuthFetch: () => vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve({}),
-  }),
+  useAuthFetch: () =>
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    }),
 }));
 
 vi.mock('../../utils/aiProvider', () => ({
@@ -44,8 +45,8 @@ const renderWithRouter = (component) => {
 describe('Ziwei', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authState.token = null;
     authState.isAuthenticated = false;
+    authState.isAuthResolved = true;
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ records: [] }),
@@ -107,7 +108,8 @@ describe('Ziwei', () => {
 describe('Ziwei - Form Validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authState.token = 'test-token';
+    authState.isAuthenticated = true;
+    authState.isAuthResolved = true;
     authState.isAuthenticated = true;
     global.fetch.mockResolvedValue({
       ok: true,

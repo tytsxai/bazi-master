@@ -24,10 +24,11 @@ export default function HistoryItem({
     <div
       data-testid="history-record-card"
       data-record-id={record.id}
-      className={`rounded-2xl border p-4 ${highlightRecordId === record.id
-        ? 'border-gold-400/60 bg-gold-500/10'
-        : 'border-white/10 bg-white/5'
-        }`}
+      className={`rounded-2xl border p-4 ${
+        highlightRecordId === record.id
+          ? 'border-gold-400/60 bg-gold-500/10'
+          : 'border-white/10 bg-white/5'
+      }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
@@ -77,18 +78,24 @@ export default function HistoryItem({
       <div className="mt-3 grid gap-3 text-xs text-white/70 sm:grid-cols-2">
         <div>
           <p className="text-white/50">{t('history.yearPillar')}</p>
-          <p>{record.pillars.year.stem} · {record.pillars.year.branch}</p>
+          <p>
+            {record.pillars.year.stem} · {record.pillars.year.branch}
+          </p>
         </div>
         <div>
           <p className="text-white/50">{t('history.dayPillar')}</p>
-          <p>{record.pillars.day.stem} · {record.pillars.day.branch}</p>
+          <p>
+            {record.pillars.day.stem} · {record.pillars.day.branch}
+          </p>
         </div>
       </div>
       {isEditing && editDraft && (
         <div className="mt-4 rounded-2xl border border-white/10 bg-black/40 p-4 text-xs text-white/70">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1">
-              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.birthYear')}</span>
+              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">
+                {t('bazi.birthYear')}
+              </span>
               <input
                 type="number"
                 min="1"
@@ -102,7 +109,9 @@ export default function HistoryItem({
               )}
             </label>
             <label className="grid gap-1">
-              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.birthMonth')}</span>
+              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">
+                {t('bazi.birthMonth')}
+              </span>
               <input
                 type="number"
                 min="1"
@@ -116,7 +125,9 @@ export default function HistoryItem({
               )}
             </label>
             <label className="grid gap-1">
-              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.birthDay')}</span>
+              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">
+                {t('bazi.birthDay')}
+              </span>
               <input
                 type="number"
                 min="1"
@@ -130,7 +141,9 @@ export default function HistoryItem({
               )}
             </label>
             <label className="grid gap-1">
-              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.birthHour')}</span>
+              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">
+                {t('bazi.birthHour')}
+              </span>
               <input
                 type="number"
                 min="0"
@@ -144,7 +157,9 @@ export default function HistoryItem({
               )}
             </label>
             <label className="grid gap-1">
-              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.gender')}</span>
+              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">
+                {t('bazi.gender')}
+              </span>
               <select
                 value={editDraft.gender}
                 onChange={(event) => onUpdateEditDraft('gender', event.target.value)}
@@ -159,7 +174,9 @@ export default function HistoryItem({
               )}
             </label>
             <label className="grid gap-1">
-              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.birthLocation')}</span>
+              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">
+                {t('bazi.birthLocation')}
+              </span>
               <input
                 type="text"
                 value={editDraft.birthLocation}
@@ -171,7 +188,9 @@ export default function HistoryItem({
               )}
             </label>
             <label className="grid gap-1">
-              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">{t('bazi.timezone')}</span>
+              <span className="text-[0.65rem] uppercase tracking-[0.18em] text-white/50">
+                {t('bazi.timezone')}
+              </span>
               <input
                 type="text"
                 value={editDraft.timezone}

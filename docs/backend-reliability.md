@@ -1,8 +1,11 @@
 # 后端可靠性分析
 
+> 版本: v0.1.3-dev | 更新: 2025-12-30
+
 ## AI并发守卫机制
 
 ### 实现原理
+
 ```javascript
 // lib/concurrency.js
 export const createAiGuard = (initial = new Set()) => {
@@ -12,20 +15,28 @@ export const createAiGuard = (initial = new Set()) => {
       if (!userId) return () => {};
       if (inFlight.has(userId)) return null; // 阻止并发
       inFlight.add(userId);
-      return () => { inFlight.delete(userId); }; // 释放锁
+      return () => {
+        inFlight.delete(userId);
+      }; // 释放锁
     },
-    has(userId) { return userId ? inFlight.has(userId) : false; },
-    size() { return inFlight.size; },
+    has(userId) {
+      return userId ? inFlight.has(userId) : false;
+    },
+    size() {
+      return inFlight.size;
+    },
   };
 };
 ```
 
 ### 应用场景
+
 - **八字AI解读**: `/api/bazi/ai-interpret`
 - **塔罗AI解读**: `/api/tarot/ai-interpret`
 - **周易AI解读**: `/api/iching/ai-interpret`
 
 ### 并发控制策略
+
 ```
 用户级别限制: 每个用户同时只能有1个AI请求进行中
 超时控制: AI请求有合理的超时时间
@@ -36,41 +47,50 @@ export const createAiGuard = (initial = new Set()) => {
 
 ### 检查类型
 
-#### 1. 存活检查 (`/health`)
+#### 1. 健康检查 (`/health`, `/api/health`)
+
 ```json
 {
-  "status": "ok",
   "service": "bazi-master-backend",
+  "status": "ok|degraded",
+  "checks": {
+    "db": { "ok": true },
+    "redis": { "ok": true | false, "status": "disabled|unavailable" }
+  },
   "timestamp": "2024-12-26T10:00:00.000Z",
   "uptime": 3600.5
 }
 ```
-- **用途**: Kubernetes存活探针，检查服务是否运行
-- **频率**: 每30秒检查一次
-- **失败标准**: 3次连续失败触发重启
+
+- **用途**: 综合健康探测（包含 DB/Redis 依赖）；可用于负载均衡/探针
+- **补充**: 现已提供 `GET /live` 作为“纯存活”端点（不依赖 DB/Redis）
 
 #### 2. 就绪检查 (`/api/ready`)
+
 ```json
 {
+  "service": "bazi-master-backend",
   "status": "ready|not_ready",
   "checks": {
     "db": { "ok": true },
-    "redis": { "ok": true }
+    "redis": { "ok": true | false, "status": "disabled|unavailable" }
   },
   "timestamp": "2024-12-26T10:00:00.000Z"
 }
 ```
+
 - **用途**: 负载均衡器健康检查，决定是否路由流量
 - **检查项目**:
   - PostgreSQL连接性 (1.5秒超时)
   - Redis连接性 (1秒超时，允许未配置)
-- **生产模式**: Redis必须可用，否则not_ready
+- **生产模式**: Redis 在启动阶段必须可用；不可用时服务会退出并拒绝启动
 
 ### 超时配置
+
 ```
 数据库检查: 1500ms
 Redis检查: 1000ms
-总检查超时: 3000ms (Promise.race实现)
+总检查超时: 无单独总超时（分别对 DB/Redis 施加超时）
 ```
 
 ## 故障演练脚本
@@ -78,15 +98,16 @@ Redis检查: 1000ms
 ### 测试场景覆盖
 
 #### 1. Redis故障演练
+
 ```bash
 # 停止Redis → 检查服务降级 → 重启Redis → 验证恢复
-✅ 服务降级到内存会话存储
-✅ API仍可响应，但会话不持久化
-✅ 健康检查标记为degraded
-✅ 就绪检查保持ready（设计选择）
+✅ 若 Redis 未配置：健康检查显示 `disabled`，服务使用内存会话/缓存/OAuth state/密码重置（仅适合单实例）
+✅ 若 Redis 已配置但不可用：健康检查 `degraded`，就绪检查 `not_ready`
+✅ 生产模式下启动阶段 Redis 不可用会直接退出
 ```
 
 #### 2. 数据库故障演练
+
 ```bash
 # 停止PostgreSQL → 检查服务状态 → 重启数据库 → 验证恢复
 ✅ 健康检查标记为degraded
@@ -96,14 +117,16 @@ Redis检查: 1000ms
 ```
 
 #### 3. AI并发控制测试
+
 ```bash
 # 模拟多个用户同时请求AI服务
 ✅ 单用户并发请求被阻止
-✅ 返回友好错误信息: "AI request already in progress"
+✅ 返回友好错误信息: "AI request already in progress. Please wait."
 ✅ 防止资源浪费和API滥用
 ```
 
 #### 4. 高负载测试
+
 ```bash
 # 发送50个并发健康检查请求
 ✅ 服务保持响应
@@ -114,14 +137,16 @@ Redis检查: 1000ms
 ### 故障恢复路径
 
 #### Redis故障恢复
+
 ```
-1. Redis重启 → 连接自动恢复
+1. Redis重启 → 连接尝试自动恢复
 2. 现有内存会话保持可用
-3. 新会话使用Redis存储
-4. 无需重启应用服务
+3. Redis恢复后会话镜像继续写入
+4. 启动阶段若 Redis 不可用（生产）会直接退出，需要先恢复 Redis 再启动服务
 ```
 
 #### 数据库故障恢复
+
 ```
 1. PostgreSQL重启 → 连接池自动重建
 2. 未完成的数据库事务安全回滚
@@ -132,6 +157,7 @@ Redis检查: 1000ms
 ## 监控指标
 
 ### 应用层指标
+
 ```
 - HTTP请求率 (per second)
 - 响应时间分布 (p50/p95/p99)
@@ -140,6 +166,7 @@ Redis检查: 1000ms
 ```
 
 ### 数据库指标
+
 ```
 - 连接池使用率 (active/idle/total)
 - 慢查询数量 (>100ms)
@@ -148,6 +175,7 @@ Redis检查: 1000ms
 ```
 
 ### Redis指标
+
 ```
 - 内存使用率
 - 连接数
@@ -156,6 +184,7 @@ Redis检查: 1000ms
 ```
 
 ### AI服务指标
+
 ```
 - 并发请求队列长度
 - AI提供商响应时间
@@ -166,6 +195,7 @@ Redis检查: 1000ms
 ## 告警配置
 
 ### 严重级别告警
+
 ```
 🚨 服务不可用 (ready检查失败)
 🚨 数据库连接池耗尽 (>90%使用率)
@@ -174,6 +204,7 @@ Redis检查: 1000ms
 ```
 
 ### 警告级别告警
+
 ```
 ⚠️ 响应时间变慢 (p95 > 500ms)
 ⚠️ 错误率升高 (5xx > 1%)
@@ -184,6 +215,7 @@ Redis检查: 1000ms
 ## 容量规划
 
 ### 当前基准性能
+
 ```
 - 健康检查: < 50ms
 - 八字计算: < 200ms
@@ -192,6 +224,7 @@ Redis检查: 1000ms
 ```
 
 ### 扩展策略
+
 ```
 水平扩展: 多实例 + 负载均衡
 垂直扩展: 增加CPU/内存
@@ -202,6 +235,7 @@ Redis检查: 1000ms
 ## 备份与恢复
 
 ### 数据备份策略
+
 ```
 每日全量备份: PostgreSQL pg_dump
 实时增量备份: WAL归档
@@ -210,6 +244,7 @@ Redis检查: 1000ms
 ```
 
 ### 灾难恢复
+
 ```
 RTO (Recovery Time Objective): 1小时
 RPO (Recovery Point Objective): 15分钟
@@ -219,6 +254,7 @@ RPO (Recovery Point Objective): 15分钟
 ## 安全加固
 
 ### 运行时安全
+
 ```
 - 非root用户运行
 - 最小权限原则
@@ -227,11 +263,10 @@ RPO (Recovery Point Objective): 15分钟
 ```
 
 ### 监控安全
+
 ```
 - 告警通知加密
 - 日志脱敏处理
 - 访问控制 (监控面板认证)
 - 审计日志保留
 ```
-
-

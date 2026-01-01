@@ -74,10 +74,7 @@ describe('Zodiac controller coverage', () => {
     assert.equal(resBadSign.body.error, 'Unknown zodiac sign.');
 
     const resBadPeriod = createRes();
-    getZodiacHoroscope(
-      { params: { sign: 'aries' }, query: { period: 'yearly' } },
-      resBadPeriod
-    );
+    getZodiacHoroscope({ params: { sign: 'aries' }, query: { period: 'yearly' } }, resBadPeriod);
     assert.equal(resBadPeriod.statusCode, 400);
     assert.equal(resBadPeriod.body.error, 'Unknown horoscope period.');
   });

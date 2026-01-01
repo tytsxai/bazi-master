@@ -37,6 +37,16 @@ router.get('/health', async (req, res) => {
   });
 });
 
+// Liveness Check (process-only)
+router.get('/live', (req, res) => {
+  res.status(200).json({
+    service: SERVICE_NAME,
+    status: 'alive',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
 // Readiness Check
 router.get('/ready', async (req, res) => {
   const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);

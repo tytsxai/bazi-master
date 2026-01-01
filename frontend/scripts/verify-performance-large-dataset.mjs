@@ -148,7 +148,9 @@ try {
   await page.getByLabel('Timezone').fill(birthData.timezone);
   await shot(page, 'step-6-bazi-filled');
 
-  const calcResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/bazi/calculate'));
+  const calcResponsePromise = page.waitForResponse((resp) =>
+    resp.url().includes('/api/bazi/calculate')
+  );
   await page.getByRole('button', { name: 'Calculate' }).click();
   const calcResponse = await calcResponsePromise;
   if (calcResponse.status() !== 200) {
@@ -163,7 +165,9 @@ try {
   await expect(page.getByRole('heading', { name: 'Major Luck Cycles' })).toBeVisible();
   await shot(page, 'step-8-full-analysis');
 
-  const saveResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/bazi/records'));
+  const saveResponsePromise = page.waitForResponse((resp) =>
+    resp.url().includes('/api/bazi/records')
+  );
   await page.getByRole('button', { name: 'Save to History' }).click();
   const saveResponse = await saveResponsePromise;
   if (saveResponse.status() !== 200) {
@@ -184,10 +188,11 @@ try {
 
   const searchInput = page.getByPlaceholder('Location, timezone, pillar');
   const searchStart = Date.now();
-  const searchResponsePromise = page.waitForResponse((resp) =>
-    resp.url().includes('/api/bazi/records') &&
-    resp.url().includes(`q=${encodeURIComponent(flowLocation)}`) &&
-    resp.status() === 200
+  const searchResponsePromise = page.waitForResponse(
+    (resp) =>
+      resp.url().includes('/api/bazi/records') &&
+      resp.url().includes(`q=${encodeURIComponent(flowLocation)}`) &&
+      resp.status() === 200
   );
   await searchInput.fill(flowLocation);
   await searchResponsePromise;
@@ -197,8 +202,13 @@ try {
   }
   await expect(page.getByText(flowLocation)).toBeVisible();
 
-  const recordCard = page.getByTestId('history-record-card').filter({ hasText: flowLocation }).first();
-  await expect(recordCard).toContainText(`${birthData.birthYear}-${birthData.birthMonth}-${birthData.birthDay}`);
+  const recordCard = page
+    .getByTestId('history-record-card')
+    .filter({ hasText: flowLocation })
+    .first();
+  await expect(recordCard).toContainText(
+    `${birthData.birthYear}-${birthData.birthMonth}-${birthData.birthDay}`
+  );
   await expect(recordCard).toContainText(birthData.gender);
   await expect(recordCard).toContainText('UTC');
   await shot(page, 'step-11-history-search');

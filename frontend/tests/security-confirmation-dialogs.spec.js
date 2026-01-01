@@ -42,7 +42,10 @@ test('Sensitive actions require confirmation (delete, AI request)', async ({ pag
   await page.getByTestId('bazi-ai-interpret').click();
   const aiDialog = page.getByRole('dialog', { name: 'Request AI interpretation?' });
   await expect(aiDialog).toBeVisible();
-  await page.screenshot({ path: 'verification/security-confirmation-01-ai-dialog.png', fullPage: true });
+  await page.screenshot({
+    path: 'verification/security-confirmation-01-ai-dialog.png',
+    fullPage: true,
+  });
 
   await aiDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(aiDialog).toHaveCount(0);
@@ -51,7 +54,10 @@ test('Sensitive actions require confirmation (delete, AI request)', async ({ pag
   const aiDialogAgain = page.getByRole('dialog', { name: 'Request AI interpretation?' });
   await aiDialogAgain.getByRole('button', { name: 'Request AI' }).click();
   await expect(page.getByText('AI BaZi Analysis')).toBeVisible();
-  await page.screenshot({ path: 'verification/security-confirmation-02-ai-requested.png', fullPage: true });
+  await page.screenshot({
+    path: 'verification/security-confirmation-02-ai-requested.png',
+    fullPage: true,
+  });
 
   await Promise.all([
     page.waitForResponse((res) => res.url().includes('/api/bazi/records') && res.ok()),
@@ -68,7 +74,10 @@ test('Sensitive actions require confirmation (delete, AI request)', async ({ pag
   await recordCard.getByRole('button', { name: 'Delete' }).click();
   const deleteDialog = page.getByRole('dialog');
   await expect(deleteDialog).toBeVisible();
-  await page.screenshot({ path: 'verification/security-confirmation-03-delete-dialog.png', fullPage: true });
+  await page.screenshot({
+    path: 'verification/security-confirmation-03-delete-dialog.png',
+    fullPage: true,
+  });
 
   await deleteDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(recordCard).toBeVisible({ timeout: 20000 });
@@ -79,6 +88,11 @@ test('Sensitive actions require confirmation (delete, AI request)', async ({ pag
   );
   await deleteDialog.getByRole('button', { name: 'Delete' }).click();
   await deleteResponse;
-  await expect(page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })).toHaveCount(0);
-  await page.screenshot({ path: 'verification/security-confirmation-04-deleted.png', fullPage: true });
+  await expect(
+    page.getByTestId('history-record-card').filter({ hasText: uniqueLocation })
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: 'verification/security-confirmation-04-deleted.png',
+    fullPage: true,
+  });
 });

@@ -18,11 +18,9 @@ const normalizeSecret = (secret) => (typeof secret === 'string' ? secret.trim() 
 const FALLBACK_TOKEN_SECRET = crypto.randomBytes(32).toString('hex');
 const resolveTokenSecret = (secret) => normalizeSecret(secret) || FALLBACK_TOKEN_SECRET;
 
-const buildSignatureBase = ({ issuedAt, payload }) =>
-  `${issuedAt}.${payload}`;
+const buildSignatureBase = ({ issuedAt, payload }) => `${issuedAt}.${payload}`;
 
-const buildLegacySignatureBase = ({ userId, issuedAt, nonce }) =>
-  `${userId}.${issuedAt}.${nonce}`;
+const buildLegacySignatureBase = ({ userId, issuedAt, nonce }) => `${userId}.${issuedAt}.${nonce}`;
 
 const buildTokenSignature = (secret, payload) => {
   if (!secret) return null;
@@ -51,7 +49,7 @@ const encryptTokenPayload = (secret, payload) => {
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const ciphertext = Buffer.concat([
     cipher.update(JSON.stringify(payload), 'utf8'),
-    cipher.final()
+    cipher.final(),
   ]);
   const tag = cipher.getAuthTag();
   return encodePayload(Buffer.concat([iv, tag, ciphertext]));
@@ -90,7 +88,7 @@ export const buildAuthToken = ({
   userId,
   issuedAt = Date.now(),
   nonce = crypto.randomBytes(TOKEN_NONCE_BYTES).toString('hex'),
-  secret = ''
+  secret = '',
 }) => {
   if (!Number.isFinite(userId)) return null;
   const resolvedSecret = resolveTokenSecret(secret);
@@ -140,7 +138,7 @@ export const parseAuthToken = (token, { secret = '' } = {}) => {
       issuedAt,
       nonce: decrypted.nonce ?? null,
       signature,
-      payload
+      payload,
     };
   }
   return null;
@@ -153,7 +151,7 @@ export const createAuthorizeToken = ({
   tokenTtlMs = DEFAULT_TOKEN_TTL_MS,
   sessionIdleMs = DEFAULT_SESSION_IDLE_MS,
   now = () => Date.now(),
-  tokenSecret = ''
+  tokenSecret = '',
 }) => {
   const resolvedSecret = resolveTokenSecret(tokenSecret);
   return async (token) => {
@@ -165,14 +163,14 @@ export const createAuthorizeToken = ({
     }
     const expected = parsed.payload
       ? buildTokenSignature(resolvedSecret, {
-        issuedAt: parsed.issuedAt,
-        payload: parsed.payload,
-      })
+          issuedAt: parsed.issuedAt,
+          payload: parsed.payload,
+        })
       : buildLegacyTokenSignature(resolvedSecret, {
-        userId: parsed.userId,
-        issuedAt: parsed.issuedAt,
-        nonce: parsed.nonce,
-      });
+          userId: parsed.userId,
+          issuedAt: parsed.issuedAt,
+          nonce: parsed.nonce,
+        });
     if (!expected || !safeEqual(expected, parsed.signature)) {
       throw new Error('Invalid token');
     }
@@ -201,7 +199,7 @@ export const createAuthorizeToken = ({
       id: user.id,
       email: user.email,
       name: user.name,
-      isAdmin: isAdminUser(user)
+      isAdmin: isAdminUser(user),
     };
   };
 };
@@ -209,7 +207,9 @@ export const createAuthorizeToken = ({
 export const createRequireAuth = ({ authorizeToken, allowSessionExpiredSilent = true }) => {
   return async (req, res, next) => {
     const auth = req.headers.authorization || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const headerToken = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const cookieToken = req.cookies?.bazi_session || null;
+    const token = headerToken || cookieToken;
     const silentExpired =
       allowSessionExpiredSilent && req.headers['x-session-expired-silent'] === '1';
     try {

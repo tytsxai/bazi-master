@@ -24,7 +24,11 @@ export const checkDatabase = async ({ prismaClient = prisma, timeoutMs = 1500 } 
   }
 };
 
-export const checkRedis = async ({ initRedisFn = initRedis, env = process.env, timeoutMs = 1000 } = {}) => {
+export const checkRedis = async ({
+  initRedisFn = initRedis,
+  env = process.env,
+  timeoutMs = 1000,
+} = {}) => {
   const configured = Boolean(env.REDIS_URL);
   const client = await initRedisFn();
   if (!client) {

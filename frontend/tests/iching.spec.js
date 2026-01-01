@@ -11,7 +11,10 @@ test('I Ching divination flow with AI interpretation and history save', async ({
   const uniqueQuestion = `E2E_ICHING_${Date.now()}`;
   const runId = Date.now();
   const snap = async (label) => {
-    await page.screenshot({ path: `../verification/iching-flow-${runId}-${label}.png`, fullPage: true });
+    await page.screenshot({
+      path: `../verification/iching-flow-${runId}-${label}.png`,
+      fullPage: true,
+    });
   };
 
   await page.addInitScript(() => {
@@ -65,7 +68,9 @@ test('I Ching divination flow with AI interpretation and history save', async ({
 
   await page.getByRole('button', { name: 'Reveal AI Interpretation' }).click();
   await page.getByRole('button', { name: /Open AI|Request AI/ }).click();
-  await expect(page.getByRole('heading', { name: 'Oracle Reflection' })).toBeVisible({ timeout: 60000 });
+  await expect(page.getByRole('heading', { name: 'Oracle Reflection' })).toBeVisible({
+    timeout: 60000,
+  });
   await snap('05-ai');
 
   await page.getByRole('button', { name: 'Save to History' }).click();
@@ -77,11 +82,19 @@ test('I Ching divination flow with AI interpretation and history save', async ({
   await expect(page.getByText(uniqueQuestion)).toBeVisible();
   await snap('07-refresh-history');
 
-  const historySection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'History' }) });
-  const historyCard = historySection.locator('div.rounded-2xl').filter({ hasText: uniqueQuestion }).first();
+  const historySection = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'History' }) });
+  const historyCard = historySection
+    .locator('div.rounded-2xl')
+    .filter({ hasText: uniqueQuestion })
+    .first();
   await historyCard.scrollIntoViewIfNeeded();
   await historyCard.getByRole('button', { name: /Remove/i }).click();
-  await page.getByRole('dialog').getByRole('button', { name: /Remove/i }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: /Remove/i })
+    .click();
   await expect(page.getByText(uniqueQuestion)).toHaveCount(0);
   await snap('08-deleted');
 

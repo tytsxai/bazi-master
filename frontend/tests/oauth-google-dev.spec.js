@@ -13,10 +13,14 @@ const resolvePort = (value) => {
 };
 
 const backendPort = resolvePort(process.env.E2E_API_PORT) ?? resolvePort(process.env.BACKEND_PORT);
-const apiBase = process.env.PW_API_BASE
-  || (backendPort ? `http://127.0.0.1:${backendPort}` : 'http://127.0.0.1:4000');
+const apiBase =
+  process.env.PW_API_BASE ||
+  (backendPort ? `http://127.0.0.1:${backendPort}` : 'http://127.0.0.1:4000');
 
-test('Auth: Google OAuth dev flow redirects to profile and saves settings', async ({ page, request }) => {
+test('Auth: Google OAuth dev flow redirects to profile and saves settings', async ({
+  page,
+  request,
+}) => {
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));

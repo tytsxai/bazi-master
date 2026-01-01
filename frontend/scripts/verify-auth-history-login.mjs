@@ -129,12 +129,16 @@ try {
     throw new Error(`History fetch failed: ${historyRes.status} ${await historyRes.text()}`);
   }
   const historyData = await historyRes.json();
-  const backendRecord = (historyData.records || []).find((record) => record.id === createdRecord.id);
+  const backendRecord = (historyData.records || []).find(
+    (record) => record.id === createdRecord.id
+  );
   if (!backendRecord) {
     throw new Error('Created record not found in backend history.');
   }
 
-  const card = page.locator(`[data-testid="history-record-card"][data-record-id="${backendRecord.id}"]`);
+  const card = page.locator(
+    `[data-testid="history-record-card"][data-record-id="${backendRecord.id}"]`
+  );
   await expect(card).toBeVisible();
   await expect(card).toContainText(
     `${backendRecord.birthYear}-${backendRecord.birthMonth}-${backendRecord.birthDay} · ${backendRecord.birthHour}:00`

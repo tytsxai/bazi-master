@@ -1,5 +1,4 @@
 import { logger } from '../config/logger.js';
-
 export const createSessionStore = ({ ttlMs = null } = {}) => {
   const store = new Map();
   let mirror = null;

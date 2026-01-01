@@ -20,94 +20,97 @@ export default defineConfig(({ mode }) => {
     base: process.env.VITE_CDN_URL || '/',
     plugins: [
       react(),
-      isAnalyze && visualizer({
-        open: true,
-        filename: 'dist/stats.html',
-        gzipSize: true,
-        brotliSize: true,
-      }),
-      !isTest && VitePWA({
-        registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
-        manifest: {
-          name: 'BaZi Master',
-          short_name: 'BaZi',
-          description: 'Ancient Wisdom, Modern Insight. Professional BaZi, I-Ching, and Tarot Readings.',
-          theme_color: '#0f172a',
-          background_color: '#0f172a',
-          display: 'standalone',
-          icons: [
-            {
-              src: 'pwa-192x192.png',
-              sizes: '192x192',
-              type: 'image/png'
-            },
-            {
-              src: 'pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png'
-            },
-            {
-              src: 'pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any maskable'
-            }
-          ]
-        },
-        workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'google-fonts-cache',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365 // < 1 year
+      isAnalyze &&
+        visualizer({
+          open: true,
+          filename: 'dist/stats.html',
+          gzipSize: true,
+          brotliSize: true,
+        }),
+      !isTest &&
+        VitePWA({
+          registerType: 'autoUpdate',
+          includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
+          manifest: {
+            name: 'BaZi Master',
+            short_name: 'BaZi',
+            description:
+              'Ancient Wisdom, Modern Insight. Professional BaZi, I-Ching, and Tarot Readings.',
+            theme_color: '#0f172a',
+            background_color: '#0f172a',
+            display: 'standalone',
+            icons: [
+              {
+                src: 'pwa-192x192.png',
+                sizes: '192x192',
+                type: 'image/png',
+              },
+              {
+                src: 'pwa-512x512.png',
+                sizes: '512x512',
+                type: 'image/png',
+              },
+              {
+                src: 'pwa-512x512.png',
+                sizes: '512x512',
+                type: 'image/png',
+                purpose: 'any maskable',
+              },
+            ],
+          },
+          workbox: {
+            globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+            runtimeCaching: [
+              {
+                urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'google-fonts-cache',
+                  expiration: {
+                    maxEntries: 10,
+                    maxAgeSeconds: 60 * 60 * 24 * 365, // < 1 year
+                  },
+                  cacheableResponse: {
+                    statuses: [0, 200],
+                  },
                 },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            },
-            {
-              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'gstatic-fonts-cache',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365 // < 1 year
+              },
+              {
+                urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'gstatic-fonts-cache',
+                  expiration: {
+                    maxEntries: 10,
+                    maxAgeSeconds: 60 * 60 * 24 * 365, // < 1 year
+                  },
+                  cacheableResponse: {
+                    statuses: [0, 200],
+                  },
                 },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            },
-            {
-              urlPattern: /\/api\/.*\/history.*/i,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'api-history-cache',
-                expiration: {
-                  maxEntries: 50,
-                  maxAgeSeconds: 60 * 60 * 24 // 24 hours
+              },
+              {
+                urlPattern: /\/api\/.*\/history.*/i,
+                handler: 'NetworkFirst',
+                options: {
+                  cacheName: 'api-history-cache',
+                  expiration: {
+                    maxEntries: 50,
+                    maxAgeSeconds: 60 * 60 * 24, // 24 hours
+                  },
+                  networkTimeoutSeconds: 5,
                 },
-                networkTimeoutSeconds: 5
-              }
-            },
-            {
-              urlPattern: /\/api\/ai\/providers/i,
-              handler: 'StaleWhileRevalidate',
-              options: {
-                cacheName: 'api-ai-providers-cache'
-              }
-            }
-          ]
-        }
-      })
+              },
+              {
+                urlPattern: /\/api\/ai\/providers/i,
+                handler: 'StaleWhileRevalidate',
+                options: {
+                  cacheName: 'api-ai-providers-cache',
+                },
+              },
+            ],
+          },
+        }),
     ],
     test: {
       globals: true,
@@ -156,26 +159,26 @@ export default defineConfig(({ mode }) => {
     },
     server: isTest
       ? {
-        middlewareMode: true,
-        hmr: false,
-        ws: false,
-        watch: null,
-      }
+          middlewareMode: true,
+          hmr: false,
+          ws: false,
+          watch: null,
+        }
       : {
-        port: 3000,
-        host: '127.0.0.1',
-        hmr: true,
-        proxy: {
-          '/api': {
-            target: 'http://127.0.0.1:' + backendPort,
-            changeOrigin: true,
-          },
-          '/ws': {
-            target: 'http://127.0.0.1:' + backendPort,
-            changeOrigin: true,
-            ws: true,
+          port: 3000,
+          host: '127.0.0.1',
+          hmr: true,
+          proxy: {
+            '/api': {
+              target: 'http://127.0.0.1:' + backendPort,
+              changeOrigin: true,
+            },
+            '/ws': {
+              target: 'http://127.0.0.1:' + backendPort,
+              changeOrigin: true,
+              ws: true,
+            },
           },
         },
-      },
   };
 });

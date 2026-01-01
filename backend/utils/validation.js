@@ -19,7 +19,7 @@ export const sanitizeNextPath = (value) => {
   if (typeof value !== 'string') return '/profile';
   const trimmed = value.trim();
   if (!trimmed || !trimmed.startsWith('/')) return '/profile';
-  // Basic security check - prevent redirect to external domains
+  if (trimmed.startsWith('//')) return '/profile';
   if (trimmed.includes('://')) return '/profile';
   return trimmed;
 };
@@ -28,7 +28,11 @@ export const isLocalUrl = (value) => {
   if (!value || typeof value !== 'string') return false;
   try {
     const url = new URL(value);
-    return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname.startsWith('127.0.0.');
+    return (
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      url.hostname.startsWith('127.0.0.')
+    );
   } catch {
     return false;
   }
@@ -41,9 +45,7 @@ export const isValidCalendarDate = (year, month, day) => {
   if (month < 1 || month > 12 || day < 1 || day > 31) return false;
   const date = new Date(Date.UTC(year, month - 1, day));
   return (
-    date.getUTCFullYear() === year
-    && date.getUTCMonth() === month - 1
-    && date.getUTCDate() === day
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   );
 };
 
@@ -54,27 +56,35 @@ export const validateBaziInput = (raw) => {
   const birthHour = Number(raw?.birthHour);
   const genderRaw = raw?.gender;
   const gender = typeof genderRaw === 'string' ? genderRaw.trim() : '';
-  if (isWhitespaceOnly(genderRaw) || isWhitespaceOnly(raw?.birthLocation) || isWhitespaceOnly(raw?.timezone)) {
+  if (
+    isWhitespaceOnly(genderRaw) ||
+    isWhitespaceOnly(raw?.birthLocation) ||
+    isWhitespaceOnly(raw?.timezone)
+  ) {
     return { ok: false, payload: null, reason: 'whitespace' };
   }
-  const birthLocation = typeof raw?.birthLocation === 'string' ? raw.birthLocation.trim() : raw?.birthLocation;
+  const birthLocation =
+    typeof raw?.birthLocation === 'string' ? raw.birthLocation.trim() : raw?.birthLocation;
   const timezone = typeof raw?.timezone === 'string' ? raw.timezone.trim() : raw?.timezone;
+  if (birthLocation === '' || timezone === '') {
+    return { ok: false, payload: null, reason: 'whitespace' };
+  }
 
   if (
-    !Number.isInteger(birthYear)
-    || birthYear < 1
-    || birthYear > 9999
-    || !Number.isInteger(birthMonth)
-    || birthMonth < 1
-    || birthMonth > 12
-    || !Number.isInteger(birthDay)
-    || birthDay < 1
-    || birthDay > 31
-    || !Number.isInteger(birthHour)
-    || birthHour < 0
-    || birthHour > 23
-    || !gender
-    || !isValidCalendarDate(birthYear, birthMonth, birthDay)
+    !Number.isInteger(birthYear) ||
+    birthYear < 1 ||
+    birthYear > 9999 ||
+    !Number.isInteger(birthMonth) ||
+    birthMonth < 1 ||
+    birthMonth > 12 ||
+    !Number.isInteger(birthDay) ||
+    birthDay < 1 ||
+    birthDay > 31 ||
+    !Number.isInteger(birthHour) ||
+    birthHour < 0 ||
+    birthHour > 23 ||
+    !gender ||
+    !isValidCalendarDate(birthYear, birthMonth, birthDay)
   ) {
     return { ok: false, payload: null, reason: 'invalid' };
   }
@@ -93,6 +103,3 @@ export const validateBaziInput = (raw) => {
     },
   };
 };
-
-
-

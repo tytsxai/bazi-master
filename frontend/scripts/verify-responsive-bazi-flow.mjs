@@ -68,7 +68,9 @@ const logout = async (page) => {
 
 const runViewportFlow = async (viewport) => {
   const consoleErrors = [];
-  const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height } });
+  const context = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+  });
   await context.addInitScript(() => {
     localStorage.setItem('locale', 'en-US');
   });
@@ -132,7 +134,9 @@ const runViewportFlow = async (viewport) => {
     await page.getByLabel('Timezone').fill(birthData.timezone);
     await shot(page, `responsive-${viewport.label}-step-6-bazi-filled`);
 
-    const calcResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/bazi/calculate'));
+    const calcResponsePromise = page.waitForResponse((resp) =>
+      resp.url().includes('/api/bazi/calculate')
+    );
     await page.getByRole('button', { name: 'Calculate' }).click();
     const calcResponse = await calcResponsePromise;
     if (!calcResponse.ok()) {
@@ -154,7 +158,9 @@ const runViewportFlow = async (viewport) => {
     await expect(page.getByRole('heading', { name: 'Major Luck Cycles' })).toBeVisible();
     await shot(page, `responsive-${viewport.label}-step-10-full-analysis-sections`);
 
-    const saveResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/bazi/records'));
+    const saveResponsePromise = page.waitForResponse((resp) =>
+      resp.url().includes('/api/bazi/records')
+    );
     await page.getByRole('button', { name: 'Save to History' }).click();
     const saveResponse = await saveResponsePromise;
     if (!saveResponse.ok()) {
@@ -162,7 +168,9 @@ const runViewportFlow = async (viewport) => {
     }
     await shot(page, `responsive-${viewport.label}-step-11-saved`);
 
-    const favResponsePromise = page.waitForResponse((resp) => resp.url().includes('/api/favorites'));
+    const favResponsePromise = page.waitForResponse((resp) =>
+      resp.url().includes('/api/favorites')
+    );
     await page.getByRole('button', { name: 'Add to Favorites' }).click();
     const favResponse = await favResponsePromise;
     if (!favResponse.ok()) {
@@ -171,7 +179,9 @@ const runViewportFlow = async (viewport) => {
     await shot(page, `responsive-${viewport.label}-step-12-favorited`);
 
     await page.goto(`${baseUrl}history`, { waitUntil: 'networkidle' });
-    const recordCard = page.getByTestId('history-record-card').filter({ hasText: birthData.birthLocation });
+    const recordCard = page
+      .getByTestId('history-record-card')
+      .filter({ hasText: birthData.birthLocation });
     await expect(recordCard).toBeVisible();
     await expect(recordCard).toContainText(
       `${birthData.birthYear}-${birthData.birthMonth}-${birthData.birthDay} · ${birthData.birthHour}:00`

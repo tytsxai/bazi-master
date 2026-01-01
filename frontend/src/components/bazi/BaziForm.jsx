@@ -281,9 +281,7 @@ export default function BaziForm({
           {t('nav.history')}
         </button>
       </div>
-      {favoriteStatus && (
-        <p className="mt-3 text-xs text-white/60">{t('bazi.favoriteReady')}</p>
-      )}
+      {favoriteStatus && <p className="mt-3 text-xs text-white/60">{t('bazi.favoriteReady')}</p>}
     </div>
   );
 }

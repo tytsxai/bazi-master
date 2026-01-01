@@ -6,7 +6,10 @@ const buildScreenshotPath = (name) => {
   return path.join(process.cwd(), '..', 'verification', `${stamp}-${name}.png`);
 };
 
-test('Security: /api/tarot/ai-interpret rejects unauthenticated requests with 401', async ({ page, request }) => {
+test('Security: /api/tarot/ai-interpret rejects unauthenticated requests with 401', async ({
+  page,
+  request,
+}) => {
   const consoleErrors = [];
 
   page.on('pageerror', (error) => consoleErrors.push(error.message));
@@ -24,7 +27,9 @@ test('Security: /api/tarot/ai-interpret rejects unauthenticated requests with 40
 
   await page.goto('/tarot', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Tarot Sanctuary' })).toBeVisible();
-  await page.screenshot({ path: buildScreenshotPath('security-tarot-ai-interpret-unauth-step-1-tarot') });
+  await page.screenshot({
+    path: buildScreenshotPath('security-tarot-ai-interpret-unauth-step-1-tarot'),
+  });
 
   const response = await request.post('/api/tarot/ai-interpret', {
     data: {
@@ -46,6 +51,8 @@ test('Security: /api/tarot/ai-interpret rejects unauthenticated requests with 40
   const body = await response.json().catch(() => ({}));
   expect(body && typeof body).toBe('object');
 
-  await page.screenshot({ path: buildScreenshotPath('security-tarot-ai-interpret-unauth-step-2-response') });
+  await page.screenshot({
+    path: buildScreenshotPath('security-tarot-ai-interpret-unauth-step-2-response'),
+  });
   expect(consoleErrors).toEqual([]);
 });

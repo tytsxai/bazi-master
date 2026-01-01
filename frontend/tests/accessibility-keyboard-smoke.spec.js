@@ -110,7 +110,9 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
 
   const calculateButton = page.getByRole('button', { name: 'Calculate' });
   const [calculateResponse] = await Promise.all([
-    page.waitForResponse((res) => res.url().includes('/api/bazi/calculate') && res.request().method() === 'POST'),
+    page.waitForResponse(
+      (res) => res.url().includes('/api/bazi/calculate') && res.request().method() === 'POST'
+    ),
     (async () => {
       await calculateButton.focus();
       await calculateButton.press('Enter');
@@ -171,7 +173,9 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
 
   const saveButton = page.getByTestId('bazi-save-record');
   const [saveResponse] = await Promise.all([
-    page.waitForResponse((res) => res.url().includes('/api/bazi/records') && res.request().method() === 'POST'),
+    page.waitForResponse(
+      (res) => res.url().includes('/api/bazi/records') && res.request().method() === 'POST'
+    ),
     (async () => {
       await saveButton.focus();
       await page.keyboard.press('Enter');
@@ -187,7 +191,9 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
   const favoriteButton = page.getByRole('button', { name: 'Add to Favorites' });
   await expect(favoriteButton).toBeEnabled({ timeout: 20000 });
   const [favoriteResponse] = await Promise.all([
-    page.waitForResponse((res) => res.url().includes('/api/favorites') && res.request().method() === 'POST'),
+    page.waitForResponse(
+      (res) => res.url().includes('/api/favorites') && res.request().method() === 'POST'
+    ),
     (async () => {
       await favoriteButton.focus();
       await page.keyboard.press('Enter');
@@ -229,7 +235,9 @@ test('Accessibility smoke flow with keyboard-only navigation', async ({ page }) 
   await expect(favoriteRecord).toContainText(uniqueLocation);
   await page.screenshot({ path: screenshotPath('step-13-favorites-record') });
 
-  const favoriteRemoveButton = favoriteRecord.getByRole('button', { name: /Remove|Add to favorites/i });
+  const favoriteRemoveButton = favoriteRecord.getByRole('button', {
+    name: /Remove|Add to favorites/i,
+  });
   await favoriteRemoveButton.focus();
   await page.keyboard.press('Enter');
   await page.screenshot({ path: screenshotPath('step-14-favorite-removed') });

@@ -1,6 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { buildAuthToken } from '../services/auth.service.js';
 import { cleanupUserInMemory, deleteUserCascade } from '../userCleanup.js';
+import { logger } from '../config/logger.js';
 import { createSessionStore } from '../services/session.service.js';
 
 const prisma = new PrismaClient();
@@ -127,14 +128,15 @@ try {
 
   await deleteUserCascade({ prisma, userId: user.id, cleanupUserMemory });
 
-  const [usersCount, baziCount, favCount, tarotCount, ichingCount, settingsCount] = await Promise.all([
-    prisma.user.count({ where: { id: user.id } }),
-    prisma.baziRecord.count({ where: { userId: user.id } }),
-    prisma.favorite.count({ where: { userId: user.id } }),
-    prisma.tarotRecord.count({ where: { userId: user.id } }),
-    prisma.ichingRecord.count({ where: { userId: user.id } }),
-    prisma.userSettings.count({ where: { userId: user.id } }),
-  ]);
+  const [usersCount, baziCount, favCount, tarotCount, ichingCount, settingsCount] =
+    await Promise.all([
+      prisma.user.count({ where: { id: user.id } }),
+      prisma.baziRecord.count({ where: { userId: user.id } }),
+      prisma.favorite.count({ where: { userId: user.id } }),
+      prisma.tarotRecord.count({ where: { userId: user.id } }),
+      prisma.ichingRecord.count({ where: { userId: user.id } }),
+      prisma.userSettings.count({ where: { userId: user.id } }),
+    ]);
 
   assertCount('user', usersCount);
   assertCount('baziRecord', baziCount);
@@ -163,7 +165,7 @@ try {
     throw new Error('Client record index still present after cleanup');
   }
 
-  console.log('User deletion cascade verified.');
+  logger.info('User deletion cascade verified.');
 } finally {
   await prisma.$disconnect();
 }

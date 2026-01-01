@@ -25,15 +25,14 @@ export const buildBaziCacheKey = (data) => {
   const birthMonth = coerceInt(data.birthMonth);
   const birthDay = coerceInt(data.birthDay);
   const birthHour = coerceInt(data.birthHour);
-  const gender =
-    typeof data.gender === 'string' ? data.gender.trim().toLowerCase() : null;
+  const gender = typeof data.gender === 'string' ? data.gender.trim().toLowerCase() : null;
 
   if (
-    birthYear === null
-    || birthMonth === null
-    || birthDay === null
-    || birthHour === null
-    || !gender
+    birthYear === null ||
+    birthMonth === null ||
+    birthDay === null ||
+    birthHour === null ||
+    !gender
   ) {
     return null;
   }
@@ -89,9 +88,7 @@ const pruneBaziCache = () => {
 const setLocalEntry = (key, value) => {
   const normalized = normalizeBaziResult(value);
   const { ttlMs } = getCacheConfig();
-  const expiresAt = Number.isFinite(ttlMs) && ttlMs > 0
-    ? Date.now() + ttlMs
-    : null;
+  const expiresAt = Number.isFinite(ttlMs) && ttlMs > 0 ? Date.now() + ttlMs : null;
   if (baziCalculationCache.has(key)) {
     baziCalculationCache.delete(key);
   }

@@ -45,9 +45,11 @@ test('Flow integrity: BaZi AI interpretation matches backend data', async ({ pag
   const aiResultLocator = page.getByTestId('bazi-ai-result');
   await expect(aiResultLocator).toBeVisible();
   await expect(page.getByText('AI interpretation ready.')).toBeVisible({ timeout: 15000 });
-  await expect.poll(async () => normalizeText(await aiResultLocator.innerText()), {
-    timeout: 15000,
-  }).not.toBe('Consulting the oracle...');
+  await expect
+    .poll(async () => normalizeText(await aiResultLocator.innerText()), {
+      timeout: 15000,
+    })
+    .not.toBe('Consulting the oracle...');
 
   const uiText = normalizeText(await aiResultLocator.innerText());
   expect(uiText.length).toBeGreaterThan(0);

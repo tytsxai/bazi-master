@@ -8,10 +8,14 @@ export const PRISMA_URL_USES_DATABASE_URL_ENV = PRISMA_DATASOURCE.urlUsesDatabas
 export const initPrismaConfig = () => {
   const IS_SQLITE = PRISMA_PROVIDER
     ? PRISMA_PROVIDER === 'sqlite'
-    : (!process.env.DATABASE_URL || process.env.DATABASE_URL.startsWith('file:') || process.env.DATABASE_URL.includes('sqlite'));
+    : !process.env.DATABASE_URL ||
+      process.env.DATABASE_URL.startsWith('file:') ||
+      process.env.DATABASE_URL.includes('sqlite');
   const IS_POSTGRES = PRISMA_PROVIDER
     ? PRISMA_PROVIDER === 'postgresql' || PRISMA_PROVIDER === 'postgres'
-    : (process.env.DATABASE_URL && (process.env.DATABASE_URL.startsWith('postgresql://') || process.env.DATABASE_URL.startsWith('postgres://')));
+    : process.env.DATABASE_URL &&
+      (process.env.DATABASE_URL.startsWith('postgresql://') ||
+        process.env.DATABASE_URL.startsWith('postgres://'));
   const STRIP_SEARCH_MODE = IS_SQLITE;
 
   return {
@@ -22,6 +26,3 @@ export const initPrismaConfig = () => {
 };
 
 export const prisma = new PrismaClient();
-
-
-

@@ -26,7 +26,10 @@ try {
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.getByRole('heading', { name: 'Welcome Back' })).toBeVisible();
-  await page.screenshot({ path: path.join(outDir, `${stamp}-auth-guard-login.png`), fullPage: true });
+  await page.screenshot({
+    path: path.join(outDir, `${stamp}-auth-guard-login.png`),
+    fullPage: true,
+  });
 
   if (consoleErrors.length) {
     throw new Error(`Console errors detected: ${consoleErrors.join(' | ')}`);

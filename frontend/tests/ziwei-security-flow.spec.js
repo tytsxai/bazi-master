@@ -9,7 +9,9 @@ const buildLunarText = (lunar) => {
 const buildPalaceText = (label, palace) =>
   `${label}: ${palace?.palace?.cn || palace?.palace?.name || ''} · ${palace?.branch?.name || ''}`;
 
-test('Ziwei V2 flow from /zodiac uses protected access and matches backend data', async ({ page }) => {
+test('Ziwei V2 flow from /zodiac uses protected access and matches backend data', async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     localStorage.setItem('locale', 'en-US');
     localStorage.removeItem('bazi_token');

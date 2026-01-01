@@ -1,5 +1,4 @@
 import { logger } from './config/logger.js';
-
 export const deleteBaziRecordHard = async ({ prisma, userId, recordId } = {}) => {
   if (!prisma || !userId || !recordId) {
     throw new Error('Missing prisma, userId, or recordId for deleteBaziRecordHard');
@@ -15,7 +14,7 @@ export const deleteBaziRecordHard = async ({ prisma, userId, recordId } = {}) =>
       DELETE FROM BaziRecordTrash WHERE userId = ${userId} AND recordId = ${recordId}
     `;
   } catch (error) {
-    logger.warn({ err: error }, 'Failed to clear BaziRecordTrash for hard delete');
+    logger.warn('Failed to clear BaziRecordTrash for hard delete:', error?.message || error);
   }
 
   return {

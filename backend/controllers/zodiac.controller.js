@@ -5,7 +5,7 @@ import {
   calculateRisingSign,
   formatDateLabel,
   getWeekRange,
-  sanitizeQueryParam
+  sanitizeQueryParam,
 } from '../services/zodiac.service.js';
 
 const getSignPayload = (signKey) => {
@@ -46,7 +46,7 @@ export const getZodiacCompatibility = (req, res) => {
   return res.json({
     ...compatibility,
     primary: getSignPayload(primaryKey),
-    secondary: getSignPayload(secondaryKey)
+    secondary: getSignPayload(secondaryKey),
   });
 };
 
@@ -78,7 +78,8 @@ export const postZodiacRising = (req, res) => {
     birthMinute <= 59;
 
   const offsetMinutes = Number(timezoneOffsetMinutes);
-  const offsetValid = Number.isFinite(offsetMinutes) && offsetMinutes >= -840 && offsetMinutes <= 840;
+  const offsetValid =
+    Number.isFinite(offsetMinutes) && offsetMinutes >= -840 && offsetMinutes <= 840;
 
   const lat = Number(latitude);
   const lon = Number(longitude);
@@ -102,7 +103,7 @@ export const postZodiacRising = (req, res) => {
     birthMinute,
     latitude: lat,
     longitude: lon,
-    timezoneOffsetMinutes: offsetMinutes
+    timezoneOffsetMinutes: offsetMinutes,
   });
 
   const risingPayload = getSignPayload(result.signKey);
@@ -115,9 +116,9 @@ export const postZodiacRising = (req, res) => {
       value: risingPayload.value,
       key: risingPayload.key,
       name: risingPayload.name,
-      dateRange: risingPayload.dateRange
+      dateRange: risingPayload.dateRange,
     },
-    ascendant: result.ascendant
+    ascendant: result.ascendant,
   });
 };
 
@@ -141,12 +142,12 @@ export const getZodiacHoroscope = (req, res) => {
       key: signKey,
       value: signKey,
       name: sign.name,
-      dateRange: sign.dateRange
+      dateRange: sign.dateRange,
     },
     period: periodRaw,
     range,
     generatedAt: new Date().toISOString(),
-    horoscope
+    horoscope,
   });
 };
 

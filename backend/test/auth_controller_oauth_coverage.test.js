@@ -23,6 +23,8 @@ const mockRes = () => {
     res.redirectUrl = url;
     return res;
   };
+  res.cookie = () => res;
+  res.clearCookie = () => res;
   return res;
 };
 
@@ -105,13 +107,19 @@ describe('Auth controller OAuth & reset coverage', () => {
         // confirm: invalid password
         {
           const res = mockRes();
-          await auth.handlePasswordResetConfirm({ body: { token: secondToken, password: '1' } }, res);
+          await auth.handlePasswordResetConfirm(
+            { body: { token: secondToken, password: '1' } },
+            res
+          );
           assert.equal(res.statusCode, 400);
         }
         // confirm: invalid token
         {
           const res = mockRes();
-          await auth.handlePasswordResetConfirm({ body: { token: 'nope', password: 'abcdef' } }, res);
+          await auth.handlePasswordResetConfirm(
+            { body: { token: 'nope', password: 'abcdef' } },
+            res
+          );
           assert.equal(res.statusCode, 400);
         }
         // confirm: expired entry
@@ -119,7 +127,10 @@ describe('Auth controller OAuth & reset coverage', () => {
           const expired = 'expired-token';
           auth.resetTokenStore.set(expired, { userId: user.id, expiresAt: Date.now() - 1 });
           const res = mockRes();
-          await auth.handlePasswordResetConfirm({ body: { token: expired, password: 'abcdef' } }, res);
+          await auth.handlePasswordResetConfirm(
+            { body: { token: expired, password: 'abcdef' } },
+            res
+          );
           assert.equal(res.statusCode, 400);
           assert.equal(auth.resetTokenStore.has(expired), false);
         }
@@ -129,7 +140,10 @@ describe('Auth controller OAuth & reset coverage', () => {
           auth.resetTokenStore.set(ghost, { userId: 99999999, expiresAt: Date.now() + 10000 });
           auth.resetTokenByUser.set(99999999, ghost);
           const res = mockRes();
-          await auth.handlePasswordResetConfirm({ body: { token: ghost, password: 'abcdef' } }, res);
+          await auth.handlePasswordResetConfirm(
+            { body: { token: ghost, password: 'abcdef' } },
+            res
+          );
           assert.equal(res.statusCode, 400);
           assert.equal(auth.resetTokenStore.has(ghost), false);
           assert.equal(auth.resetTokenByUser.has(99999999), false);
@@ -138,7 +152,10 @@ describe('Auth controller OAuth & reset coverage', () => {
         // confirm: success path clears stores
         {
           const res = mockRes();
-          await auth.handlePasswordResetConfirm({ body: { token: secondToken, password: 'abcdef' } }, res);
+          await auth.handlePasswordResetConfirm(
+            { body: { token: secondToken, password: 'abcdef' } },
+            res
+          );
           assert.equal(res.statusCode, null);
           assert.equal(res.body?.status, 'ok');
           assert.equal(auth.resetTokenStore.has(secondToken), false);
@@ -224,7 +241,16 @@ describe('Auth controller OAuth & reset coverage', () => {
       async () => {
         // token endpoint not ok
         await withMockFetch(
-          async () => ({ ok: false, status: 500, async text() { return 'nope'; }, async json() { return {}; } }),
+          async () => ({
+            ok: false,
+            status: 500,
+            async text() {
+              return 'nope';
+            },
+            async json() {
+              return {};
+            },
+          }),
           async () => {
             const state = buildOauthState('/home');
             const res = mockRes();
@@ -236,7 +262,16 @@ describe('Auth controller OAuth & reset coverage', () => {
 
         // token ok but missing access token
         await withMockFetch(
-          async () => ({ ok: true, status: 200, async json() { return {}; }, async text() { return ''; } }),
+          async () => ({
+            ok: true,
+            status: 200,
+            async json() {
+              return {};
+            },
+            async text() {
+              return '';
+            },
+          }),
           async () => {
             const state = buildOauthState('/home');
             const res = mockRes();
@@ -251,8 +286,27 @@ describe('Auth controller OAuth & reset coverage', () => {
         await withMockFetch(
           async () => {
             call++;
-            if (call === 1) return { ok: true, status: 200, async json() { return { access_token: 't' }; }, async text() { return ''; } };
-            return { ok: false, status: 500, async json() { return {}; }, async text() { return 'bad'; } };
+            if (call === 1)
+              return {
+                ok: true,
+                status: 200,
+                async json() {
+                  return { access_token: 't' };
+                },
+                async text() {
+                  return '';
+                },
+              };
+            return {
+              ok: false,
+              status: 500,
+              async json() {
+                return {};
+              },
+              async text() {
+                return 'bad';
+              },
+            };
           },
           async () => {
             const state = buildOauthState('/home');
@@ -268,8 +322,27 @@ describe('Auth controller OAuth & reset coverage', () => {
         await withMockFetch(
           async () => {
             call++;
-            if (call === 1) return { ok: true, status: 200, async json() { return { access_token: 't' }; }, async text() { return ''; } };
-            return { ok: true, status: 200, async json() { return { name: 'No Email' }; }, async text() { return ''; } };
+            if (call === 1)
+              return {
+                ok: true,
+                status: 200,
+                async json() {
+                  return { access_token: 't' };
+                },
+                async text() {
+                  return '';
+                },
+              };
+            return {
+              ok: true,
+              status: 200,
+              async json() {
+                return { name: 'No Email' };
+              },
+              async text() {
+                return '';
+              },
+            };
           },
           async () => {
             const state = buildOauthState('/home');
@@ -280,20 +353,39 @@ describe('Auth controller OAuth & reset coverage', () => {
           }
         );
 
-        // success: creates user and redirects with token
+        // success: creates user and redirects with oauth success
         call = 0;
         await withMockFetch(
           async () => {
             call++;
-            if (call === 1) return { ok: true, status: 200, async json() { return { access_token: 't' }; }, async text() { return ''; } };
-            return { ok: true, status: 200, async json() { return { email, name: 'Google User' }; }, async text() { return ''; } };
+            if (call === 1)
+              return {
+                ok: true,
+                status: 200,
+                async json() {
+                  return { access_token: 't' };
+                },
+                async text() {
+                  return '';
+                },
+              };
+            return {
+              ok: true,
+              status: 200,
+              async json() {
+                return { email, name: 'Google User' };
+              },
+              async text() {
+                return '';
+              },
+            };
           },
           async () => {
             const state = buildOauthState('/home');
             const res = mockRes();
             await auth.handleGoogleCallback({ query: { state, code: 'x' } }, res);
             assert.ok(res.redirectUrl);
-            assert.ok(res.redirectUrl.includes('token='));
+            assert.ok(res.redirectUrl.includes('oauth=success'));
           }
         );
       }
@@ -318,7 +410,16 @@ describe('Auth controller OAuth & reset coverage', () => {
       async () => {
         // token endpoint not ok
         await withMockFetch(
-          async () => ({ ok: false, status: 500, async json() { return {}; }, async text() { return 'nope'; } }),
+          async () => ({
+            ok: false,
+            status: 500,
+            async json() {
+              return {};
+            },
+            async text() {
+              return 'nope';
+            },
+          }),
           async () => {
             const state = buildOauthState('/home');
             const res = mockRes();
@@ -330,7 +431,16 @@ describe('Auth controller OAuth & reset coverage', () => {
 
         // token ok but missing access_token
         await withMockFetch(
-          async () => ({ ok: true, status: 200, async json() { return { openid: openId }; }, async text() { return ''; } }),
+          async () => ({
+            ok: true,
+            status: 200,
+            async json() {
+              return { openid: openId };
+            },
+            async text() {
+              return '';
+            },
+          }),
           async () => {
             const state = buildOauthState('/home');
             const res = mockRes();
@@ -342,7 +452,16 @@ describe('Auth controller OAuth & reset coverage', () => {
 
         // token ok but missing openid
         await withMockFetch(
-          async () => ({ ok: true, status: 200, async json() { return { access_token: 't' }; }, async text() { return ''; } }),
+          async () => ({
+            ok: true,
+            status: 200,
+            async json() {
+              return { access_token: 't' };
+            },
+            async text() {
+              return '';
+            },
+          }),
           async () => {
             const state = buildOauthState('/home');
             const res = mockRes();
@@ -357,8 +476,27 @@ describe('Auth controller OAuth & reset coverage', () => {
         await withMockFetch(
           async () => {
             call++;
-            if (call === 1) return { ok: true, status: 200, async json() { return { access_token: 't', openid: openId }; }, async text() { return ''; } };
-            return { ok: false, status: 500, async json() { return {}; }, async text() { return 'bad'; } };
+            if (call === 1)
+              return {
+                ok: true,
+                status: 200,
+                async json() {
+                  return { access_token: 't', openid: openId };
+                },
+                async text() {
+                  return '';
+                },
+              };
+            return {
+              ok: false,
+              status: 500,
+              async json() {
+                return {};
+              },
+              async text() {
+                return 'bad';
+              },
+            };
           },
           async () => {
             const state = buildOauthState('/home');
@@ -369,20 +507,39 @@ describe('Auth controller OAuth & reset coverage', () => {
           }
         );
 
-        // success: creates user and redirects with token
+        // success: creates user and redirects with oauth success
         call = 0;
         await withMockFetch(
           async () => {
             call++;
-            if (call === 1) return { ok: true, status: 200, async json() { return { access_token: 't', openid: openId }; }, async text() { return ''; } };
-            return { ok: true, status: 200, async json() { return { nickname: 'WeChat User' }; }, async text() { return ''; } };
+            if (call === 1)
+              return {
+                ok: true,
+                status: 200,
+                async json() {
+                  return { access_token: 't', openid: openId };
+                },
+                async text() {
+                  return '';
+                },
+              };
+            return {
+              ok: true,
+              status: 200,
+              async json() {
+                return { nickname: 'WeChat User' };
+              },
+              async text() {
+                return '';
+              },
+            };
           },
           async () => {
             const state = buildOauthState('/home');
             const res = mockRes();
             await auth.handleWeChatCallback({ query: { code: 'c', state } }, res);
             assert.ok(res.redirectUrl);
-            assert.ok(res.redirectUrl.includes('token='));
+            assert.ok(res.redirectUrl.includes('oauth=success'));
           }
         );
       }

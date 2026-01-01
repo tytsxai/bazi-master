@@ -24,7 +24,12 @@ describe('server startup coverage', () => {
           REDIS_URL: 'redis://localhost:6379',
           FRONTEND_URL: 'https://example.com',
           BACKEND_BASE_URL: 'https://api.example.com',
+          ADMIN_EMAILS: 'admin@example.com',
+          DOCS_PASSWORD: 'docs-pass',
           SENTRY_DSN: 'https://public@example.ingest.sentry.io/1',
+          SMTP_HOST: 'smtp.example.com',
+          SMTP_FROM: 'noreply@example.com',
+          TRUST_PROXY: '1',
         },
       });
       assert.deepEqual(errors, []);
@@ -35,18 +40,38 @@ describe('server startup coverage', () => {
   it('initRedisMirrors no-ops when initRedis returns null', async () => {
     let setMirrorCalls = 0;
     let setBaziMirrorCalls = 0;
+    let setResetTokenMirrorCalls = 0;
+    let setOauthStateMirrorCalls = 0;
 
     await initRedisMirrors({
       require: false,
       initRedisFn: async () => null,
       createRedisMirrorFn: () => ({ mirror: true }),
-      sessionStoreRef: { setMirror() { setMirrorCalls++; } },
-      setBaziCacheMirrorFn() { setBaziMirrorCalls++; },
-      loggerInstance: { info() { throw new Error('should not log'); } },
+      sessionStoreRef: {
+        setMirror() {
+          setMirrorCalls++;
+        },
+      },
+      setBaziCacheMirrorFn() {
+        setBaziMirrorCalls++;
+      },
+      setResetTokenMirrorsFn() {
+        setResetTokenMirrorCalls++;
+      },
+      setOauthStateMirrorFn() {
+        setOauthStateMirrorCalls++;
+      },
+      loggerInstance: {
+        info() {
+          throw new Error('should not log');
+        },
+      },
     });
 
     assert.equal(setMirrorCalls, 0);
     assert.equal(setBaziMirrorCalls, 0);
+    assert.equal(setResetTokenMirrorCalls, 0);
+    assert.equal(setOauthStateMirrorCalls, 0);
   });
 
   it('initRedisMirrors wires mirrors when client exists', async () => {
@@ -71,7 +96,17 @@ describe('server startup coverage', () => {
       setBaziCacheMirrorFn(mirror) {
         calls.push(['setBaziMirror', mirror.prefix]);
       },
-      loggerInstance: { info(msg) { calls.push(['info', msg]); } },
+      setResetTokenMirrorsFn({ tokenMirror, userMirror }) {
+        calls.push(['setResetTokenMirrors', tokenMirror.prefix, userMirror.prefix]);
+      },
+      setOauthStateMirrorFn(mirror) {
+        calls.push(['setOauthStateMirror', mirror.prefix]);
+      },
+      loggerInstance: {
+        info(msg) {
+          calls.push(['info', msg]);
+        },
+      },
       sessionIdleMs: 123,
       baziCacheTtlMs: 456,
     });
@@ -79,8 +114,20 @@ describe('server startup coverage', () => {
     assert.deepEqual(calls[0], ['initRedis', true]);
     assert.ok(calls.some((c) => c[0] === 'createMirror' && c[2] === 'session:' && c[3] === 123));
     assert.ok(calls.some((c) => c[0] === 'createMirror' && c[2] === 'bazi-cache:' && c[3] === 456));
+    assert.ok(calls.some((c) => c[0] === 'createMirror' && c[2] === 'reset-token:'));
+    assert.ok(calls.some((c) => c[0] === 'createMirror' && c[2] === 'reset-token-user:'));
+    assert.ok(calls.some((c) => c[0] === 'createMirror' && c[2] === 'oauth-state:'));
     assert.ok(calls.some((c) => c[0] === 'setSessionMirror' && c[1] === 'session:'));
     assert.ok(calls.some((c) => c[0] === 'setBaziMirror' && c[1] === 'bazi-cache:'));
+    assert.ok(
+      calls.some(
+        (c) =>
+          c[0] === 'setResetTokenMirrors' &&
+          c[1] === 'reset-token:' &&
+          c[2] === 'reset-token-user:'
+      )
+    );
+    assert.ok(calls.some((c) => c[0] === 'setOauthStateMirror' && c[1] === 'oauth-state:'));
     assert.ok(calls.some((c) => c[0] === 'info'));
   });
 
@@ -135,16 +182,26 @@ describe('server startup coverage', () => {
 
     await startServer({
       appConfigValue: { IS_PRODUCTION: true, PORT: 123 },
-      serverInstance: { listen() { throw new Error('should not listen'); } },
-      prismaClient: { async $connect() { throw new Error('should not connect'); } },
+      serverInstance: {
+        listen() {
+          throw new Error('should not listen');
+        },
+      },
+      prismaClient: {
+        async $connect() {
+          throw new Error('should not connect');
+        },
+      },
       initRedisMirrorsFn: async () => {
         throw new Error('should not init redis');
       },
-      loggerInstance: { warn() { }, error() { }, fatal() { }, info() { } },
+      loggerInstance: { warn() {}, error() {}, fatal() {}, info() {} },
       processRef: {
         env: {},
-        exit(code) { exits.push(code); },
-        once() { },
+        exit(code) {
+          exits.push(code);
+        },
+        once() {},
         exitCode: 0,
       },
     });
@@ -156,11 +213,28 @@ describe('server startup coverage', () => {
     const exits = [];
     await startServer({
       appConfigValue: { IS_PRODUCTION: false, PORT: 123 },
-      serverInstance: { listen() { throw new Error('should not listen'); } },
-      prismaClient: { async $connect() { throw new Error('db down'); } },
-      initRedisMirrorsFn: async () => { throw new Error('should not init redis'); },
-      loggerInstance: { warn() { }, error() { }, fatal() { }, info() { } },
-      processRef: { env: {}, exit(code) { exits.push(code); }, once() { }, exitCode: 0 },
+      serverInstance: {
+        listen() {
+          throw new Error('should not listen');
+        },
+      },
+      prismaClient: {
+        async $connect() {
+          throw new Error('db down');
+        },
+      },
+      initRedisMirrorsFn: async () => {
+        throw new Error('should not init redis');
+      },
+      loggerInstance: { warn() {}, error() {}, fatal() {}, info() {} },
+      processRef: {
+        env: {},
+        exit(code) {
+          exits.push(code);
+        },
+        once() {},
+        exitCode: 0,
+      },
     });
     assert.deepEqual(exits, [1]);
   });
@@ -169,11 +243,24 @@ describe('server startup coverage', () => {
     const exits = [];
     await startServer({
       appConfigValue: { IS_PRODUCTION: false, PORT: 123 },
-      serverInstance: { listen() { throw new Error('should not listen'); } },
-      prismaClient: { async $connect() { } },
-      initRedisMirrorsFn: async () => { throw new Error('redis down'); },
-      loggerInstance: { warn() { }, error() { }, fatal() { }, info() { } },
-      processRef: { env: {}, exit(code) { exits.push(code); }, once() { }, exitCode: 0 },
+      serverInstance: {
+        listen() {
+          throw new Error('should not listen');
+        },
+      },
+      prismaClient: { async $connect() {} },
+      initRedisMirrorsFn: async () => {
+        throw new Error('redis down');
+      },
+      loggerInstance: { warn() {}, error() {}, fatal() {}, info() {} },
+      processRef: {
+        env: {},
+        exit(code) {
+          exits.push(code);
+        },
+        once() {},
+        exitCode: 0,
+      },
     });
     assert.deepEqual(exits, [1]);
   });
@@ -191,18 +278,22 @@ describe('server startup coverage', () => {
           cb();
         },
       },
-      prismaClient: { async $connect() { } },
-      initRedisMirrorsFn: async () => { },
+      prismaClient: { async $connect() {} },
+      initRedisMirrorsFn: async () => {},
       loggerInstance: {
-        warn() { },
-        error() { },
-        fatal() { },
-        info(msg) { infos.push(msg); },
+        warn() {},
+        error() {},
+        fatal() {},
+        info(msg) {
+          infos.push(msg);
+        },
       },
       processRef: {
         env: {},
-        exit(code) { exits.push(code); },
-        once() { },
+        exit(code) {
+          exits.push(code);
+        },
+        once() {},
         exitCode: 0,
       },
     });

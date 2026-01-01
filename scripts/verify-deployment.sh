@@ -100,6 +100,14 @@ validate_json() {
 test_basic_connectivity() {
     log_step "1. Testing basic connectivity and health checks"
 
+    # Test API liveness endpoint
+    log_info "Testing API liveness endpoint..."
+    if ! http_request "$API_BASE_URL/live" >/dev/null; then
+        log_error "API liveness check failed"
+        return 1
+    fi
+    log_success "API liveness check passed"
+
     # Test API health endpoint
     log_info "Testing API health endpoint..."
     local health_response
@@ -444,6 +452,5 @@ done
 
 # Run main function
 main "$@"
-
 
 

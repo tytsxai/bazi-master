@@ -53,20 +53,23 @@ test('buildSearchOr creates Prisma conditions', () => {
 });
 
 test('buildImportRecord builds a normalized record with fallback timezone', async () => {
-  const record = await buildImportRecord({
-    birthYear: '1992',
-    birthMonth: '7',
-    birthDay: '15',
-    birthHour: '4',
-    gender: 'male',
-    birthLocation: 'Taipei',
-    timezoneOffsetMinutes: 'UTC+08:00',
-    pillars: { year: { stem: 'A' } },
-    fiveElements: { Wood: 2, Fire: 1, Earth: 1, Metal: 2, Water: 2 },
-    tenGods: [{ name: 'Friend', strength: 10 }],
-    luckCycles: [{ range: '10-20' }],
-    createdAt: '2024-01-01T00:00:00.000Z',
-  }, 42);
+  const record = await buildImportRecord(
+    {
+      birthYear: '1992',
+      birthMonth: '7',
+      birthDay: '15',
+      birthHour: '4',
+      gender: 'male',
+      birthLocation: 'Taipei',
+      timezoneOffsetMinutes: 'UTC+08:00',
+      pillars: { year: { stem: 'A' } },
+      fiveElements: { Wood: 2, Fire: 1, Earth: 1, Metal: 2, Water: 2 },
+      tenGods: [{ name: 'Friend', strength: 10 }],
+      luckCycles: [{ range: '10-20' }],
+      createdAt: '2024-01-01T00:00:00.000Z',
+    },
+    42
+  );
 
   assert.ok(record);
   assert.equal(record.userId, 42);
@@ -78,7 +81,10 @@ test('buildImportRecord builds a normalized record with fallback timezone', asyn
   assert.equal(record.birthLocation, 'Taipei');
   assert.equal(record.timezone, 'UTC+08:00');
   assert.equal(record.pillars, JSON.stringify({ year: { stem: 'A' } }));
-  assert.equal(record.fiveElements, JSON.stringify({ Wood: 2, Fire: 1, Earth: 1, Metal: 2, Water: 2 }));
+  assert.equal(
+    record.fiveElements,
+    JSON.stringify({ Wood: 2, Fire: 1, Earth: 1, Metal: 2, Water: 2 })
+  );
   assert.equal(record.tenGods, JSON.stringify([{ name: 'Friend', strength: 10 }]));
   assert.equal(record.luckCycles, JSON.stringify([{ range: '10-20' }]));
   assert.ok(record.createdAt instanceof Date);

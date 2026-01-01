@@ -51,9 +51,8 @@ test('History search and filter flow', async ({ page }) => {
     await expect(saveButton).toBeEnabled({ timeout: 30000 });
     await Promise.all([
       page.waitForResponse(
-        (res) => res.url().includes('/api/bazi/records')
-          && res.request().method() === 'POST'
-          && res.ok()
+        (res) =>
+          res.url().includes('/api/bazi/records') && res.request().method() === 'POST' && res.ok()
       ),
       saveButton.click(),
     ]);

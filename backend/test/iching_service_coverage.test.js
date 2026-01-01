@@ -53,10 +53,22 @@ describe('iching.service coverage', () => {
     assert.deepEqual(deriveChangingLinesFromTimeContext('x'), []);
     assert.deepEqual(deriveChangingLinesFromTimeContext({ year: 'x' }), []);
 
-    const lines = deriveChangingLinesFromTimeContext({ year: 1, month: 1, day: 1, hour: 0, minute: 0 });
+    const lines = deriveChangingLinesFromTimeContext({
+      year: 1,
+      month: 1,
+      day: 1,
+      hour: 0,
+      minute: 0,
+    });
     assert.deepEqual(lines, [3, 6]);
 
-    const deduped = deriveChangingLinesFromTimeContext({ year: 1, month: 1, day: 4, hour: 0, minute: 0 });
+    const deduped = deriveChangingLinesFromTimeContext({
+      year: 1,
+      month: 1,
+      day: 4,
+      hour: 0,
+      minute: 0,
+    });
     // first and second both normalize to 6
     assert.deepEqual(deduped, [6]);
   });
