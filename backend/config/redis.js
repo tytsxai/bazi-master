@@ -84,6 +84,24 @@ export const createRedisMirror = (
         return null;
       }
     },
+    async getAndDelete(key) {
+      if (!key) return null;
+      try {
+        let raw = null;
+        if (typeof client.getDel === 'function') {
+          raw = await client.getDel(resolveKey(key));
+        } else {
+          raw = await client.get(resolveKey(key));
+          if (raw !== null && raw !== undefined) {
+            await client.del(resolveKey(key));
+          }
+        }
+        return fromJson(raw);
+      } catch (error) {
+        logger.warn('[redis] getAndDelete failed:', error?.message || error);
+        return null;
+      }
+    },
     async set(key, value, overrideTtlMs = null) {
       if (!key) return;
       const payload = toJson(value);

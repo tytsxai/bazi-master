@@ -22,9 +22,8 @@ import {
   resetTokenStore,
   resetTokenByUser,
   pruneResetTokens,
-  getResetTokenEntryAsync,
+  consumeResetTokenEntryAsync,
   setResetTokenForUser,
-  deleteResetToken,
 } from '../services/resetTokens.service.js';
 import {
   ensurePasswordResetDeliveryReady,
@@ -244,14 +243,13 @@ export const handlePasswordResetConfirm = async (req, res) => {
   }
 
   pruneResetTokens();
-  const entry = await getResetTokenEntryAsync(token);
+  const entry = await consumeResetTokenEntryAsync(token);
   if (!entry?.userId) {
     return res.status(400).json({ error: 'Invalid or expired token' });
   }
 
   const user = await prisma.user.findUnique({ where: { id: entry.userId } });
   if (!user) {
-    deleteResetToken(token, entry.userId);
     return res.status(400).json({ error: 'Invalid or expired token' });
   }
 
@@ -261,8 +259,6 @@ export const handlePasswordResetConfirm = async (req, res) => {
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { password: hashed } });
-  deleteResetToken(token, user.id);
-
   return res.json({ status: 'ok' });
 };
 

@@ -154,6 +154,55 @@ export const getResetTokenEntryAsync = async (token) => {
   return normalized;
 };
 
+export const consumeResetTokenEntryAsync = async (token) => {
+  if (!token) return null;
+
+  const local = getResetTokenEntry(token);
+  if (local) {
+    resetTokenStore.delete(token);
+    const localUserId = normalizeUserId(local.userId);
+    if (localUserId && resetTokenByUser.get(localUserId) === token) {
+      resetTokenByUser.delete(localUserId);
+    }
+    return local;
+  }
+
+  const mirror = resetTokenStore.getMirror();
+  if (!mirror?.get) return null;
+
+  let remote = null;
+  if (typeof mirror.getAndDelete === 'function') {
+    remote = await mirror.getAndDelete(token);
+  } else {
+    remote = await mirror.get(token);
+    if (remote !== null && remote !== undefined && mirror?.delete) {
+      mirror.delete(token);
+    }
+  }
+
+  const normalized = normalizeTokenEntry(remote);
+  if (!normalized) {
+    return null;
+  }
+  if (isExpiredEntry(normalized)) {
+    return null;
+  }
+
+  const normalizedUserId = normalizeUserId(normalized.userId);
+  if (normalizedUserId) {
+    const localToken = resetTokenByUser.get(normalizedUserId);
+    if (localToken === token) {
+      resetTokenByUser.delete(normalizedUserId);
+    } else if (!localToken) {
+      const remoteToken = await getResetTokenForUserAsync(normalizedUserId);
+      if (remoteToken === token) {
+        resetTokenByUser.delete(normalizedUserId);
+      }
+    }
+  }
+  return normalized;
+};
+
 export const getResetTokenForUserAsync = async (userId) => {
   const normalizedUserId = normalizeUserId(userId);
   if (!normalizedUserId) return null;
