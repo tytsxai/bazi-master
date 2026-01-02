@@ -29,13 +29,17 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
     async getAsync(key) {
       warnOnFallback();
       const local = store.get(key);
-      if (local !== undefined) return local;
-      if (!mirror?.get) return null;
+      if (!mirror?.get) {
+        return local !== undefined ? local : null;
+      }
       const remote = await mirror.get(key);
       const normalized = normalizeValue(remote);
       if (normalized === null) {
         if (remote !== null && remote !== undefined && mirror?.delete) {
           mirror.delete(key);
+        }
+        if (local !== undefined) {
+          store.delete(key);
         }
         return null;
       }
@@ -65,13 +69,17 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
     async hasAsync(key) {
       warnOnFallback();
       const local = store.get(key);
-      if (local !== undefined) return true;
-      if (!mirror?.get) return false;
+      if (!mirror?.get) {
+        return local !== undefined;
+      }
       const remote = await mirror.get(key);
       const normalized = normalizeValue(remote);
       if (normalized === null) {
         if (remote !== null && remote !== undefined && mirror?.delete) {
           mirror.delete(key);
+        }
+        if (local !== undefined) {
+          store.delete(key);
         }
         return false;
       }

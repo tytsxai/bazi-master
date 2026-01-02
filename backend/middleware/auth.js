@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma.js';
+import { logger } from '../config/logger.js';
 import {
   buildAuthToken,
   createAuthorizeToken,
@@ -12,6 +13,14 @@ import { REQUEST_ID_HEADER, getRequestId, requestIdMiddleware } from './requestI
 const { sessionTokenSecret: envSecret, adminEmails } = getServerConfig();
 const isTest = process.env.NODE_ENV === 'test';
 const sessionTokenSecret = isTest ? envSecret || 'test-session-secret-for-auth-me-test' : envSecret;
+if (!isTest && process.env.NODE_ENV === 'production' && !sessionTokenSecret) {
+  throw new Error('SESSION_TOKEN_SECRET is required in production');
+}
+if (!isTest && !sessionTokenSecret) {
+  logger.warn(
+    '[auth] SESSION_TOKEN_SECRET is not set; sessions will reset on restart and multi-instance tokens will not validate.'
+  );
+}
 export const sessionStore = createSessionStore();
 export const isAdminUser = (user) => adminEmails.has(user.email);
 

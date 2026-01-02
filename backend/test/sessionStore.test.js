@@ -34,6 +34,28 @@ describe('session store', () => {
     assert.equal(store.get('session'), 42);
   });
 
+  test('getAsync prefers mirror and clears stale local values', async () => {
+    const mirror = new Map();
+    const store = createSessionStore();
+    store.setMirror({
+      get: async (key) => mirror.get(key),
+      set: (key, value) => mirror.set(key, value),
+      delete: (key) => mirror.delete(key),
+    });
+
+    store.set('session', 123);
+    mirror.delete('session');
+
+    const value = await store.getAsync('session');
+    assert.equal(value, null);
+    assert.equal(store.has('session'), false);
+
+    mirror.set('session', 999);
+    const fresh = await store.getAsync('session');
+    assert.equal(fresh, 999);
+    assert.equal(store.get('session'), 999);
+  });
+
   test('hasAsync clears invalid mirror values', async () => {
     const mirror = new Map();
     let deleteCalled = false;
