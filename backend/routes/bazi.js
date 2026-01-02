@@ -430,7 +430,7 @@ router.get('/records/:id', requireAuth, async (req, res) => {
   if (!id) return res.status(400).json({ error: 'Invalid ID' });
 
   try {
-    const record = await prisma.baziRecord.findUnique({
+    const record = await prisma.baziRecord.findFirst({
       where: { id, userId: req.user.id },
     });
     if (!record) return res.status(404).json({ error: 'Record not found' });
@@ -447,7 +447,7 @@ router.delete('/records/:id', requireAuth, async (req, res) => {
 
   try {
     // Verify ownership
-    const record = await prisma.baziRecord.findUnique({ where: { id, userId: req.user.id } });
+    const record = await prisma.baziRecord.findFirst({ where: { id, userId: req.user.id } });
     if (!record) return res.status(404).json({ error: 'Record not found' });
 
     await prisma.baziRecordTrash.upsert({
@@ -488,9 +488,12 @@ router.delete('/records/:id/hard-delete', requireAuth, async (req, res) => {
     await prisma.favorite.deleteMany({ where: { userId: req.user.id, recordId: id } });
 
     // Delete record
-    await prisma.baziRecord.delete({
+    const deleted = await prisma.baziRecord.deleteMany({
       where: { id, userId: req.user.id },
     });
+    if (!deleted.count) {
+      return res.status(404).json({ error: 'Not found' });
+    }
     res.json({ status: 'ok' });
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Not found' });

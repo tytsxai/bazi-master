@@ -77,7 +77,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
   if (!id) return res.status(400).json({ error: 'Invalid ID' });
 
   try {
-    await prisma.favorite.delete({
+    await prisma.favorite.deleteMany({
       where: { id, userId: req.user.id },
     });
 
