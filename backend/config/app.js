@@ -6,9 +6,13 @@ const readNumber = (value, fallback) => {
 };
 
 const parseAdminEmails = (raw, nodeEnv = '') => {
-  const fallback = nodeEnv === 'production' ? '' : 'admin@example.com';
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    throw new Error(
+      `ADMIN_EMAILS must be configured (comma-separated)${nodeEnv ? ` for NODE_ENV=${nodeEnv}` : ''}.`
+    );
+  }
   return new Set(
-    (raw || fallback)
+    raw
       .split(',')
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean)
