@@ -53,6 +53,12 @@ if (!process.env.E2E_SERVER) {
 if (!process.env.VITE_E2E) {
   process.env.VITE_E2E = '1';
 }
+if (!process.env.ADMIN_EMAILS) {
+  process.env.ADMIN_EMAILS = 'test@example.com';
+}
+if (!process.env.SESSION_TOKEN_SECRET) {
+  process.env.SESSION_TOKEN_SECRET = 'test-session-secret-for-auth-me-test';
+}
 
 const isWindows = process.platform === 'win32';
 const playwrightBin = path.join(
