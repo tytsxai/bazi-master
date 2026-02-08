@@ -16,7 +16,25 @@ const TOKEN_MIN_PAYLOAD_BYTES = TOKEN_IV_BYTES + TOKEN_TAG_BYTES + 1;
 
 const normalizeSecret = (secret) => (typeof secret === 'string' ? secret.trim() : '');
 const FALLBACK_TOKEN_SECRET = crypto.randomBytes(32).toString('hex');
-const resolveTokenSecret = (secret) => normalizeSecret(secret) || FALLBACK_TOKEN_SECRET;
+let warnedAboutFallbackTokenSecret = false;
+const resolveTokenSecret = (secret) => {
+  const normalized = normalizeSecret(secret);
+  if (normalized) return normalized;
+
+  const nodeEnv = process.env.NODE_ENV || '';
+  if (nodeEnv === 'production') {
+    throw new Error('SESSION_TOKEN_SECRET must be configured in production.');
+  }
+
+  if (!warnedAboutFallbackTokenSecret) {
+    warnedAboutFallbackTokenSecret = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[auth] SESSION_TOKEN_SECRET is not configured; using an ephemeral fallback secret (non-production only).'
+    );
+  }
+  return FALLBACK_TOKEN_SECRET;
+};
 
 const buildSignatureBase = ({ issuedAt, payload }) => `${issuedAt}.${payload}`;
 

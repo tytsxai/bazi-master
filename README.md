@@ -38,7 +38,7 @@ English summary: BaZi Master is a sample full‑stack divination app (React + Ex
 
 ```bash
 # 克隆仓库
-git clone <repository-url>
+git clone https://github.com/tytsxai/bazi-master.git
 cd bazi-master
 
 # 安装根依赖（Prisma 客户端）
