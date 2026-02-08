@@ -15,7 +15,7 @@ describe('Database config coverage', () => {
 
       delete process.env.DATABASE_URL;
       const info = readPrismaDatasourceInfo();
-      assert.equal(info.provider, 'sqlite');
+      assert.equal(info.provider, 'postgresql');
       assert.equal(info.urlUsesDatabaseUrlEnv, true);
     } finally {
       if (prev === undefined) delete process.env.DATABASE_URL;
@@ -44,7 +44,7 @@ describe('Database config coverage', () => {
     }
   });
 
-  it('ensureDatabaseUrl sets a sqlite url when missing', () => {
+  it('ensureDatabaseUrl sets a postgres url when missing', () => {
     const prevUrl = process.env.DATABASE_URL;
     const prevEnv = process.env.NODE_ENV;
     try {
@@ -52,7 +52,7 @@ describe('Database config coverage', () => {
       process.env.NODE_ENV = 'test';
       ensureDatabaseUrl();
       assert.ok(process.env.DATABASE_URL);
-      assert.ok(process.env.DATABASE_URL.startsWith('file:'));
+      assert.ok(process.env.DATABASE_URL.startsWith('postgresql://'));
     } finally {
       if (prevUrl === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = prevUrl;
