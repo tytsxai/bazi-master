@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,6 +70,17 @@ const playwrightBin = path.join(
 );
 
 const args = process.argv.slice(2);
+
+if (process.env.CI) {
+  const install = spawnSync(playwrightBin, ['install', 'chromium'], {
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (install.status !== 0) {
+    process.exit(typeof install.status === 'number' ? install.status : 1);
+  }
+}
+
 const child = spawn(playwrightBin, ['test', ...args], {
   stdio: 'inherit',
   env: process.env,
