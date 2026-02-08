@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { prisma } from '../config/prisma.js';
 import {
   buildAuthToken,
@@ -44,6 +45,13 @@ export const revokeSession = (token) => {
   sessionStore.delete(token);
 };
 
+const timingSafeEqualDigest = (a, b) => {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const left = crypto.createHash('sha256').update(a, 'utf8').digest();
+  const right = crypto.createHash('sha256').update(b, 'utf8').digest();
+  return crypto.timingSafeEqual(left, right);
+};
+
 export const docsBasicAuth = (req, res, next) => {
   const validUser = process.env.DOCS_USER || 'admin';
   const validPassword = process.env.DOCS_PASSWORD;
@@ -65,9 +73,7 @@ export const docsBasicAuth = (req, res, next) => {
   const credentials = Buffer.from(auth.split(' ')[1], 'base64').toString().split(':');
   const [user, password] = credentials;
 
-  // fast-path constant time comparison not strictly required for docs, but safeEqual is good practice
-  // However we need buffers for safeEqual. Simple string comparison is acceptable for this scope.
-  if (user === validUser && password === validPassword) {
+  if (timingSafeEqualDigest(user, validUser) && timingSafeEqualDigest(password, validPassword)) {
     return next();
   }
 
