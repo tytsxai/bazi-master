@@ -690,8 +690,9 @@ export default function useHistoryData({ t }) {
     if (pendingSearchSyncRef.current) {
       if (nextSearch === pendingSearchSyncRef.current) {
         pendingSearchSyncRef.current = '';
+        return;
       }
-      return;
+      pendingSearchSyncRef.current = '';
     }
 
     if (shouldResetPage) return;
