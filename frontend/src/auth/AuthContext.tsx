@@ -480,15 +480,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const storedUser = safeParseUser(storedUserRaw);
 
       if (!storedUser) {
-        clearSessionState();
-        setProfileName('');
+        clearIdleTimeout();
+        lastActivityWriteRef.current = 0;
+        setUser((prev) => (prev === null ? prev : null));
+        setProfileNameState((prev) => (prev === '' ? prev : ''));
         return;
       }
 
-      setUser(storedUser);
+      setUser((prev) => {
+        const prevRaw = prev ? JSON.stringify(prev) : null;
+        return prevRaw === storedUserRaw ? prev : storedUser;
+      });
 
       const storedProfileName = localStorage.getItem(PROFILE_NAME_KEY);
-      setProfileNameState(storedProfileName ? storedProfileName.trim() : '');
+      const nextProfileName = storedProfileName ? storedProfileName.trim() : '';
+      setProfileNameState((prev) => (prev === nextProfileName ? prev : nextProfileName));
 
       const lastActivityRaw = localStorage.getItem(LAST_ACTIVITY_KEY);
       const lastActivity = lastActivityRaw ? Number(lastActivityRaw) : Date.now();
@@ -524,7 +530,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       window.removeEventListener('focus', syncFromStorage);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [clearSessionState, expireSession, scheduleIdleTimeout, setProfileName, user]);
+  }, [clearIdleTimeout, expireSession, scheduleIdleTimeout]);
 
   useEffect(() => {
     if (isAuthResolved) return;
