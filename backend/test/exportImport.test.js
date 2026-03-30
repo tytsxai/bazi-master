@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildImportRecord } from '../services/calculations.service.js';
-import { parseRecordsQuery } from '../utils/query.js';
+import { parseRecordsQuery, buildCreatedAtRange } from '../utils/query.js';
 import { parseSearchTerms, buildSearchOr, recordMatchesQuery } from '../utils/search.js';
 
 test('parseSearchTerms handles quotes and whitespace', () => {
@@ -30,6 +30,33 @@ test('parseRecordsQuery normalizes paging, filters, and ranges', () => {
   assert.equal(result.sortOption, 'birth-asc');
   assert.equal(result.normalizedStatus, 'deleted');
   assert.equal(result.timezoneOffsetMinutes, -300);
+});
+
+test('buildCreatedAtRange builds timezone-aware ranges', () => {
+  const now = new Date('2026-03-30T15:30:00.000Z');
+
+  const todayRange = buildCreatedAtRange({
+    rangeType: 'today',
+    timezoneOffsetMinutes: 480,
+    now,
+  });
+  assert.equal(todayRange.gte.toISOString(), '2026-03-29T16:00:00.000Z');
+  assert.equal(todayRange.lt.toISOString(), '2026-03-30T16:00:00.000Z');
+
+  const weekRange = buildCreatedAtRange({
+    rangeType: 'week',
+    timezoneOffsetMinutes: 480,
+    now,
+  });
+  assert.equal(weekRange.gte.toISOString(), '2026-03-29T16:00:00.000Z');
+  assert.equal(weekRange.lte.toISOString(), now.toISOString());
+
+  const rollingRange = buildCreatedAtRange({
+    validRangeDays: 7,
+    now,
+  });
+  assert.equal(rollingRange.gte.toISOString(), '2026-03-23T15:30:00.000Z');
+  assert.equal(rollingRange.lte.toISOString(), now.toISOString());
 });
 
 test('recordMatchesQuery checks searchable fields', () => {

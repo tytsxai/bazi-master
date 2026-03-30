@@ -1,9 +1,11 @@
 import { PrismaClient } from '@prisma/client';
-import { readPrismaDatasourceInfo } from './database.js';
+import { ensureDatabaseUrl, readPrismaDatasourceInfo } from './database.js';
 
 const PRISMA_DATASOURCE = readPrismaDatasourceInfo();
 export const PRISMA_PROVIDER = PRISMA_DATASOURCE.provider;
 export const PRISMA_URL_USES_DATABASE_URL_ENV = PRISMA_DATASOURCE.urlUsesDatabaseUrlEnv;
+
+ensureDatabaseUrl();
 
 export const initPrismaConfig = () => {
   const IS_SQLITE = PRISMA_PROVIDER
