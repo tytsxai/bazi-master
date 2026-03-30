@@ -1,17 +1,36 @@
 import { test, expect } from './fixtures.js';
 
+const loginWithSession = async (page, { email, password, name }) => {
+  let loginResponse = await page.request.post('/api/auth/login', {
+    data: { email, password },
+  });
+  if (!loginResponse.ok()) {
+    await page.request.post('/api/auth/register', {
+      data: { email, password, name },
+    });
+    loginResponse = await page.request.post('/api/auth/login', {
+      data: { email, password },
+    });
+  }
+  expect(loginResponse.ok()).toBeTruthy();
+  return loginResponse.json();
+};
+
 test('Non-admin user is redirected to 403 when accessing admin area', async ({ page }) => {
   const screenshotPath = (name) => `verification/admin-access-non-admin-${name}.png`;
-
-  await page.addInitScript(() => {
-    localStorage.setItem('locale', 'en-US');
-    localStorage.setItem('bazi_token', 'token_user_123');
-    localStorage.setItem(
-      'bazi_user',
-      JSON.stringify({ id: 123, email: 'user@example.com', name: 'Regular User', isAdmin: false })
-    );
-    localStorage.setItem('bazi_last_activity', String(Date.now()));
+  const session = await loginWithSession(page, {
+    email: `user-${Date.now()}@example.com`,
+    password: 'password123',
+    name: 'Regular User',
   });
+
+  await page.addInitScript(({ token, user }) => {
+    localStorage.setItem('locale', 'en-US');
+    localStorage.setItem('bazi_token', token);
+    localStorage.setItem('bazi_token_origin', 'backend');
+    localStorage.setItem('bazi_user', JSON.stringify(user));
+    localStorage.setItem('bazi_last_activity', String(Date.now()));
+  }, session);
 
   await page.goto('/admin', { waitUntil: 'domcontentloaded' });
   await page.screenshot({ path: screenshotPath('step-1-admin-redirect') });
@@ -23,16 +42,19 @@ test('Non-admin user is redirected to 403 when accessing admin area', async ({ p
 
 test('Admin user can access admin area', async ({ page }) => {
   const screenshotPath = (name) => `verification/admin-access-admin-${name}.png`;
-
-  await page.addInitScript(() => {
-    localStorage.setItem('locale', 'en-US');
-    localStorage.setItem('bazi_token', 'token_admin_456');
-    localStorage.setItem(
-      'bazi_user',
-      JSON.stringify({ id: 456, email: 'admin@example.com', name: 'Admin User', isAdmin: true })
-    );
-    localStorage.setItem('bazi_last_activity', String(Date.now()));
+  const session = await loginWithSession(page, {
+    email: 'test@example.com',
+    password: 'password123',
+    name: 'Admin User',
   });
+
+  await page.addInitScript(({ token, user }) => {
+    localStorage.setItem('locale', 'en-US');
+    localStorage.setItem('bazi_token', token);
+    localStorage.setItem('bazi_token_origin', 'backend');
+    localStorage.setItem('bazi_user', JSON.stringify(user));
+    localStorage.setItem('bazi_last_activity', String(Date.now()));
+  }, session);
 
   await page.goto('/admin', { waitUntil: 'domcontentloaded' });
   await page.screenshot({ path: screenshotPath('step-1-admin-page') });
