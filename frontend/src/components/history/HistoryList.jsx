@@ -40,6 +40,26 @@ export default function HistoryList({
   selectAllRef,
 }) {
   const { t } = useTranslation();
+  const shouldVirtualize = editRecordId == null;
+  const renderHistoryItem = (record) => (
+    <HistoryItem
+      key={record.id}
+      record={record}
+      highlightRecordId={highlightRecordId}
+      isSelected={selectedSet.has(record.id)}
+      onToggleSelection={() => onToggleSelection(record.id)}
+      onStartEdit={onStartEdit}
+      onRequestDelete={onRequestDelete}
+      editRecordId={editRecordId}
+      editDraft={editDraft}
+      editErrors={editErrors}
+      editStatus={editStatus}
+      editSaving={editSaving}
+      onUpdateEditDraft={onUpdateEditDraft}
+      onEditSave={onEditSave}
+      onCancelEdit={onCancelEdit}
+    />
+  );
 
   return (
     <>
@@ -126,29 +146,15 @@ export default function HistoryList({
             </div>
           </div>
           <div className="min-h-[600px]">
-            <VirtualList
-              items={filteredRecords}
-              itemHeight={ITEM_HEIGHT}
-              renderItem={(record) => (
-                <HistoryItem
-                  key={record.id}
-                  record={record}
-                  highlightRecordId={highlightRecordId}
-                  isSelected={selectedSet.has(record.id)}
-                  onToggleSelection={() => onToggleSelection(record.id)}
-                  onStartEdit={onStartEdit}
-                  onRequestDelete={onRequestDelete}
-                  editRecordId={editRecordId}
-                  editDraft={editDraft}
-                  editErrors={editErrors}
-                  editStatus={editStatus}
-                  editSaving={editSaving}
-                  onUpdateEditDraft={onUpdateEditDraft}
-                  onEditSave={onEditSave}
-                  onCancelEdit={onCancelEdit}
-                />
-              )}
-            />
+            {shouldVirtualize ? (
+              <VirtualList
+                items={filteredRecords}
+                itemHeight={ITEM_HEIGHT}
+                renderItem={renderHistoryItem}
+              />
+            ) : (
+              <div className="grid gap-4">{filteredRecords.map(renderHistoryItem)}</div>
+            )}
           </div>
           {totalPages > 1 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/60">

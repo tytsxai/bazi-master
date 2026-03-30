@@ -54,6 +54,7 @@ const RETRY_ACTION_KEY = 'bazi_retry_action';
 const SESSION_EXPIRED_KEY = 'bazi_session_expired';
 const PROFILE_NAME_KEY = 'bazi_profile_name';
 const SESSION_IDLE_MS = 30 * 60 * 1000;
+const ACTIVITY_STORAGE_SYNC_MS = 15 * 1000;
 const LEGACY_TOKEN_KEYS = ['bazi_token', 'bazi_token_origin'];
 const shouldUseLegacyTokens = () =>
   import.meta.env.MODE === 'test' || import.meta.env.VITE_E2E === '1';
@@ -162,6 +163,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return stored ? stored.trim() : '';
   });
   const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastActivityWriteRef = useRef(0);
 
   const setRetryAction = useCallback((action: Partial<RetryAction>) => {
     if (!action || !action.action) return;
@@ -295,17 +297,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   const recordActivity = useCallback(
-    (remainingMs = SESSION_IDLE_MS) => {
+    (remainingMs = SESSION_IDLE_MS, forcePersist = false) => {
       const now = Date.now();
-      try {
-        localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
-      } catch {
-        // Ignore storage failures.
-      }
-      try {
-        sessionStorage.setItem(LAST_ACTIVITY_KEY, String(now));
-      } catch {
-        // Ignore storage failures.
+      const shouldPersist =
+        forcePersist || now - lastActivityWriteRef.current >= ACTIVITY_STORAGE_SYNC_MS;
+      if (shouldPersist) {
+        lastActivityWriteRef.current = now;
+        try {
+          localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+        } catch {
+          // Ignore storage failures.
+        }
+        try {
+          sessionStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+        } catch {
+          // Ignore storage failures.
+        }
       }
       scheduleIdleTimeout(remainingMs);
     },
@@ -425,7 +432,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
         setUser(data.user);
         setAuthResolved(true);
-        recordActivity();
+        recordActivity(SESSION_IDLE_MS, true);
         return true;
       } catch (error) {
         logger.error({ error }, 'Login error:');
@@ -440,6 +447,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (!user) {
       clearIdleTimeout();
+      lastActivityWriteRef.current = 0;
       setProfileName('');
       return;
     }
@@ -484,6 +492,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const lastActivityRaw = localStorage.getItem(LAST_ACTIVITY_KEY);
       const lastActivity = lastActivityRaw ? Number(lastActivityRaw) : Date.now();
+      lastActivityWriteRef.current = lastActivity;
       const elapsed = Date.now() - lastActivity;
       if (elapsed >= SESSION_IDLE_MS) {
         expireSession();
@@ -506,16 +515,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (!document.hidden) syncFromStorage();
     };
 
-    const shouldPollStorage = import.meta.env.MODE !== 'test';
-    const intervalId = shouldPollStorage ? setInterval(syncFromStorage, 2000) : null;
-
     window.addEventListener('storage', handleStorage);
     window.addEventListener('focus', syncFromStorage);
     document.addEventListener('visibilitychange', handleVisibility);
+    syncFromStorage();
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('focus', syncFromStorage);
       document.removeEventListener('visibilitychange', handleVisibility);

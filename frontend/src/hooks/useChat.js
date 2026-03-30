@@ -88,7 +88,19 @@ export const useChat = () => {
 
   const connect = useCallback(() => {
     if (!isAuthenticated) return;
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      wsRef.current?.readyState === WebSocket.CONNECTING
+    ) {
+      return;
+    }
+    if (
+      wsRef.current &&
+      wsRef.current.readyState !== WebSocket.OPEN &&
+      wsRef.current.readyState !== WebSocket.CONNECTING
+    ) {
+      wsRef.current = null;
+    }
 
     setStatus('connecting');
     setError(null);
@@ -100,11 +112,17 @@ export const useChat = () => {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (wsRef.current !== ws) return;
         setStatus('connected');
         reconnectAttempts.current = 0;
+        if (reconnectTimer.current) {
+          clearTimeout(reconnectTimer.current);
+          reconnectTimer.current = null;
+        }
       };
 
       ws.onmessage = (event) => {
+        if (wsRef.current !== ws) return;
         try {
           const data = JSON.parse(event.data);
           handleMessage(data);
@@ -114,11 +132,16 @@ export const useChat = () => {
       };
 
       ws.onclose = (event) => {
+        if (wsRef.current === ws) {
+          wsRef.current = null;
+        }
+        if (wsRef.current && wsRef.current !== ws) return;
         setStatus('disconnected');
         if (event.code !== 1000) attemptReconnect();
       };
 
       ws.onerror = (err) => {
+        if (wsRef.current !== ws) return;
         logger.warn({ err }, 'WS error');
         setStatus('error');
         setError('Connection error');
@@ -140,8 +163,9 @@ export const useChat = () => {
     if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
     reconnectTimer.current = null;
     if (wsRef.current) {
-      wsRef.current.close(1000, 'User initiated disconnect');
+      const activeSocket = wsRef.current;
       wsRef.current = null;
+      activeSocket.close(1000, 'User initiated disconnect');
     }
   }, []);
 

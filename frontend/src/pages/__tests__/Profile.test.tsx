@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import type { ReactNode } from 'react';
 
 // Mock dependencies
 vi.mock('../../auth/AuthContext', () => ({
@@ -32,7 +33,7 @@ vi.mock('../../utils/apiError', () => ({
 
 import Profile from '../Profile';
 
-const renderWithRouter = (component) => {
+const renderWithRouter = (component: ReactNode) => {
   return render(
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       {component}

@@ -2,22 +2,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
+const authState = {
+  isAuthenticated: false,
+  isAuthResolved: true,
+  login: vi.fn(),
+  logout: vi.fn(),
+};
+
+const authFetchMock = vi.fn();
+
 // Mock dependencies
 vi.mock('../../auth/AuthContext', () => ({
-  useAuth: () => ({
-    isAuthenticated: false,
-    isAuthResolved: true,
-    login: vi.fn(),
-    logout: vi.fn(),
-  }),
+  useAuth: () => authState,
 }));
 
 vi.mock('../../auth/useAuthFetch', () => ({
-  useAuthFetch: () =>
-    vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({}),
-    }),
+  useAuthFetch: () => authFetchMock,
 }));
 
 vi.mock('../../utils/aiProvider', () => ({
@@ -44,9 +44,15 @@ const renderWithRouter = (component) => {
 describe('Tarot', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authState.isAuthenticated = false;
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ cards: [] }),
+    });
+    authFetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ records: [] }),
     });
   });
 
@@ -109,6 +115,12 @@ describe('Tarot', () => {
 describe('Tarot - Card Drawing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authState.isAuthenticated = false;
+    authFetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ records: [] }),
+    });
   });
 
   it('disables draw button while loading', async () => {
@@ -121,6 +133,30 @@ describe('Tarot - Card Drawing', () => {
 
     await waitFor(() => {
       expect(drawButton).toBeDisabled();
+    });
+  });
+});
+
+describe('Tarot - Authenticated', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    authState.isAuthenticated = true;
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ cards: [] }),
+    });
+    authFetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ records: [] }),
+    });
+  });
+
+  it('loads history through authFetch', async () => {
+    renderWithRouter(<Tarot />);
+
+    await waitFor(() => {
+      expect(authFetchMock).toHaveBeenCalledWith('/api/tarot/history');
     });
   });
 });

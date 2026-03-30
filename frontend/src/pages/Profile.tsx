@@ -56,19 +56,6 @@ export default function Profile() {
   const [activeProvider, setActiveProvider] = useState('');
   const [aiProviderError, setAiProviderError] = useState('');
 
-  const [latestBaziRecord, setLatestBaziRecord] = useState<{
-    id: string | number;
-    birthYear: number;
-    birthMonth: number;
-    birthDay: number;
-    birthHour: number;
-    gender: string;
-    birthLocation?: string;
-    timezone?: string;
-    createdAt: string;
-  } | null>(null);
-  const [latestBaziStatus, setLatestBaziStatus] = useState({ type: 'idle', message: '' });
-
   const [ziweiStatus, setZiweiStatus] = useState({ type: 'idle', message: '' });
   const [ziweiResult, setZiweiResult] = useState<{
     lunar: {
@@ -195,36 +182,6 @@ export default function Profile() {
 
   useEffect(() => {
     let isMounted = true;
-    const loadLatestBazi = async () => {
-      if (!isAuthenticated) return;
-      setLatestBaziStatus({ type: 'loading', message: '' });
-      try {
-        const res = await authFetch('/api/bazi/records?sort=created-desc&page=1&pageSize=1', {
-          cache: 'no-store',
-        });
-        if (!res.ok) throw new Error(await readApiErrorMessage(res, t('profile.recordsLoadError')));
-        const data = await res.json();
-        const record = Array.isArray(data?.records) ? data.records[0] : null;
-        if (!isMounted) return;
-        setLatestBaziRecord(record || null);
-        setLatestBaziStatus({
-          type: 'success',
-          message: record ? '' : t('profile.noRecordAvailable'),
-        });
-      } catch (error: unknown) {
-        if (!isMounted) return;
-        const message = error instanceof Error ? error.message : t('profile.recordsLoadError');
-        setLatestBaziStatus({ type: 'error', message });
-      }
-    };
-    void loadLatestBazi();
-    return () => {
-      isMounted = false;
-    };
-  }, [authFetch, isAuthenticated, t]);
-
-  useEffect(() => {
-    let isMounted = true;
     const loadRecentHistory = async () => {
       if (!isAuthenticated) return;
       setHistoryLoading(true);
@@ -236,7 +193,8 @@ export default function Profile() {
         if (!res.ok) throw new Error(await readApiErrorMessage(res, t('profile.recordsLoadError')));
         const data = await res.json();
         if (!isMounted) return;
-        setRecentHistory(Array.isArray(data?.records) ? data.records : []);
+        const nextHistory = Array.isArray(data?.records) ? data.records : [];
+        setRecentHistory(nextHistory);
         setHistoryMeta({
           totalCount: Number.isFinite(data?.totalCount) ? data.totalCount : 0,
           filteredCount: Number.isFinite(data?.filteredCount) ? data.filteredCount : 0,
@@ -369,6 +327,16 @@ export default function Profile() {
   }, [locale, preferences]);
 
   useUnsavedChangesWarning(hasUnsavedChanges, t('errors.unsavedChanges'));
+
+  const latestBaziRecord = recentHistory[0] || null;
+  const latestBaziStatus = historyLoading
+    ? { type: 'loading', message: '' }
+    : historyStatus.type === 'error'
+      ? historyStatus
+      : {
+          type: 'success',
+          message: latestBaziRecord ? '' : t('profile.noRecordAvailable'),
+        };
 
   const latestBirthSummary = latestBaziRecord
     ? `${latestBaziRecord.birthYear}-${String(latestBaziRecord.birthMonth).padStart(2, '0')}-${String(latestBaziRecord.birthDay).padStart(2, '0')} · ${String(latestBaziRecord.birthHour).padStart(2, '0')}:00`
