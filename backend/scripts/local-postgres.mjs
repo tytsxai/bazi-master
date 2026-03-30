@@ -50,6 +50,18 @@ const waitForPort = async (port, host, timeoutMs = 15_000) => {
   return false;
 };
 
+const waitForDatabaseReady = async (host, port, timeoutMs = 15_000) => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const check = runCapture('psql', ['-h', host, '-p', String(port), '-d', 'postgres', '-tAc', 'SELECT 1']);
+    if (check.status === 0 && check.stdout === '1') {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
+};
+
 const getInstalledPostgresMajorVersion = () => {
   const version = runCapture('postgres', ['--version']);
   if (version.status !== 0) {
@@ -88,7 +100,9 @@ const ensureDatabaseExists = ({ host, port, dbName }) => {
     `SELECT 1 FROM pg_database WHERE datname='${dbName.replace(/'/g, "''")}'`,
   ]);
   if (check.status !== 0 || check.stdout !== '1') {
-    throw new Error(`Unable to create or detect database ${dbName}`);
+    throw new Error(
+      `Unable to create or detect database ${dbName}: ${createResult.stderr || check.stderr || 'unknown error'}`
+    );
   }
 };
 
@@ -112,6 +126,10 @@ export const ensureLocalPostgres = async ({
     const ready = await waitForPort(port, host, 20_000);
     if (!ready) {
       throw new Error(`PostgreSQL did not start listening on ${host}:${port}`);
+    }
+    const databaseReady = await waitForDatabaseReady(host, port, 20_000);
+    if (!databaseReady) {
+      throw new Error(`PostgreSQL did not become query-ready on ${host}:${port}`);
     }
   }
 
