@@ -21,6 +21,8 @@ import {
 } from './historyUtils';
 
 const readErrorMessage = (response, fallback) => readApiErrorMessage(response, fallback);
+const readThrownMessage = (error, fallback) =>
+  error instanceof Error && error.message ? error.message : fallback;
 
 const readPendingSave = () => {
   try {
@@ -795,7 +797,19 @@ export default function useHistoryData({ t }) {
       });
       showStatus({ type: 'success', message: t('history.recordDeleted') });
       deletingIdsRef.current.delete(record.id);
-      await Promise.all([loadRecords({ page }), loadDeletedRecords(record)]);
+      try {
+        await Promise.all([loadRecords({ page }), loadDeletedRecords(record)]);
+      } catch {
+        // Keep optimistic state if background refresh fails.
+      }
+    } catch (error) {
+      setRecords((prev) => (prev.some((item) => item.id === record.id) ? prev : [record, ...prev]));
+      setTotalCount((prev) => clampCount(prev + 1));
+      setFilteredCount((prev) => clampCount(prev + 1));
+      showStatus({
+        type: 'error',
+        message: readThrownMessage(error, t('history.deleteRestoredError')),
+      });
     } finally {
       deletingIdsRef.current.delete(record.id);
     }
@@ -839,8 +853,14 @@ export default function useHistoryData({ t }) {
         lastDeletedRecordRef.current = null;
       }
       setLastDeletedId((prev) => (prev === recordId ? null : prev));
-      await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
+      try {
+        await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
+      } catch {
+        // Keep optimistic state if background refresh fails.
+      }
       showStatus({ type: 'success', message: t('history.recordRestored') });
+    } catch (error) {
+      showStatus({ type: 'error', message: readThrownMessage(error, t('history.restoreError')) });
     } finally {
       deletingIdsRef.current.delete(recordId);
     }
@@ -884,7 +904,16 @@ export default function useHistoryData({ t }) {
         lastDeletedRecordRef.current = null;
       }
       showStatus({ type: 'success', message: t('history.recordHardDeleted') });
-      await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
+      try {
+        await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
+      } catch {
+        // Keep optimistic state if background refresh fails.
+      }
+    } catch (error) {
+      showStatus({
+        type: 'error',
+        message: readThrownMessage(error, t('history.deletePermanentError')),
+      });
     } finally {
       deletingIdsRef.current.delete(recordId);
     }
@@ -1177,38 +1206,56 @@ export default function useHistoryData({ t }) {
     setTotalCount((prev) => Math.max(0, prev - idsToDelete.length));
     setFilteredCount((prev) => Math.max(0, prev - idsToDelete.length));
 
-    const res = await authFetch('/api/bazi/records/bulk-delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Client-ID': clientIdRef.current },
-      body: JSON.stringify({ ids: idsToDelete, clientId: clientIdRef.current }),
-    });
+    try {
+      const res = await authFetch('/api/bazi/records/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Client-ID': clientIdRef.current },
+        body: JSON.stringify({ ids: idsToDelete, clientId: clientIdRef.current }),
+      });
 
-    if (res.status === 401) {
-      setRecords(previousRecords);
-      setTotalCount(previousTotalCount);
-      setFilteredCount(previousFilteredCount);
-      return;
-    }
-
-    if (!res.ok) {
-      if (res.status === 404) {
-        await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
-        showStatus({ type: 'success', message: t('history.bulkAlreadyDeleted') });
+      if (res.status === 401) {
+        setRecords(previousRecords);
+        setTotalCount(previousTotalCount);
+        setFilteredCount(previousFilteredCount);
         return;
       }
+
+      if (!res.ok) {
+        if (res.status === 404) {
+          try {
+            await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
+          } catch {
+            // Keep optimistic state if background refresh fails.
+          }
+          showStatus({ type: 'success', message: t('history.bulkAlreadyDeleted') });
+          return;
+        }
+        setRecords(previousRecords);
+        setTotalCount(previousTotalCount);
+        setFilteredCount(previousFilteredCount);
+        const message = await readErrorMessage(res, t('history.bulkDeleteRestoredError'));
+        showStatus({ type: 'error', message });
+        return;
+      }
+
+      try {
+        await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
+      } catch {
+        // Keep optimistic state if background refresh fails.
+      }
+      showStatus({
+        type: 'success',
+        message: t('history.bulkDeleted', { count: idsToDelete.length }),
+      });
+    } catch (error) {
       setRecords(previousRecords);
       setTotalCount(previousTotalCount);
       setFilteredCount(previousFilteredCount);
-      const message = await readErrorMessage(res, t('history.bulkDeleteRestoredError'));
-      showStatus({ type: 'error', message });
-      return;
+      showStatus({
+        type: 'error',
+        message: readThrownMessage(error, t('history.bulkDeleteRestoredError')),
+      });
     }
-
-    await Promise.all([loadRecords({ page }), loadDeletedRecords()]);
-    showStatus({
-      type: 'success',
-      message: t('history.bulkDeleted', { count: idsToDelete.length }),
-    });
   };
 
   const requestDelete = (record) => {

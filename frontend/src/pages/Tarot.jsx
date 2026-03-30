@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { useAuthFetch } from '../auth/useAuthFetch';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { getPreferredAiProvider } from '../utils/aiProvider';
 import { readApiErrorMessage } from '../utils/apiError';
@@ -21,6 +22,7 @@ export default function Tarot() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language?.startsWith('zh');
   const { isAuthenticated } = useAuth();
+  const authFetch = useAuthFetch();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -89,9 +91,8 @@ export default function Tarot() {
     if (!isAuthenticated) return;
     setHistoryLoading(true);
     try {
-      const res = await fetch('/api/tarot/history', {
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/tarot/history');
+      if (res.status === 401) return;
       if (!res.ok) {
         const message = await readApiErrorMessage(res, t('history.recordLoadError'));
         throw new Error(message);
@@ -108,7 +109,7 @@ export default function Tarot() {
   useEffect(() => {
     if (isAuthenticated) loadHistory();
     else setHistory([]);
-  }, [isAuthenticated]);
+  }, [authFetch, isAuthenticated, t]);
 
   const redirectToAuth = (mode) => {
     const redirectPath = `${location.pathname}${location.search || ''}${location.hash || ''}`;
@@ -272,10 +273,10 @@ export default function Tarot() {
     const current = history.find((record) => record.id === recordId);
     setHistory((prev) => prev.filter((record) => record.id !== recordId));
     try {
-      const res = await fetch(`/api/tarot/history/${recordId}`, {
+      const res = await authFetch(`/api/tarot/history/${recordId}`, {
         method: 'DELETE',
-        credentials: 'include',
       });
+      if (res.status === 401) return;
       if (!res.ok) {
         const message = await readApiErrorMessage(res, t('history.recordLoadError'));
         throw new Error(message);
@@ -347,7 +348,7 @@ export default function Tarot() {
       if (requestId !== zodiacRequestRef.current) return;
       setZodiacStatus({ type: 'error', message: error.message });
     } finally {
-      if (requestId === requestId) {
+      if (requestId === zodiacRequestRef.current) {
         setZodiacLoading(false);
       }
     }

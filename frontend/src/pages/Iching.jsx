@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { useAuthFetch } from '../auth/useAuthFetch';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { getPreferredAiProvider } from '../utils/aiProvider';
 import { readApiErrorMessage } from '../utils/apiError';
@@ -11,6 +12,7 @@ import { sanitizeRedirectPath, safeAssignLocation } from '../utils/redirect';
 export default function Iching() {
   const { t } = useTranslation();
   const { isAuthenticated } = useAuth();
+  const authFetch = useAuthFetch();
   const navigate = useNavigate();
   const location = useLocation();
   const [numbers, setNumbers] = useState({ first: '', second: '', third: '' });
@@ -102,9 +104,8 @@ export default function Iching() {
     if (!isAuthenticated) return;
     setHistoryLoading(true);
     try {
-      const res = await fetch('/api/iching/history', {
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/iching/history');
+      if (res.status === 401) return;
       if (!res.ok) {
         const message = await readApiErrorMessage(res, t('iching.historyLoadError'));
         throw new Error(message);
@@ -125,7 +126,7 @@ export default function Iching() {
       return;
     }
     loadHistory();
-  }, [isAuthenticated]);
+  }, [authFetch, isAuthenticated, t]);
 
   const filteredHexagrams = useMemo(() => {
     if (!filter.trim()) return hexagrams;
@@ -378,10 +379,9 @@ export default function Iching() {
     setSaveLoading(true);
     setStatus(null);
     try {
-      const res = await fetch('/api/iching/history', {
+      const res = await authFetch('/api/iching/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           method: divination.method,
           numbers: divination.numbers,
@@ -393,6 +393,7 @@ export default function Iching() {
           aiInterpretation: aiResult,
         }),
       });
+      if (res.status === 401) return;
       if (!res.ok) {
         const message = await readApiErrorMessage(res, t('iching.saveFailed'));
         throw new Error(message);
@@ -419,11 +420,13 @@ export default function Iching() {
     setHistory((prev) => prev.filter((record) => record.id !== recordId));
     let responseStatus = null;
     try {
-      const res = await fetch(`/api/iching/history/${recordId}`, {
+      const res = await authFetch(`/api/iching/history/${recordId}`, {
         method: 'DELETE',
-        credentials: 'include',
       });
       responseStatus = res.status;
+      if (res.status === 401) {
+        return;
+      }
       if (res.status === 404) {
         return;
       }

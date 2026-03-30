@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import type { ReactNode } from 'react';
 
 // Mock dependencies
 vi.mock('../../auth/AuthContext', () => ({
@@ -26,7 +27,7 @@ vi.mock('../../utils/validation', () => ({
 
 import Login from '../Login';
 
-const renderWithRouter = (component, initialEntries = ['/login']) => {
+const renderWithRouter = (component: ReactNode, initialEntries = ['/login']) => {
   return render(
     <MemoryRouter
       initialEntries={initialEntries}
@@ -55,18 +56,18 @@ describe('Login Page', () => {
 
   it('renders login form by default', () => {
     renderWithRouter(<Login />);
-    expect(screen.getByText('auth.login')).toBeInTheDocument();
+    expect(screen.getByText('login.title')).toBeInTheDocument();
   });
 
   it('renders email input field', () => {
     renderWithRouter(<Login />);
-    const emailInput = screen.getByLabelText(/auth\.email/i);
+    const emailInput = screen.getByLabelText(/login\.email/i);
     expect(emailInput).toBeInTheDocument();
   });
 
   it('renders password input field', () => {
     renderWithRouter(<Login />);
-    const passwordInput = screen.getByLabelText(/auth\.password/i);
+    const passwordInput = screen.getByLabelText(/login\.password/i);
     expect(passwordInput).toBeInTheDocument();
   });
 });

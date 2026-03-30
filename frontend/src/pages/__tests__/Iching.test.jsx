@@ -9,16 +9,14 @@ const authState = {
   logout: vi.fn(),
 };
 
+const authFetchMock = vi.fn();
+
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => authState,
 }));
 
 vi.mock('../../auth/useAuthFetch', () => ({
-  useAuthFetch: () =>
-    vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({}),
-    }),
+  useAuthFetch: () => authFetchMock,
 }));
 
 vi.mock('../../utils/aiProvider', () => ({
@@ -47,6 +45,11 @@ describe('Iching', () => {
     vi.clearAllMocks();
     authState.isAuthenticated = false;
     authState.isAuthResolved = true;
+    authFetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ records: [] }),
+    });
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ hexagrams: [] }),
@@ -139,7 +142,11 @@ describe('Iching - Authenticated', () => {
     vi.clearAllMocks();
     authState.isAuthenticated = true;
     authState.isAuthResolved = true;
-    authState.isAuthenticated = true;
+    authFetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ records: [] }),
+    });
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ hexagrams: [], records: [] }),
@@ -151,6 +158,14 @@ describe('Iching - Authenticated', () => {
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/iching/hexagrams');
+    });
+  });
+
+  it('loads history through authFetch', async () => {
+    renderWithRouter(<Iching />);
+
+    await waitFor(() => {
+      expect(authFetchMock).toHaveBeenCalledWith('/api/iching/history');
     });
   });
 });
