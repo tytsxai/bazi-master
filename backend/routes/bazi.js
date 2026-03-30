@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { getBaziCalculation, hasFullBaziResult } from '../services/calculations.service.js';
 import { buildBaziCacheKey, getCachedBaziCalculationAsync } from '../services/cache.service.js';
 import { validateBaziInput, parseIdParam } from '../utils/validation.js';
-import { parseRecordsQuery } from '../utils/query.js';
+import { parseRecordsQuery, buildCreatedAtRange } from '../utils/query.js';
 import { buildSearchOr } from '../utils/search.js';
 import { generateAIContent, resolveAiProvider, buildBaziPrompt } from '../services/ai.service.js';
 import { createAiGuard } from '../lib/concurrency.js';
@@ -78,6 +78,11 @@ const buildTimeMetaForPayload = (payload) => {
   return { ...meta, trueSolarTime };
 };
 
+const findOwnedRecord = (id, userId, prismaClient = prisma) =>
+  prismaClient.baziRecord.findFirst({
+    where: { id, userId },
+  });
+
 const resolveRecordsOrderBy = (sortOption) => {
   switch (sortOption) {
     case 'created-asc':
@@ -102,6 +107,36 @@ const resolveRecordsOrderBy = (sortOption) => {
     default:
       return { createdAt: 'desc' };
   }
+};
+
+const buildRecordsWhere = ({ query, userId, trashedIds }) => {
+  const statusWhere = { userId };
+  if (query.normalizedStatus === 'active') {
+    statusWhere.id = { notIn: trashedIds };
+  } else if (query.normalizedStatus === 'deleted') {
+    statusWhere.id = { in: trashedIds };
+  }
+
+  const where = { ...statusWhere };
+
+  if (query.validGender) {
+    where.gender = query.validGender;
+  }
+
+  if (query.normalizedQuery) {
+    where.OR = buildSearchOr(query.normalizedQuery);
+  }
+
+  const createdAtRange = buildCreatedAtRange({
+    rangeType: query.rangeType,
+    validRangeDays: query.validRangeDays,
+    timezoneOffsetMinutes: query.timezoneOffsetMinutes,
+  });
+  if (createdAtRange) {
+    where.createdAt = createdAtRange;
+  }
+
+  return { statusWhere, where };
 };
 
 router.post('/calculate', async (req, res) => {
@@ -225,22 +260,7 @@ router.get('/records', requireAuth, async (req, res) => {
     });
     const trashedIds = trashed.map((t) => t.recordId);
 
-    const statusWhere = { userId };
-    if (query.normalizedStatus === 'active') {
-      statusWhere.id = { notIn: trashedIds };
-    } else if (query.normalizedStatus === 'deleted') {
-      statusWhere.id = { in: trashedIds };
-    }
-
-    const where = { ...statusWhere };
-
-    if (query.validGender) {
-      where.gender = query.validGender;
-    }
-
-    if (query.normalizedQuery) {
-      where.OR = buildSearchOr(query.normalizedQuery);
-    }
+    const { statusWhere, where } = buildRecordsWhere({ query, userId, trashedIds });
 
     const records = await prisma.baziRecord.findMany({
       where,
@@ -258,6 +278,7 @@ router.get('/records', requireAuth, async (req, res) => {
       records: records.map(serializeRecord),
       totalCount,
       filteredCount,
+      hasMore: query.safePage * query.safePageSize < filteredCount,
     });
   } catch (error) {
     logger.error(error);
@@ -370,21 +391,11 @@ router.get('/records/export', requireAuth, async (req, res) => {
     const trashedIds = trashed.map((t) => t.recordId);
     const trashedIdSet = new Set(trashedIds);
 
-    const where = { userId };
-    if (query.normalizedStatus === 'active') where.id = { notIn: trashedIds };
-    else if (query.normalizedStatus === 'deleted') where.id = { in: trashedIds };
-
-    if (query.validGender) {
-      where.gender = query.validGender;
-    }
-    if (query.normalizedQuery) {
-      where.OR = buildSearchOr(query.normalizedQuery);
-    }
+    const { where } = buildRecordsWhere({ query, userId, trashedIds });
 
     const records = await prisma.baziRecord.findMany({
       where,
       orderBy: resolveRecordsOrderBy(query.sortOption),
-      take: 2000, // reasonable limit for export
     });
 
     const payload = records.map((record) => {
@@ -403,22 +414,31 @@ router.post('/records/bulk-delete', requireAuth, async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids)) return res.status(400).json({ error: 'IDs array required' });
 
-  // Soft delete multiple
   try {
-    // Create trash entries. Ignore duplicates.
-    // prisma.createMany is not supported nicely with "ignore" on sqlite sometimes?
-    // But here we need to insert for each.
-    // Use a transaction or loop.
+    const normalizedIds = Array.from(
+      new Set(ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))
+    );
+    if (!normalizedIds.length) {
+      return res.status(400).json({ error: 'Valid record IDs required' });
+    }
 
-    const operations = ids.map((id) =>
+    const ownedRecords = await prisma.baziRecord.findMany({
+      where: { userId: req.user.id, id: { in: normalizedIds } },
+      select: { id: true },
+    });
+    if (!ownedRecords.length) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    const operations = ownedRecords.map((record) =>
       prisma.baziRecordTrash.upsert({
-        where: { userId_recordId: { userId: req.user.id, recordId: Number(id) } },
-        create: { userId: req.user.id, recordId: Number(id) },
+        where: { userId_recordId: { userId: req.user.id, recordId: record.id } },
+        create: { userId: req.user.id, recordId: record.id },
         update: {},
       })
     );
     await prisma.$transaction(operations);
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', updated: ownedRecords.length });
   } catch (err) {
     logger.error(err);
     res.status(500).json({ error: 'Bulk delete failed' });
@@ -430,13 +450,50 @@ router.get('/records/:id', requireAuth, async (req, res) => {
   if (!id) return res.status(400).json({ error: 'Invalid ID' });
 
   try {
-    const record = await prisma.baziRecord.findUnique({
-      where: { id, userId: req.user.id },
-    });
+    const record = await findOwnedRecord(id, req.user.id);
     if (!record) return res.status(404).json({ error: 'Record not found' });
     res.json({ record: serializeRecord(record) });
   } catch (error) {
     res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+router.put('/records/:id', requireAuth, async (req, res) => {
+  const id = parseIdParam(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid ID' });
+
+  const validation = validateBaziInput(req.body);
+  if (!validation.ok) {
+    return res.status(400).json({
+      error: validation.reason === 'whitespace' ? 'Whitespace-only input' : 'Invalid input',
+    });
+  }
+
+  try {
+    const existing = await findOwnedRecord(id, req.user.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    const calculation = await getBaziCalculation(validation.payload);
+    const updated = await prisma.baziRecord.update({
+      where: { id },
+      data: {
+        ...buildRecordData(validation.payload, req.user.id),
+        pillars: JSON.stringify(calculation.pillars),
+        fiveElements: JSON.stringify(calculation.fiveElements),
+        tenGods: JSON.stringify(calculation.tenGods),
+        luckCycles: JSON.stringify(calculation.luckCycles),
+      },
+    });
+
+    res.json({ record: serializeRecord(updated) });
+  } catch (error) {
+    if (error?.code === 'P2025') {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+    logger.error(error);
+    res.status(500).json({ error: 'Failed to update record' });
   }
 });
 
@@ -446,8 +503,7 @@ router.delete('/records/:id', requireAuth, async (req, res) => {
   if (!id) return res.status(400).json({ error: 'Invalid ID' });
 
   try {
-    // Verify ownership
-    const record = await prisma.baziRecord.findUnique({ where: { id, userId: req.user.id } });
+    const record = await findOwnedRecord(id, req.user.id);
     if (!record) return res.status(404).json({ error: 'Record not found' });
 
     await prisma.baziRecordTrash.upsert({
@@ -467,9 +523,17 @@ router.post('/records/:id/restore', requireAuth, async (req, res) => {
   if (!id) return res.status(400).json({ error: 'Invalid ID' });
 
   try {
-    await prisma.baziRecordTrash.deleteMany({
-      where: { userId: req.user.id, recordId: id },
-    });
+    const [record, deleted] = await prisma.$transaction([
+      findOwnedRecord(id, req.user.id),
+      prisma.baziRecordTrash.deleteMany({
+        where: { userId: req.user.id, recordId: id },
+      }),
+    ]);
+
+    if (!record || !deleted.count) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
     res.json({ status: 'ok' });
   } catch (err) {
     res.status(500).json({ error: 'Restore failed' });
@@ -482,18 +546,30 @@ router.delete('/records/:id/hard-delete', requireAuth, async (req, res) => {
   if (!id) return res.status(400).json({ error: 'Invalid ID' });
 
   try {
-    // Delete from trash first (cascade not working reverse?)
-    await prisma.baziRecordTrash.deleteMany({ where: { userId: req.user.id, recordId: id } });
-    // Delete from favorites
-    await prisma.favorite.deleteMany({ where: { userId: req.user.id, recordId: id } });
+    const result = await prisma.$transaction(async (tx) => {
+      const record = await findOwnedRecord(id, req.user.id, tx);
+      if (!record) {
+        const notFoundError = new Error('NOT_FOUND');
+        notFoundError.code = 'NOT_FOUND';
+        throw notFoundError;
+      }
 
-    // Delete record
-    await prisma.baziRecord.delete({
-      where: { id, userId: req.user.id },
+      await tx.baziRecordTrash.deleteMany({ where: { userId: req.user.id, recordId: id } });
+      await tx.favorite.deleteMany({ where: { userId: req.user.id, recordId: id } });
+      return tx.baziRecord.deleteMany({
+        where: { id, userId: req.user.id },
+      });
     });
+
+    if (!result.count) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
     res.json({ status: 'ok' });
   } catch (err) {
-    if (err.code === 'P2025') return res.status(404).json({ error: 'Not found' });
+    if (err?.code === 'NOT_FOUND' || err?.code === 'P2025') {
+      return res.status(404).json({ error: 'Not found' });
+    }
     res.status(500).json({ error: 'Hard delete failed' });
   }
 });

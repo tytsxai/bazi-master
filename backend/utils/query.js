@@ -18,6 +18,64 @@ export const normalizeRangeFilter = (rangeDays) => {
   return { rangeType: null, rangeDays: validRangeDays };
 };
 
+const MINUTE_MS = 60 * 1000;
+const DAY_MS = 24 * 60 * MINUTE_MS;
+
+const resolveTimezoneOffsetMinutes = (timezoneOffsetMinutes) =>
+  Number.isFinite(timezoneOffsetMinutes) ? timezoneOffsetMinutes : 0;
+
+export const buildCreatedAtRange = ({
+  rangeType = null,
+  validRangeDays = null,
+  timezoneOffsetMinutes = null,
+  now = new Date(),
+} = {}) => {
+  const nowDate = now instanceof Date ? now : new Date(now);
+  if (Number.isNaN(nowDate.getTime())) return null;
+
+  const offsetMinutes = resolveTimezoneOffsetMinutes(timezoneOffsetMinutes);
+  const offsetMs = offsetMinutes * MINUTE_MS;
+  const shiftedNow = new Date(nowDate.getTime() + offsetMs);
+
+  if (rangeType === 'today') {
+    const startLocalMs = Date.UTC(
+      shiftedNow.getUTCFullYear(),
+      shiftedNow.getUTCMonth(),
+      shiftedNow.getUTCDate()
+    );
+    const endLocalMs = startLocalMs + DAY_MS;
+    return {
+      gte: new Date(startLocalMs - offsetMs),
+      lt: new Date(endLocalMs - offsetMs),
+    };
+  }
+
+  if (rangeType === 'week') {
+    const localDay = shiftedNow.getUTCDay();
+    const daysFromMonday = (localDay + 6) % 7;
+    const startLocalMs =
+      Date.UTC(
+        shiftedNow.getUTCFullYear(),
+        shiftedNow.getUTCMonth(),
+        shiftedNow.getUTCDate()
+      ) -
+      daysFromMonday * DAY_MS;
+    return {
+      gte: new Date(startLocalMs - offsetMs),
+      lte: nowDate,
+    };
+  }
+
+  if (Number.isFinite(validRangeDays) && validRangeDays > 0) {
+    return {
+      gte: new Date(nowDate.getTime() - validRangeDays * DAY_MS),
+      lte: nowDate,
+    };
+  }
+
+  return null;
+};
+
 export const parseRecordsQuery = (source) => {
   const {
     page = '1',

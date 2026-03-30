@@ -50,9 +50,25 @@ const waitForPort = async (port, host, timeoutMs = 15_000) => {
   return false;
 };
 
+const getInstalledPostgresMajorVersion = () => {
+  const version = runCapture('postgres', ['--version']);
+  if (version.status !== 0) {
+    throw new Error(version.stderr || 'Unable to determine PostgreSQL version');
+  }
+  return version.stdout.match(/(\d+)(?:\.\d+)?/)?.[1] ?? '';
+};
+
 const ensureDataDirInitialized = (dataDir) => {
   const versionFile = path.join(dataDir, 'PG_VERSION');
-  if (fs.existsSync(versionFile)) return;
+  if (fs.existsSync(versionFile)) {
+    const currentMajorVersion = getInstalledPostgresMajorVersion();
+    const initializedMajorVersion = fs.readFileSync(versionFile, 'utf8').trim();
+    if (currentMajorVersion && initializedMajorVersion && currentMajorVersion !== initializedMajorVersion) {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    } else {
+      return;
+    }
+  }
   fs.mkdirSync(dataDir, { recursive: true });
   run('initdb', ['-D', dataDir, '--auth=trust']);
 };

@@ -14,6 +14,8 @@ backend/dist/
 frontend/test-results/
 test-results/
 verification/
+frontend/verification/
+.tmp/
 frontend/.vite/
 prisma/.pgdata-e2e/
 frontend/test-error*.txt
