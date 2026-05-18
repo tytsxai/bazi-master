@@ -1,10 +1,14 @@
-# BaZi Master
+# BaZi Master · 八字 / 塔罗 / 周易 / 星座 / 紫微 全栈玄学示例项目
 
-> 版本: v0.1.3-dev | 更新: 2025-12-30
+[![Release](https://img.shields.io/github/v/release/tytsxai/bazi-master)](https://github.com/tytsxai/bazi-master/releases) · [llms.txt](llms.txt) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/tytsxai/bazi-master/issues)
 
-一个融合八字、塔罗、周易、星座、紫微的全栈示例项目，前后端均为开源示例代码，默认使用 SQLite 数据库，生产推荐 PostgreSQL + Redis。
+> **关键词**:八字排盘开源 · 塔罗抽牌全栈 · 周易起卦 API · 星座配对 React · 紫微斗数排盘开源 · 合盘 Synastry 分析 · 灵魂画像 AI 图片 · WebSocket AI 流式 · React + Express + Prisma · SQLite / PostgreSQL + Redis
+>
+> **Keywords**: BaZi chart open-source · Tarot draw API · I Ching divination API · Western astrology compatibility · Zi Wei Dou Shu chart · full-stack divination starter · React Vite Tailwind divination · Prisma divination schema · open-source divination web app
 
-English summary: BaZi Master is a sample full‑stack divination app (React + Express + Prisma). Default DB is SQLite; production targets PostgreSQL + Redis.
+一个融合八字、塔罗、周易、星座、紫微的全栈示例项目,前后端均为开源示例代码,默认使用 SQLite 数据库,生产推荐 PostgreSQL + Redis。**这是参考实现 / 示例项目**,不是托管的算命服务 —— 你可以 fork 它、改逻辑、对接自己的 AI 与 OAuth、自部署。
+
+English summary: BaZi Master is an open-source **reference full-stack divination app** combining BaZi, Tarot, I Ching, Western astrology, and Zi Wei Dou Shu (React + Express + Prisma). Default DB SQLite; production-recommended PostgreSQL + Redis. Bring your own AI provider and OAuth credentials.
 
 ## 功能特性
 
