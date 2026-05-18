@@ -52,7 +52,11 @@ jobs:
         run: |
           cd backend
           export DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/bazi_master_e2e?schema=public'
-          node scripts/prisma.mjs db push --force-reset --schema=../prisma/schema.prisma
+          # Use `migrate reset` so the prisma migration history table is set up.
+          # `db push` writes the schema directly without history, which then
+          # causes the test runner's subsequent `migrate deploy` to hit P3005
+          # ("schema is not empty").
+          node scripts/prisma.mjs migrate reset --force --skip-seed --schema=../prisma/schema.prisma
 
       - name: Check Backend Linting/Formatting (Skip if not configured)
         run: |
