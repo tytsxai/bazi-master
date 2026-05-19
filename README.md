@@ -159,3 +159,7 @@ bazi-master/
 ## 许可证
 
 本项目采用 MIT 许可证。详情请参阅 `LICENSE` 文件。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=tytsxai/bazi-master&type=Date)](https://www.star-history.com/#tytsxai/bazi-master&Date)
