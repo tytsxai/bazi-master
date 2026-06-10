@@ -4,6 +4,10 @@
 
 本文件概述当前代码中实际实现的 HTTP API。所有响应均为 JSON；时间戳采用 ISO 8601。
 
+English summary: BaZi Master exposes a React + Express + Prisma backend API for BaZi chart calculation, Tarot draw, I Ching divination, Zodiac data, Zi Wei Dou Shu charts, Synastry analysis, AI interpretation, user records, favorites, health checks, OpenAPI JSON and Swagger UI.
+
+核心关键词 / Keywords: BaZi API, 八字排盘 API, Tarot draw API, I Ching divination API, Zi Wei Dou Shu API, Zodiac compatibility API, Synastry API, AI divination API, Express Prisma PostgreSQL API.
+
 ## 目录
 
 - [认证](#认证)

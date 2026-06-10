@@ -47,12 +47,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "ok",
-              "degraded",
-              "ready",
-              "not_ready"
-            ]
+            "enum": ["ok", "degraded", "ready", "not_ready"]
           },
           "checks": {
             "type": "object",
@@ -84,9 +79,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "alive"
-            ]
+            "enum": ["alive"]
           },
           "timestamp": {
             "type": "string",
@@ -212,11 +205,7 @@
       },
       "BaziCalculationRequest": {
         "type": "object",
-        "required": [
-          "birthYear",
-          "birthMonth",
-          "birthDay"
-        ],
+        "required": ["birthYear", "birthMonth", "birthDay"],
         "properties": {
           "birthYear": {
             "type": "integer",
@@ -251,9 +240,7 @@
       },
       "CreateFavoriteRequest": {
         "type": "object",
-        "required": [
-          "recordId"
-        ],
+        "required": ["recordId"],
         "properties": {
           "recordId": {
             "type": "integer",
@@ -266,10 +253,7 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": [
-              "ok",
-              "degraded"
-            ]
+            "enum": ["ok", "degraded"]
           },
           "timestamp": {
             "type": "string",
@@ -784,9 +768,7 @@
                   "properties": {
                     "status": {
                       "type": "string",
-                      "enum": [
-                        "ok"
-                      ]
+                      "enum": ["ok"]
                     }
                   }
                 }
@@ -950,9 +932,7 @@
                   "properties": {
                     "status": {
                       "type": "string",
-                      "enum": [
-                        "ok"
-                      ]
+                      "enum": ["ok"]
                     }
                   }
                 }

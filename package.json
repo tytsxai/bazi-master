@@ -1,5 +1,48 @@
 {
+  "name": "bazi-master",
+  "version": "0.1.0",
   "private": true,
+  "description": "Self-hostable open-source BaZi charting, Tarot, I Ching, Zodiac, Zi Wei Dou Shu, Synastry and AI divination web app starter built with React, Express, Prisma and PostgreSQL.",
+  "license": "MIT",
+  "author": "tytsxai",
+  "homepage": "https://github.com/tytsxai/bazi-master#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tytsxai/bazi-master.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tytsxai/bazi-master/issues"
+  },
+  "keywords": [
+    "bazi",
+    "bazi-master",
+    "bazi-chart",
+    "bazi-open-source",
+    "ziwei",
+    "ziwei-doushu",
+    "tarot",
+    "iching",
+    "astrology",
+    "synastry",
+    "divination",
+    "fortune-telling",
+    "metaphysics",
+    "chinese-metaphysics",
+    "ai-divination",
+    "react-divination-app",
+    "react",
+    "vite",
+    "tailwindcss",
+    "express",
+    "nodejs",
+    "prisma",
+    "postgresql",
+    "redis",
+    "ai-app",
+    "self-hosted",
+    "swagger",
+    "openapi"
+  ],
   "scripts": {
     "dev": "npm -C frontend run dev",
     "test": "npm -C backend test && npm -C frontend test",
