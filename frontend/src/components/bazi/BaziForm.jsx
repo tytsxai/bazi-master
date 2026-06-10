@@ -26,6 +26,23 @@ export default function BaziForm({
   favoriteStatus,
   errorAnnouncement,
 }) {
+  const defaultInputLimits = {
+    birthYear: { min: 1, max: new Date().getFullYear() },
+    birthMonth: { min: 1, max: 12 },
+    birthDay: { min: 1, max: 31 },
+    birthHour: { min: 0, max: 23 },
+  };
+  const inputLimits = {
+    birthYear: { ...defaultInputLimits.birthYear, ...dateInputLimits?.birthYear },
+    birthMonth: { ...defaultInputLimits.birthMonth, ...dateInputLimits?.birthMonth },
+    birthDay: { ...defaultInputLimits.birthDay, ...dateInputLimits?.birthDay },
+    birthHour: { ...defaultInputLimits.birthHour, ...dateInputLimits?.birthHour },
+  };
+  const getFieldChangeHandler = (field) => {
+    const handler = typeof onFieldChange === 'function' ? onFieldChange(field) : null;
+    return typeof handler === 'function' ? handler : () => {};
+  };
+
   return (
     <div className="glass-card rounded-3xl border border-white/10 p-8 shadow-glass">
       <h1 className="font-display text-3xl text-gold-400">{t('bazi.title')}</h1>
@@ -42,11 +59,11 @@ export default function BaziForm({
             id="birthYear"
             type="number"
             value={formData.birthYear}
-            onChange={onFieldChange('birthYear')}
+            onChange={getFieldChangeHandler('birthYear')}
             className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"
             placeholder="1993"
-            min={dateInputLimits.birthYear.min}
-            max={dateInputLimits.birthYear.max}
+            min={inputLimits.birthYear.min}
+            max={inputLimits.birthYear.max}
             required
             aria-invalid={Boolean(errors.birthYear)}
             aria-describedby={errors.birthYear ? 'bazi-birthYear-error' : undefined}
@@ -65,11 +82,11 @@ export default function BaziForm({
             id="birthMonth"
             type="number"
             value={formData.birthMonth}
-            onChange={onFieldChange('birthMonth')}
+            onChange={getFieldChangeHandler('birthMonth')}
             className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"
             placeholder="6"
-            min={dateInputLimits.birthMonth.min}
-            max={dateInputLimits.birthMonth.max}
+            min={inputLimits.birthMonth.min}
+            max={inputLimits.birthMonth.max}
             required
             aria-invalid={Boolean(errors.birthMonth)}
             aria-describedby={errors.birthMonth ? 'bazi-birthMonth-error' : undefined}
@@ -88,11 +105,11 @@ export default function BaziForm({
             id="birthDay"
             type="number"
             value={formData.birthDay}
-            onChange={onFieldChange('birthDay')}
+            onChange={getFieldChangeHandler('birthDay')}
             className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"
             placeholder="18"
-            min={dateInputLimits.birthDay.min}
-            max={dateInputLimits.birthDay.max}
+            min={inputLimits.birthDay.min}
+            max={inputLimits.birthDay.max}
             required
             aria-invalid={Boolean(errors.birthDay)}
             aria-describedby={errors.birthDay ? 'bazi-birthDay-error' : undefined}
@@ -111,11 +128,11 @@ export default function BaziForm({
             id="birthHour"
             type="number"
             value={formData.birthHour}
-            onChange={onFieldChange('birthHour')}
+            onChange={getFieldChangeHandler('birthHour')}
             className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"
             placeholder="14"
-            min="0"
-            max="23"
+            min={inputLimits.birthHour.min}
+            max={inputLimits.birthHour.max}
             required
             aria-invalid={Boolean(errors.birthHour)}
             aria-describedby={errors.birthHour ? 'bazi-birthHour-error' : undefined}
@@ -134,7 +151,7 @@ export default function BaziForm({
             id="gender"
             aria-label={t('bazi.gender')}
             value={formData.gender}
-            onChange={onFieldChange('gender')}
+            onChange={getFieldChangeHandler('gender')}
             className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"
             required
             aria-invalid={Boolean(errors.gender)}
@@ -160,7 +177,7 @@ export default function BaziForm({
             id="birthLocation"
             type="text"
             value={formData.birthLocation}
-            onChange={onFieldChange('birthLocation')}
+            onChange={getFieldChangeHandler('birthLocation')}
             list="bazi-location-options"
             className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"
             placeholder={t('bazi.locationPlaceholder')}
@@ -189,7 +206,7 @@ export default function BaziForm({
             id="timezone"
             type="text"
             value={formData.timezone}
-            onChange={onFieldChange('timezone')}
+            onChange={getFieldChangeHandler('timezone')}
             className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-white"
             placeholder="UTC+8"
             aria-invalid={Boolean(errors.timezone)}

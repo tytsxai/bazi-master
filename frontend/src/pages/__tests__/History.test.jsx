@@ -85,6 +85,6 @@ describe('History Page', () => {
 
   it('renders the page title', () => {
     renderWithRouter(<History />);
-    expect(screen.getByText('history.title')).toBeInTheDocument();
+    expect(screen.getByText('nav.history')).toBeInTheDocument();
   });
 });

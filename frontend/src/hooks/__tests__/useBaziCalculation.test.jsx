@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { cleanup, renderHook, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import useBaziCalculation from '../../components/bazi/useBaziCalculation';
 
@@ -50,22 +50,26 @@ const wrapper = ({ children }) => (
   </MemoryRouter>
 );
 const noopListener = () => {};
-const renderBaziHook = async () => {
-  const rendered = renderHook(() => useBaziCalculation(), { wrapper });
-  await act(async () => {
-    await Promise.resolve();
-  });
-  return rendered;
-};
+const renderBaziHook = () => renderHook(() => useBaziCalculation(), { wrapper });
 
 describe('useBaziCalculation', () => {
   beforeEach(() => {
     authFetchMock.mockReset();
     localStorage.clear();
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ locations: [] }),
-    });
+    global.fetch = vi.fn(
+      (_url, options = {}) =>
+        new Promise((resolve, reject) => {
+          options.signal?.addEventListener(
+            'abort',
+            () => {
+              const error = new Error('AbortError');
+              error.name = 'AbortError';
+              reject(error);
+            },
+            { once: true }
+          );
+        })
+    );
     vi.spyOn(window, 'addEventListener').mockImplementation(noopListener);
     vi.spyOn(window, 'removeEventListener').mockImplementation(noopListener);
     vi.spyOn(document, 'addEventListener').mockImplementation(noopListener);
@@ -84,6 +88,7 @@ describe('useBaziCalculation', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    cleanup();
   });
 
   afterEach(() => {
