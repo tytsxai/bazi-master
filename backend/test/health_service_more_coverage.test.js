@@ -14,7 +14,12 @@ describe('health.service more coverage', () => {
 
   it('withTimeout rejects when timeout elapses', async () => {
     const pending = new Promise(() => {});
-    await assert.rejects(() => withTimeout(pending, 1), /Timeout/);
+    const keepAlive = setTimeout(() => {}, 50);
+    try {
+      await assert.rejects(() => withTimeout(pending, 1), /Timeout/);
+    } finally {
+      clearTimeout(keepAlive);
+    }
   });
 
   it('checkDatabase returns ok true/false', async () => {

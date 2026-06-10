@@ -40,8 +40,26 @@ export const touchSession = (token, now = Date.now()) => {
   sessionStore.set(token, now);
 };
 
+export const touchSessionAsync = async (token, now = Date.now()) => {
+  if (!token) return;
+  if (sessionStore.setAsync) {
+    await sessionStore.setAsync(token, now);
+    return;
+  }
+  sessionStore.set(token, now);
+};
+
 export const revokeSession = (token) => {
   if (!token) return;
+  sessionStore.delete(token);
+};
+
+export const revokeSessionAsync = async (token) => {
+  if (!token) return;
+  if (sessionStore.deleteAsync) {
+    await sessionStore.deleteAsync(token);
+    return;
+  }
   sessionStore.delete(token);
 };
 

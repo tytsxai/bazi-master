@@ -51,4 +51,27 @@ describe('session store', () => {
     assert.equal(exists, false);
     assert.equal(deleteCalled, true);
   });
+
+  test('async writes wait for mirror operations', async () => {
+    const calls = [];
+    const store = createSessionStore({ ttlMs: 5000 });
+    store.setMirror({
+      async set(key, value, ttlMs) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        calls.push(['set', key, value, ttlMs]);
+      },
+      async delete(key) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        calls.push(['delete', key]);
+      },
+    });
+
+    await store.setAsync('session', 123);
+    await store.deleteAsync('session');
+
+    assert.deepEqual(calls, [
+      ['set', 'session', 123, 5000],
+      ['delete', 'session'],
+    ]);
+  });
 });

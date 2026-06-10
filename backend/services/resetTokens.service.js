@@ -42,6 +42,13 @@ const createMirroredStore = ({ name } = {}) => {
         mirror.set(key, value, ttlMs);
       }
     },
+    async setAsync(key, value, ttlMs = null) {
+      warnOnFallback();
+      store.set(key, value);
+      if (mirror?.set) {
+        await mirror.set(key, value, ttlMs);
+      }
+    },
     delete(key) {
       warnOnFallback();
       store.delete(key);
@@ -49,11 +56,25 @@ const createMirroredStore = ({ name } = {}) => {
         mirror.delete(key);
       }
     },
+    async deleteAsync(key) {
+      warnOnFallback();
+      store.delete(key);
+      if (mirror?.delete) {
+        await mirror.delete(key);
+      }
+    },
     clear() {
       warnOnFallback();
       store.clear();
       if (mirror?.clear) {
         mirror.clear();
+      }
+    },
+    async clearAsync() {
+      warnOnFallback();
+      store.clear();
+      if (mirror?.clear) {
+        await mirror.clear();
       }
     },
     has(key) {
@@ -78,10 +99,7 @@ const createMirroredStore = ({ name } = {}) => {
 export const resetTokenStore = createMirroredStore({ name: 'reset-token-store' });
 export const resetTokenByUser = createMirroredStore({ name: 'reset-token-by-user' });
 
-export const setResetTokenMirrors = ({
-  tokenMirror = null,
-  userMirror = null,
-} = {}) => {
+export const setResetTokenMirrors = ({ tokenMirror = null, userMirror = null } = {}) => {
   resetTokenStore.setMirror(tokenMirror);
   resetTokenByUser.setMirror(userMirror);
 };
@@ -140,11 +158,11 @@ export const getResetTokenEntryAsync = async (token) => {
   const remote = await resetTokenStore.getAsync(token);
   const normalized = normalizeTokenEntry(remote);
   if (!normalized) {
-    resetTokenStore.delete(token);
+    await resetTokenStore.deleteAsync(token);
     return null;
   }
   if (isExpiredEntry(normalized)) {
-    resetTokenStore.delete(token);
+    await resetTokenStore.deleteAsync(token);
     return null;
   }
   resetTokenStore.setLocal(token, normalized);
@@ -160,9 +178,9 @@ export const getResetTokenForUserAsync = async (userId) => {
   const local = resetTokenByUser.get(normalizedUserId);
   if (local) return local;
   if (!resetTokenByUser.getMirror()?.get) return null;
-  const remote = await resetTokenByUser.getAsync(String(normalizedUserId));
+  const remote = await resetTokenByUser.getAsync(normalizedUserId);
   if (typeof remote !== 'string' || !remote) {
-    resetTokenByUser.delete(normalizedUserId);
+    await resetTokenByUser.deleteAsync(normalizedUserId);
     return null;
   }
   resetTokenByUser.setLocal(normalizedUserId, remote);
@@ -176,12 +194,12 @@ export const setResetTokenForUser = async ({ userId, token, expiresAt, ttlMs } =
   const existingToken =
     resetTokenByUser.get(normalizedUserId) || (await getResetTokenForUserAsync(normalizedUserId));
   if (existingToken && existingToken !== token) {
-    resetTokenStore.delete(existingToken);
+    await resetTokenStore.deleteAsync(existingToken);
   }
 
   const entry = { userId: normalizedUserId, expiresAt: normalizeExpiresAt(expiresAt) };
-  resetTokenStore.set(token, entry, ttlMs);
-  resetTokenByUser.set(normalizedUserId, token, ttlMs);
+  await resetTokenStore.setAsync(token, entry, ttlMs);
+  await resetTokenByUser.setAsync(normalizedUserId, token, ttlMs);
 };
 
 export const deleteResetToken = (token, userId = null) => {
@@ -195,13 +213,26 @@ export const deleteResetToken = (token, userId = null) => {
   }
 };
 
+export const deleteResetTokenAsync = async (token, userId = null) => {
+  if (!token) return;
+  await resetTokenStore.deleteAsync(token);
+  if (userId) {
+    const normalizedUserId = normalizeUserId(userId);
+    const mappedToken =
+      resetTokenByUser.get(normalizedUserId) || (await getResetTokenForUserAsync(normalizedUserId));
+    if (mappedToken === token) {
+      await resetTokenByUser.deleteAsync(normalizedUserId);
+    }
+  }
+};
+
 export const deleteResetTokensForUser = async (userId) => {
   const normalizedUserId = normalizeUserId(userId);
   if (!normalizedUserId) return;
   const token =
     resetTokenByUser.get(normalizedUserId) || (await getResetTokenForUserAsync(normalizedUserId));
   if (token) {
-    resetTokenStore.delete(token);
+    await resetTokenStore.deleteAsync(token);
   }
-  resetTokenByUser.delete(normalizedUserId);
+  await resetTokenByUser.deleteAsync(normalizedUserId);
 };

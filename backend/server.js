@@ -5,7 +5,6 @@ import cookieParser from 'cookie-parser';
 import { pathToFileURL } from 'url';
 import swaggerUi from 'swagger-ui-express';
 import * as Sentry from '@sentry/node';
-import { nodeProfilingIntegration } from '@sentry/profiling-node';
 
 // Import configurations
 // Health Check imports
@@ -67,9 +66,17 @@ const app = express();
 app.disable('x-powered-by');
 
 if (process.env.SENTRY_DSN && NODE_ENV === 'production') {
+  const integrations = [];
+  try {
+    const { nodeProfilingIntegration } = await import('@sentry/profiling-node');
+    integrations.push(nodeProfilingIntegration());
+  } catch (error) {
+    logger.warn({ err: error }, '[sentry] Profiling integration unavailable');
+  }
+
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
-    integrations: [nodeProfilingIntegration()],
+    integrations,
     // Performance Monitoring
     tracesSampleRate: 1.0, //  Capture 100% of the transactions
     // Set sampling rate for profiling - this is relative to tracesSampleRate
@@ -217,7 +224,10 @@ app.use(globalErrorHandler);
 // Create HTTP server
 const server = http.createServer(app);
 
-const applyServerTimeouts = (serverInstance, { env = process.env, loggerInstance = logger } = {}) => {
+const applyServerTimeouts = (
+  serverInstance,
+  { env = process.env, loggerInstance = logger } = {}
+) => {
   if (!serverInstance) return;
 
   const parseMs = (value) => {
@@ -391,22 +401,20 @@ const setupGracefulShutdown = (
   processRef.once('unhandledRejection', (reason) => void closeServer('unhandledRejection', reason));
 };
 
+const parseEnabledFlag = (value, fallback = true) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+};
+
 const validateProductionConfig = ({ env = process.env } = {}) => {
   const errors = [];
   const warnings = [];
-  const allowDevOauthRaw = typeof env.ALLOW_DEV_OAUTH === 'string' ? env.ALLOW_DEV_OAUTH : '';
-  const allowDevOauthEnabled =
-    allowDevOauthRaw.trim().toLowerCase() === '1' ||
-    allowDevOauthRaw.trim().toLowerCase() === 'true';
-  const allowLocalhostRaw =
-    typeof env.ALLOW_LOCALHOST_PROD === 'string' ? env.ALLOW_LOCALHOST_PROD : '';
-  const allowLocalhostEnabled =
-    allowLocalhostRaw.trim().toLowerCase() === '1' ||
-    allowLocalhostRaw.trim().toLowerCase() === 'true';
-  const passwordResetEnabledRaw =
-    typeof env.PASSWORD_RESET_ENABLED === 'string' ? env.PASSWORD_RESET_ENABLED : '';
-  const passwordResetEnabled =
-    passwordResetEnabledRaw === '' ? true : passwordResetEnabledRaw.trim().toLowerCase() !== 'false';
+  const allowDevOauthEnabled = parseEnabledFlag(env.ALLOW_DEV_OAUTH, false);
+  const allowLocalhostEnabled = parseEnabledFlag(env.ALLOW_LOCALHOST_PROD, false);
+  const passwordResetEnabled = parseEnabledFlag(env.PASSWORD_RESET_ENABLED, true);
 
   if (!env.SESSION_TOKEN_SECRET || env.SESSION_TOKEN_SECRET.length < 32) {
     errors.push('SESSION_TOKEN_SECRET must be at least 32 characters in production');
@@ -425,7 +433,10 @@ const validateProductionConfig = ({ env = process.env } = {}) => {
   if (!env.FRONTEND_URL || (!allowLocalhostEnabled && env.FRONTEND_URL.includes('localhost'))) {
     warnings.push('FRONTEND_URL should not be localhost in production');
   }
-  if (!env.BACKEND_BASE_URL || (!allowLocalhostEnabled && env.BACKEND_BASE_URL.includes('localhost'))) {
+  if (
+    !env.BACKEND_BASE_URL ||
+    (!allowLocalhostEnabled && env.BACKEND_BASE_URL.includes('localhost'))
+  ) {
     warnings.push('BACKEND_BASE_URL should not be localhost in production');
   }
   if (!env.ADMIN_EMAILS) {

@@ -15,10 +15,13 @@ const parseBoolean = (value) => {
 
 const getEmailConfig = (env = process.env) => {
   const passwordResetEnabledRaw = env.PASSWORD_RESET_ENABLED;
+  const parsedPasswordResetEnabled = parseBoolean(passwordResetEnabledRaw);
   const passwordResetEnabled =
     passwordResetEnabledRaw === undefined || passwordResetEnabledRaw === ''
       ? true
-      : passwordResetEnabledRaw !== 'false';
+      : parsedPasswordResetEnabled !== null
+        ? parsedPasswordResetEnabled
+        : true;
 
   const smtpPort = Number(env.SMTP_PORT) || DEFAULT_SMTP_PORT;
   const smtpSecure = parseBoolean(env.SMTP_SECURE);

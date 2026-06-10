@@ -1,6 +1,6 @@
 import { logger } from '../config/logger.js';
 import { prisma } from '../config/prisma.js';
-import { revokeSession } from '../middleware/auth.js';
+import { revokeSessionAsync } from '../middleware/auth.js';
 import { deleteUserCascade } from '../userCleanup.js';
 
 const readBearerToken = (req) => {
@@ -52,7 +52,7 @@ export const deleteAuthMe = async (req, res) => {
     await deleteUserCascade({
       prisma,
       userId,
-      cleanupUserMemory: () => revokeSession(token),
+      cleanupUserMemory: () => revokeSessionAsync(token),
     });
     return res.json({ status: 'ok' });
   } catch (error) {

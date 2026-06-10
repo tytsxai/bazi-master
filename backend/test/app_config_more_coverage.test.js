@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { initAppConfig } from '../config/app.js';
+import { getBaziCacheConfig, getServerConfig, initAppConfig } from '../config/app.js';
 
 const withEnv = async (patch, run) => {
   const previous = {};
@@ -52,6 +52,39 @@ describe('app config more coverage', () => {
         assert.equal(config.allowedOrigins.has('http://localhost:3000'), true);
         assert.equal(config.allowedOrigins.has('http://127.0.0.1:3000'), true);
         assert.equal(config.allowedOrigins.has('not a url'), true);
+      }
+    );
+  });
+
+  it('uses a development admin fallback and allows missing production admins', async () => {
+    await withEnv({ NODE_ENV: 'development', ADMIN_EMAILS: undefined }, async () => {
+      const config = getServerConfig();
+      assert.equal(config.adminEmails.has('admin@example.com'), true);
+    });
+
+    await withEnv({ NODE_ENV: 'production', ADMIN_EMAILS: undefined }, async () => {
+      const config = getServerConfig();
+      assert.equal(config.adminEmails.size, 0);
+    });
+  });
+
+  it('falls back when numeric environment values are invalid', async () => {
+    await withEnv(
+      {
+        NODE_ENV: 'production',
+        ADMIN_EMAILS: 'admin@example.com',
+        PORT: 'bad-port',
+        RATE_LIMIT_WINDOW_MS: 'not-a-number',
+        RATE_LIMIT_MAX: 'also-bad',
+        BAZI_CACHE_TTL_MS: 'invalid',
+      },
+      async () => {
+        const serverConfig = getServerConfig();
+        const baziCacheConfig = getBaziCacheConfig();
+        assert.equal(serverConfig.port, 4000);
+        assert.equal(serverConfig.rateLimitWindowMs, 60000);
+        assert.equal(serverConfig.rateLimitMax, 120);
+        assert.equal(baziCacheConfig.ttlMs, 6 * 60 * 60 * 1000);
       }
     );
   });
