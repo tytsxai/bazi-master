@@ -63,6 +63,8 @@ npm -C backend run dev | npx pino-pretty
 BACKUP_DIR=./backups ./scripts/backup-db.sh
 ```
 
+脚本输出为 `custom pg_dump` 后再 gzip 压缩的文件，并生成 `<backup>.sha256`。脚本会立即通过容器内 `pg_restore --list` 验证备份可读，避免本机缺少 `pg_restore` 时误判。
+
 ### Scheduled Backups (cron example)
 
 ```bash
@@ -75,15 +77,18 @@ BACKUP_DIR=./backups ./scripts/backup-db.sh
 **WARNING**: This will overwrite existing data.
 
 ```bash
+./scripts/restore-db.sh ./backups/<file>.sql.gz --dry-run
 ./scripts/restore-db.sh ./backups/<file>.sql.gz
 ```
 
 如需手动执行：
 
 ```bash
-docker compose -f docker-compose.prod.yml exec postgres pg_dump -U postgres bazi_master > backup_$(date +%F).sql
-cat backup.sql | docker compose -f docker-compose.prod.yml exec -T postgres psql -U postgres -d bazi_master
+docker compose -f docker-compose.prod.yml exec postgres pg_dump -U postgres bazi_master | gzip > backup_$(date +%F).sql.gz
+zcat backup.sql.gz | docker compose -f docker-compose.prod.yml exec -T postgres psql -U postgres -d bazi_master
 ```
+
+> `restore-db.sh` 会校验 gzip 和 `.sha256`。生产恢复会覆盖数据库，执行前必须先确认目标环境、备份时间点和回滚方案。
 
 ## 4. Rollback Procedure
 

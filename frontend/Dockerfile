@@ -3,6 +3,11 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+ARG VITE_SENTRY_DSN=
+ARG VITE_CDN_URL=/
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
+ENV VITE_CDN_URL=$VITE_CDN_URL
+
 COPY package.json package-lock.json ./
 RUN npm ci
 

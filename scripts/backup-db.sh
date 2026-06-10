@@ -34,6 +34,14 @@ log_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
+calculate_checksum() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+    return
+  fi
+  shasum -a 256 "$1" | awk '{print $1}'
+}
+
 # Ensure backup directory exists
 mkdir -p "$BACKUP_DIR"
 
@@ -66,7 +74,7 @@ log_info "Starting backup process..."
 START_TIME=$(date +%s)
 
 # Use pg_dump with custom format for better compression and features
-if docker exec -t "$CONTAINER_NAME" pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom --compress=9 --verbose | gzip > "$FILENAME" 2>/dev/null; then
+if docker exec "$CONTAINER_NAME" pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom --compress=9 --verbose 2>/dev/null | gzip > "$FILENAME"; then
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
     BACKUP_SIZE=$(du -h "$FILENAME" | cut -f1)
@@ -79,12 +87,12 @@ fi
 
 # Generate checksum for integrity verification
 log_info "Generating checksum..."
-sha256sum "$FILENAME" | cut -d' ' -f1 > "$CHECKSUM_FILE"
+calculate_checksum "$FILENAME" > "$CHECKSUM_FILE"
 log_success "Checksum saved to $CHECKSUM_FILE"
 
 # Verify backup integrity
 log_info "Verifying backup integrity..."
-if gunzip -c "$FILENAME" | pg_restore --list >/dev/null 2>&1; then
+if gunzip -c "$FILENAME" | docker exec -i "$CONTAINER_NAME" pg_restore --list >/dev/null 2>&1; then
     log_success "Backup integrity verified"
 else
     log_error "Backup integrity check failed!"

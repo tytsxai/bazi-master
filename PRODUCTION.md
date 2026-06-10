@@ -15,6 +15,9 @@
    - AI 密钥可选：`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`
 2. 将 `.env.production` 与 `docker-compose.prod.yml` 放在同一目录。
 
+> `docker compose --env-file` 只用于变量替换，不会自动把所有变量注入容器。
+> `docker-compose.prod.yml` 已显式透传生产必需的后端变量（SMTP、Docs、Cookie、Sentry、超时、会话等）；新增生产变量时必须同步加入 compose `environment` 或使用受控的 `env_file`。
+
 ## 1. 构建与启动
 
 ```bash
@@ -89,6 +92,7 @@ server {
 - **跨站部署**：前后端跨站点时需 `SESSION_COOKIE_SAMESITE=none` 且 `SESSION_COOKIE_SECURE=true`。
 - **可选超时**：可设置 `SERVER_KEEP_ALIVE_TIMEOUT_MS` / `SERVER_HEADERS_TIMEOUT_MS` / `SERVER_REQUEST_TIMEOUT_MS` 控制慢连接；`headersTimeout` 应大于 `keepAliveTimeout`。
 - **迁移开关**：默认启动时执行 `migrate deploy`，可通过 `RUN_MIGRATIONS_ON_START=false` 关闭（推荐多实例时关闭）。
+- **多实例会话一致性**：登录、续期、登出、OAuth state 与密码重置依赖 Redis mirror；生产 Redis 不可用应让实例退出或从就绪池摘除。
 
 ## 6. 监控与日志
 
@@ -102,10 +106,15 @@ server {
 ## 7. 备份与恢复（PostgreSQL 示例）
 
 ```bash
-# 备份
-docker compose -f docker-compose.prod.yml exec postgres pg_dump -U postgres bazi_master | gzip > backups/bazi_master_$(date +%Y%m%d_%H%M%S).sql.gz
+# 推荐使用项目脚本（custom pg_dump + gzip + sha256，并验证 pg_restore 可读）
+BACKUP_DIR=./backups ./scripts/backup-db.sh
 
-# 恢复（覆盖现有库）
+# 恢复（覆盖现有库；脚本会先校验 gzip/checksum，并支持 dry-run）
+./scripts/restore-db.sh ./backups/<file>.sql.gz --dry-run
+./scripts/restore-db.sh ./backups/<file>.sql.gz
+
+# 手动 SQL 备份/恢复（仅适用于 plain SQL 备份）
+docker compose -f docker-compose.prod.yml exec postgres pg_dump -U postgres bazi_master | gzip > backups/bazi_master_sql_$(date +%Y%m%d_%H%M%S).sql.gz
 zcat backups/<file>.sql.gz | docker compose -f docker-compose.prod.yml exec -T postgres psql -U postgres bazi_master
 ```
 
