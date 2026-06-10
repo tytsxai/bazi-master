@@ -104,6 +104,7 @@ Redis检查: 1000ms
 ✅ 若 Redis 未配置：健康检查显示 `disabled`，服务使用内存会话/缓存/OAuth state/密码重置（仅适合单实例）
 ✅ 若 Redis 已配置但不可用：健康检查 `degraded`，就绪检查 `not_ready`
 ✅ 生产模式下启动阶段 Redis 不可用会直接退出
+✅ 故障演练脚本默认使用容器名 `bazi_redis`，可通过 `REDIS_CONTAINER_NAME` 覆盖
 ```
 
 #### 2. 数据库故障演练
@@ -114,6 +115,7 @@ Redis检查: 1000ms
 ✅ 就绪检查返回not_ready（阻止流量）
 ✅ 认证和数据操作失败但不崩溃
 ✅ 连接恢复后自动恢复服务
+✅ 故障演练脚本默认使用容器名 `bazi_postgres`，可通过 `POSTGRES_CONTAINER_NAME` 覆盖
 ```
 
 #### 3. AI并发控制测试
@@ -140,8 +142,8 @@ Redis检查: 1000ms
 
 ```
 1. Redis重启 → 连接尝试自动恢复
-2. 现有内存会话保持可用
-3. Redis恢复后会话镜像继续写入
+2. 单实例内存会话可短期保持；多实例生产应依赖 Redis 并让实例从就绪池摘除
+3. Redis恢复后会话、OAuth state、密码重置 mirror 继续写入
 4. 启动阶段若 Redis 不可用（生产）会直接退出，需要先恢复 Redis 再启动服务
 ```
 

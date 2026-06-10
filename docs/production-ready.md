@@ -30,6 +30,7 @@
 - Cookie：`SESSION_COOKIE_SAMESITE` / `SESSION_COOKIE_DOMAIN` / `SESSION_COOKIE_SECURE`
 - 代理：`TRUST_PROXY=1`
 - 文档：`DOCS_USER` / `DOCS_PASSWORD`（生产访问 `/api-docs`）
+- Docker Compose：`.env.production` 中新增的运行变量必须同步出现在 `docker-compose.prod.yml` 的 `environment` 或受控 `env_file`
 
 ## 应用健康
 
@@ -46,6 +47,7 @@
 - [ ] 会话密钥定期轮换（建议 90 天）
 - [ ] 速率限制启用
 - [ ] 关闭 `ALLOW_DEV_OAUTH`（生产环境禁用开发直登）
+- [ ] 生产 5xx 响应不暴露内部错误信息，详细错误只进入后端日志/APM
 
 ## 监控与告警
 
@@ -58,6 +60,7 @@
 
 - [ ] 每日自动备份 PostgreSQL，保留 ≥30 天
 - [ ] 定期演练备份恢复
+- [ ] 恢复前验证 gzip、sha256 与 `pg_restore --list`
 - [ ] 配置文件与环境变量另行备份
 
 ## 性能与容量

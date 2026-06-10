@@ -30,6 +30,14 @@ log_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
+calculate_checksum() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+        return
+    fi
+    shasum -a 256 "$1" | awk '{print $1}'
+}
+
 show_usage() {
     echo "Usage: $0 <path_to_backup_file.sql.gz> [options]"
     echo
@@ -105,7 +113,9 @@ fi
 CHECKSUM_FILE="${BACKUP_FILE}.sha256"
 if [ -f "$CHECKSUM_FILE" ]; then
     log_info "Verifying backup checksum..."
-    if ! sha256sum -c "$CHECKSUM_FILE" >/dev/null 2>&1; then
+    EXPECTED_CHECKSUM="$(awk '{print $1}' "$CHECKSUM_FILE")"
+    ACTUAL_CHECKSUM="$(calculate_checksum "$BACKUP_FILE")"
+    if [ -z "$EXPECTED_CHECKSUM" ] || [ "$EXPECTED_CHECKSUM" != "$ACTUAL_CHECKSUM" ]; then
         log_error "Backup checksum verification failed!"
         exit 1
     fi

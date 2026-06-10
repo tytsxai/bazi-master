@@ -7,6 +7,8 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+REDIS_CONTAINER_NAME="${REDIS_CONTAINER_NAME:-bazi_redis}"
+POSTGRES_CONTAINER_NAME="${POSTGRES_CONTAINER_NAME:-bazi_postgres}"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -65,6 +67,40 @@ wait_for_service() {
     return 1
 }
 
+wait_for_redis() {
+    local container_name=${1:-$REDIS_CONTAINER_NAME}
+    local timeout=${2:-30}
+
+    log_info "Waiting for Redis container $container_name to be ready..."
+    for i in $(seq 1 $timeout); do
+        if docker exec "$container_name" redis-cli ping 2>/dev/null | grep -q PONG; then
+            log_success "Redis is ready"
+            return 0
+        fi
+        sleep 1
+    done
+
+    log_error "Redis failed to start within $timeout seconds"
+    return 1
+}
+
+wait_for_postgres() {
+    local container_name=${1:-$POSTGRES_CONTAINER_NAME}
+    local timeout=${2:-30}
+
+    log_info "Waiting for PostgreSQL container $container_name to be ready..."
+    for i in $(seq 1 $timeout); do
+        if docker exec "$container_name" pg_isready -U postgres -d bazi_master >/dev/null 2>&1; then
+            log_success "PostgreSQL is ready"
+            return 0
+        fi
+        sleep 1
+    done
+
+    log_error "PostgreSQL failed to start within $timeout seconds"
+    return 1
+}
+
 # 测试场景1: Redis故障
 test_redis_failure() {
     log_info "=== 测试场景1: Redis故障 ==="
@@ -76,8 +112,8 @@ test_redis_failure() {
     log_info "停止Redis服务..."
     if command -v redis-cli &> /dev/null; then
         redis-cli shutdown 2>/dev/null || true
-    elif [ "$(docker ps -q -f name=redis)" ]; then
-        docker stop redis
+    elif [ "$(docker ps -q -f name="$REDIS_CONTAINER_NAME")" ]; then
+        docker stop "$REDIS_CONTAINER_NAME"
     fi
 
     sleep 2
@@ -90,17 +126,17 @@ test_redis_failure() {
         log_warn "服务可能未正确处理Redis故障"
     fi
 
-    if curl -s "http://localhost:4000/api/ready" | grep -q '"status":"ready"'; then
-        log_success "就绪检查在Redis故障时仍返回ready（设计如此）"
+    if curl -s "http://localhost:4000/api/ready" | grep -q '"status":"not_ready"'; then
+        log_success "就绪检查在Redis故障时正确返回not_ready"
     else
-        log_error "就绪检查在Redis故障时返回not_ready"
+        log_error "就绪检查在Redis故障时未返回not_ready"
     fi
 
     # 重启Redis
     log_info "重启Redis服务..."
-    if [ "$(docker ps -a -q -f name=redis)" ]; then
-        docker start redis
-        wait_for_service "http://localhost:6379" "Redis" 10
+    if [ "$(docker ps -a -q -f name="$REDIS_CONTAINER_NAME")" ]; then
+        docker start "$REDIS_CONTAINER_NAME"
+        wait_for_redis "$REDIS_CONTAINER_NAME" 15
     fi
 
     sleep 2
@@ -113,8 +149,8 @@ test_database_failure() {
 
     # 停止数据库
     log_info "停止PostgreSQL服务..."
-    if [ "$(docker ps -q -f name=postgres)" ]; then
-        docker stop postgres
+    if [ "$(docker ps -q -f name="$POSTGRES_CONTAINER_NAME")" ]; then
+        docker stop "$POSTGRES_CONTAINER_NAME"
     elif command -v sudo &> /dev/null && sudo systemctl is-active postgresql &> /dev/null; then
         sudo systemctl stop postgresql
     fi
@@ -137,9 +173,9 @@ test_database_failure() {
 
     # 重启数据库
     log_info "重启PostgreSQL服务..."
-    if [ "$(docker ps -a -q -f name=postgres)" ]; then
-        docker start postgres
-        wait_for_service "http://localhost:5432" "PostgreSQL" 15
+    if [ "$(docker ps -a -q -f name="$POSTGRES_CONTAINER_NAME")" ]; then
+        docker start "$POSTGRES_CONTAINER_NAME"
+        wait_for_postgres "$POSTGRES_CONTAINER_NAME" 30
     fi
 
     sleep 5
@@ -224,7 +260,7 @@ main() {
     log_success "所有故障演练测试完成！"
     echo
     log_info "演练总结:"
-    echo "✅ Redis故障: 服务降级但保持可用"
+    echo "✅ Redis故障: 服务正确降级并从就绪池摘除"
     echo "✅ 数据库故障: 服务正确标记为not ready"
     echo "✅ AI并发控制: 防止重复请求"
     echo "✅ 高负载: 服务保持响应"
@@ -241,6 +277,5 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
-
 
 
