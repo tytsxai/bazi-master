@@ -26,8 +26,7 @@ const nodeCmd = process.execPath;
 const testEnv = {
   ...process.env,
   NODE_ENV: process.env.NODE_ENV || 'test',
-  SESSION_TOKEN_SECRET:
-    process.env.SESSION_TOKEN_SECRET || 'test-session-secret-for-auth-me-test',
+  SESSION_TOKEN_SECRET: process.env.SESSION_TOKEN_SECRET || 'test-session-secret-for-auth-me-test',
   ADMIN_EMAILS: process.env.ADMIN_EMAILS || 'test@example.com',
 };
 
@@ -41,7 +40,7 @@ try {
     const result = await ensureLocalPostgres({
       dataDir,
       host: '127.0.0.1',
-      port: Number(process.env.PG_TEST_PORT || 5432),
+      port: Number(process.env.PG_TEST_PORT || 5433),
       dbName: process.env.PG_TEST_DB || 'bazi_master',
       logFile,
     });

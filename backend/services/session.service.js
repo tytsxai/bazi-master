@@ -14,6 +14,13 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
     mirror = nextMirror;
   };
 
+  const setValue = (key, value) => {
+    const normalized = normalizeValue(value);
+    if (normalized === null) return null;
+    store.set(key, normalized);
+    return normalized;
+  };
+
   const normalizeValue = (value) => {
     if (Number.isFinite(value)) return value;
     const parsed = Number(value);
@@ -44,11 +51,18 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
     },
     set(key, value) {
       warnOnFallback();
-      const normalized = normalizeValue(value);
+      const normalized = setValue(key, value);
       if (normalized === null) return;
-      store.set(key, normalized);
       if (mirror?.set) {
         mirror.set(key, normalized, ttlMs);
+      }
+    },
+    async setAsync(key, value) {
+      warnOnFallback();
+      const normalized = setValue(key, value);
+      if (normalized === null) return;
+      if (mirror?.set) {
+        await mirror.set(key, normalized, ttlMs);
       }
     },
     delete(key) {
@@ -56,6 +70,13 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
       store.delete(key);
       if (mirror?.delete) {
         mirror.delete(key);
+      }
+    },
+    async deleteAsync(key) {
+      warnOnFallback();
+      store.delete(key);
+      if (mirror?.delete) {
+        await mirror.delete(key);
       }
     },
     has(key) {
@@ -85,6 +106,13 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
         mirror.clear();
       }
     },
+    async clearAsync() {
+      warnOnFallback();
+      store.clear();
+      if (mirror?.clear) {
+        await mirror.clear();
+      }
+    },
     deleteByPrefix(prefix) {
       warnOnFallback();
       if (!prefix) return;
@@ -95,6 +123,18 @@ export const createSessionStore = ({ ttlMs = null } = {}) => {
       }
       if (mirror?.deleteByPrefix) {
         mirror.deleteByPrefix(prefix);
+      }
+    },
+    async deleteByPrefixAsync(prefix) {
+      warnOnFallback();
+      if (!prefix) return;
+      for (const key of store.keys()) {
+        if (typeof key === 'string' && key.startsWith(prefix)) {
+          store.delete(key);
+        }
+      }
+      if (mirror?.deleteByPrefix) {
+        await mirror.deleteByPrefix(prefix);
       }
     },
     keys() {

@@ -4,7 +4,7 @@ import { prisma } from '../config/prisma.js';
 import { getServerConfig } from '../config/app.js';
 import {
   requireAuth,
-  revokeSession,
+  revokeSessionAsync,
   createSessionToken,
   sessionStore,
   isAdminUser,
@@ -23,7 +23,7 @@ import {
 } from '../controllers/auth.controller.js';
 import {
   buildOauthRedirectUrl,
-  buildOauthState,
+  buildOauthStateAsync,
   handleDevOauthLogin,
 } from '../services/oauth.service.js';
 
@@ -60,81 +60,89 @@ router.post('/password/request', handlePasswordResetRequest);
 router.post('/password/reset', handlePasswordResetConfirm);
 
 // OAuth redirect entry points
-router.get('/google', (req, res) => {
-  const { googleClientId, googleRedirectUri, frontendUrl, allowDevOauth } = getServerConfig();
-  const nextPath = sanitizeNextPath(req.query?.next) || null;
-  const state = buildOauthState(nextPath);
+router.get('/google', async (req, res, next) => {
+  try {
+    const { googleClientId, googleRedirectUri, frontendUrl, allowDevOauth } = getServerConfig();
+    const nextPath = sanitizeNextPath(req.query?.next) || null;
+    const state = await buildOauthStateAsync(nextPath);
 
-  if (allowDevOauth && !googleClientId) {
-    return handleDevOauthLogin({
-      provider: 'google',
-      req,
-      res,
-      nextPath,
-      prisma,
-      hashPassword,
-      createSessionToken,
-      sessionStore,
-      isAdminUser,
-      frontendUrl,
-      setSessionCookie,
-    });
+    if (allowDevOauth && !googleClientId) {
+      return await handleDevOauthLogin({
+        provider: 'google',
+        req,
+        res,
+        nextPath,
+        prisma,
+        hashPassword,
+        createSessionToken,
+        sessionStore,
+        isAdminUser,
+        frontendUrl,
+        setSessionCookie,
+      });
+    }
+
+    if (!googleClientId || !googleRedirectUri) {
+      const redirectUrl = buildOauthRedirectUrl({ error: 'not_configured', nextPath, frontendUrl });
+      return res.redirect(redirectUrl);
+    }
+
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', googleClientId);
+    authUrl.searchParams.set('redirect_uri', googleRedirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', 'email profile');
+    authUrl.searchParams.set('state', state);
+    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('prompt', 'consent');
+    return res.redirect(authUrl.toString());
+  } catch (error) {
+    return next(error);
   }
-
-  if (!googleClientId || !googleRedirectUri) {
-    const redirectUrl = buildOauthRedirectUrl({ error: 'not_configured', nextPath, frontendUrl });
-    return res.redirect(redirectUrl);
-  }
-
-  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  authUrl.searchParams.set('client_id', googleClientId);
-  authUrl.searchParams.set('redirect_uri', googleRedirectUri);
-  authUrl.searchParams.set('response_type', 'code');
-  authUrl.searchParams.set('scope', 'email profile');
-  authUrl.searchParams.set('state', state);
-  authUrl.searchParams.set('access_type', 'offline');
-  authUrl.searchParams.set('prompt', 'consent');
-  return res.redirect(authUrl.toString());
 });
 
-router.get('/wechat/redirect', (req, res) => {
-  const { wechatAppId, wechatRedirectUri, wechatScope, wechatFrontendUrl, allowDevOauth } =
-    getServerConfig();
-  const nextPath = sanitizeNextPath(req.query?.next) || null;
-  const state = buildOauthState(nextPath);
+router.get('/wechat/redirect', async (req, res, next) => {
+  try {
+    const { wechatAppId, wechatRedirectUri, wechatScope, wechatFrontendUrl, allowDevOauth } =
+      getServerConfig();
+    const nextPath = sanitizeNextPath(req.query?.next) || null;
+    const state = await buildOauthStateAsync(nextPath);
 
-  if (allowDevOauth && !wechatAppId) {
-    return handleDevOauthLogin({
-      provider: 'wechat',
-      req,
-      res,
-      nextPath,
-      prisma,
-      hashPassword,
-      createSessionToken,
-      sessionStore,
-      isAdminUser,
-      frontendUrl: wechatFrontendUrl,
-      setSessionCookie,
-    });
+    if (allowDevOauth && !wechatAppId) {
+      return await handleDevOauthLogin({
+        provider: 'wechat',
+        req,
+        res,
+        nextPath,
+        prisma,
+        hashPassword,
+        createSessionToken,
+        sessionStore,
+        isAdminUser,
+        frontendUrl: wechatFrontendUrl,
+        setSessionCookie,
+      });
+    }
+
+    if (!wechatAppId || !wechatRedirectUri) {
+      const redirectUrl = buildOauthRedirectUrl({
+        error: 'wechat_not_configured',
+        nextPath,
+        frontendUrl: wechatFrontendUrl,
+      });
+      return res.redirect(redirectUrl);
+    }
+
+    const authUrl = new URL('https://open.weixin.qq.com/connect/qrconnect');
+    authUrl.searchParams.set('appid', wechatAppId);
+    authUrl.searchParams.set('redirect_uri', wechatRedirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', wechatScope || 'snsapi_login');
+    authUrl.searchParams.set('state', state);
+    return res.redirect(`${authUrl.toString()}#wechat_redirect`);
+  } catch (error) {
+    return next(error);
   }
-
-  if (!wechatAppId || !wechatRedirectUri) {
-    const redirectUrl = buildOauthRedirectUrl({
-      error: 'wechat_not_configured',
-      nextPath,
-      frontendUrl: wechatFrontendUrl,
-    });
-    return res.redirect(redirectUrl);
-  }
-
-  const authUrl = new URL('https://open.weixin.qq.com/connect/qrconnect');
-  authUrl.searchParams.set('appid', wechatAppId);
-  authUrl.searchParams.set('redirect_uri', wechatRedirectUri);
-  authUrl.searchParams.set('response_type', 'code');
-  authUrl.searchParams.set('scope', wechatScope || 'snsapi_login');
-  authUrl.searchParams.set('state', state);
-  return res.redirect(`${authUrl.toString()}#wechat_redirect`);
 });
 
 // OAuth Callbacks
@@ -160,7 +168,7 @@ router.delete('/me', requireAuth, async (req, res) => {
     await deleteUserCascade({
       prisma,
       userId,
-      cleanupUserMemory: () => revokeSession(token),
+      cleanupUserMemory: () => revokeSessionAsync(token),
     });
     res.json({ status: 'ok' });
   } catch (error) {

@@ -121,6 +121,55 @@ describe('auth.service more coverage', () => {
     }
   });
 
+  it('authorizeToken awaits async session mirror updates', async () => {
+    const secret = 'secret';
+    const calls = [];
+    const prisma = {
+      user: {
+        async findUnique({ where }) {
+          return { id: where.id, email: 'u@example.com', name: 'User' };
+        },
+      },
+    };
+
+    const sessionValues = new Map();
+    const sessionStore = {
+      async getAsync(token) {
+        return sessionValues.get(token);
+      },
+      async setAsync(token, value) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        calls.push(['set', token, value]);
+        sessionValues.set(token, value);
+      },
+      async deleteAsync(token) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        calls.push(['delete', token]);
+        sessionValues.delete(token);
+      },
+    };
+
+    let current = 1000;
+    const authorizeToken = createAuthorizeToken({
+      prisma,
+      sessionStore,
+      isAdminUser: () => false,
+      tokenSecret: secret,
+      tokenTtlMs: 10_000,
+      sessionIdleMs: 100,
+      now: () => current,
+    });
+
+    const token = buildAuthToken({ userId: 1, issuedAt: 990, secret });
+    sessionValues.set(token, 990);
+    await authorizeToken(token);
+    assert.deepEqual(calls[0], ['set', token, 1000]);
+
+    current = 1200;
+    await assert.rejects(() => authorizeToken(token), /Session expired/);
+    assert.deepEqual(calls[1], ['delete', token]);
+  });
+
   it('createRequireAuth supports silent expired mode', async () => {
     const authorizeToken = async () => {
       throw new Error('Token expired');

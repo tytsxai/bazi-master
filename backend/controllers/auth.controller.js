@@ -5,8 +5,8 @@ import { prisma } from '../config/prisma.js';
 import { getServerConfig } from '../config/app.js';
 import {
   createSessionToken,
-  touchSession,
-  revokeSession,
+  touchSessionAsync,
+  revokeSessionAsync,
   sessionStore,
   isAdminUser,
 } from '../middleware/auth.js';
@@ -24,7 +24,7 @@ import {
   pruneResetTokens,
   getResetTokenEntryAsync,
   setResetTokenForUser,
-  deleteResetToken,
+  deleteResetTokenAsync,
 } from '../services/resetTokens.service.js';
 import {
   ensurePasswordResetDeliveryReady,
@@ -125,7 +125,7 @@ export const handleRegister = async (req, res) => {
   });
 
   const token = createSessionToken(user.id);
-  touchSession(token);
+  await touchSessionAsync(token);
   setSessionCookie(res, token);
 
   return res.json({
@@ -162,7 +162,7 @@ export const handleLogin = async (req, res) => {
   }
 
   const token = createSessionToken(user.id);
-  touchSession(token);
+  await touchSessionAsync(token);
   setSessionCookie(res, token);
 
   return res.json({
@@ -182,7 +182,7 @@ export const handleLogout = async (req, res) => {
     cookieToken ||
     readBearerToken(req) ||
     (typeof req.body?.token === 'string' ? req.body.token : null);
-  revokeSession(token);
+  await revokeSessionAsync(token);
   clearSessionCookie(res);
   res.json({ status: 'ok' });
 };
@@ -251,7 +251,7 @@ export const handlePasswordResetConfirm = async (req, res) => {
 
   const user = await prisma.user.findUnique({ where: { id: entry.userId } });
   if (!user) {
-    deleteResetToken(token, entry.userId);
+    await deleteResetTokenAsync(token, entry.userId);
     return res.status(400).json({ error: 'Invalid or expired token' });
   }
 
@@ -261,7 +261,7 @@ export const handlePasswordResetConfirm = async (req, res) => {
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { password: hashed } });
-  deleteResetToken(token, user.id);
+  await deleteResetTokenAsync(token, user.id);
 
   return res.json({ status: 'ok' });
 };
@@ -416,7 +416,7 @@ export const handleGoogleCallback = async (req, res) => {
     }
 
     const token = createSessionToken(user.id);
-    touchSession(token);
+    await touchSessionAsync(token);
     setSessionCookie(res, token);
 
     const redirectUrl = buildOauthRedirectUrl({
@@ -568,7 +568,7 @@ export const handleWeChatCallback = async (req, res) => {
     }
 
     const token = createSessionToken(user.id);
-    touchSession(token);
+    await touchSessionAsync(token);
     setSessionCookie(res, token);
 
     const redirectUrl = buildOauthRedirectUrl({

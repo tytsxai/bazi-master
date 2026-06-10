@@ -39,6 +39,17 @@ const buildOauthState = (nextPath) => {
   return state;
 };
 
+const buildOauthStateAsync = async (nextPath) => {
+  pruneOauthStateStore();
+  const state = crypto.randomBytes(24).toString('hex');
+  const entry = { createdAt: Date.now(), nextPath };
+  oauthStateStore.set(state, entry);
+  if (oauthStateMirror?.set) {
+    await oauthStateMirror.set(state, entry, OAUTH_STATE_TTL_MS);
+  }
+  return state;
+};
+
 const getLocalOauthState = (state) => {
   warnOnFallback();
   const entry = oauthStateStore.get(state);
@@ -67,7 +78,7 @@ const consumeOauthStateAsync = async (state) => {
   if (local) {
     oauthStateStore.delete(state);
     if (oauthStateMirror?.delete) {
-      oauthStateMirror.delete(state);
+      await oauthStateMirror.delete(state);
     }
     return local;
   }
@@ -78,18 +89,18 @@ const consumeOauthStateAsync = async (state) => {
   const createdAt = Number(remote.createdAt);
   if (!Number.isFinite(createdAt)) {
     if (oauthStateMirror?.delete) {
-      oauthStateMirror.delete(state);
+      await oauthStateMirror.delete(state);
     }
     return null;
   }
   if (Date.now() - createdAt > OAUTH_STATE_TTL_MS) {
     if (oauthStateMirror?.delete) {
-      oauthStateMirror.delete(state);
+      await oauthStateMirror.delete(state);
     }
     return null;
   }
   if (oauthStateMirror?.delete) {
-    oauthStateMirror.delete(state);
+    await oauthStateMirror.delete(state);
   }
   return {
     createdAt,
@@ -159,7 +170,11 @@ const handleDevOauthLogin = async ({
   }
 
   const token = createSessionToken(user.id);
-  sessionStore.set(token, Date.now());
+  if (sessionStore.setAsync) {
+    await sessionStore.setAsync(token, Date.now());
+  } else {
+    sessionStore.set(token, Date.now());
+  }
   if (typeof setSessionCookie === 'function') {
     setSessionCookie(res, token);
   }
@@ -174,6 +189,7 @@ const handleDevOauthLogin = async ({
 
 export {
   buildOauthState,
+  buildOauthStateAsync,
   consumeOauthState,
   consumeOauthStateAsync,
   buildOauthRedirectUrl,

@@ -3,6 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "description": "Express + Prisma API for BaZi Master, including BaZi, Tarot, I Ching, Zodiac, Zi Wei Dou Shu, Synastry, auth, OpenAPI, health checks and AI providers.",
+  "keywords": [
+    "bazi",
+    "tarot",
+    "iching",
+    "ziwei-doushu",
+    "astrology",
+    "express",
+    "prisma",
+    "postgresql",
+    "openapi",
+    "ai-provider"
+  ],
   "scripts": {
     "dev": "node server.js",
     "start": "node scripts/start.mjs",
@@ -23,7 +36,7 @@
     "express": "^4.21.1",
     "helmet": "^7.1.0",
     "lunar-javascript": "^1.7.7",
-    "nodemailer": "^6.9.14",
+    "nodemailer": "^8.0.10",
     "pino": "^10.1.0",
     "pino-http": "^11.0.0",
     "redis": "^4.6.14",

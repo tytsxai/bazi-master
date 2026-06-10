@@ -87,6 +87,6 @@ export const deleteUserCascade = async ({ prisma, userId, cleanupUserMemory = nu
   }
 
   if (typeof cleanupUserMemory === 'function') {
-    cleanupUserMemory(userId);
+    await cleanupUserMemory(userId);
   }
 };

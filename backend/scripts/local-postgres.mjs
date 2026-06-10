@@ -53,7 +53,16 @@ const waitForPort = async (port, host, timeoutMs = 15_000) => {
 const waitForDatabaseReady = async (host, port, timeoutMs = 15_000) => {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const check = runCapture('psql', ['-h', host, '-p', String(port), '-d', 'postgres', '-tAc', 'SELECT 1']);
+    const check = runCapture('psql', [
+      '-h',
+      host,
+      '-p',
+      String(port),
+      '-d',
+      'postgres',
+      '-tAc',
+      'SELECT 1',
+    ]);
     if (check.status === 0 && check.stdout === '1') {
       return true;
     }
@@ -75,7 +84,11 @@ const ensureDataDirInitialized = (dataDir) => {
   if (fs.existsSync(versionFile)) {
     const currentMajorVersion = getInstalledPostgresMajorVersion();
     const initializedMajorVersion = fs.readFileSync(versionFile, 'utf8').trim();
-    if (currentMajorVersion && initializedMajorVersion && currentMajorVersion !== initializedMajorVersion) {
+    if (
+      currentMajorVersion &&
+      initializedMajorVersion &&
+      currentMajorVersion !== initializedMajorVersion
+    ) {
       fs.rmSync(dataDir, { recursive: true, force: true });
     } else {
       return;

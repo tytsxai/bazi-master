@@ -21,6 +21,8 @@ export const createGlobalErrorHandler =
     const statusCode = err.statusCode || 500;
     const message = err.message || 'Internal Server Error';
     const requestId = req?.id || req?.requestId;
+    const isProduction = env.NODE_ENV === 'production';
+    const responseMessage = isProduction && statusCode >= 500 ? 'Internal Server Error' : message;
 
     // Log the error
     loggerInstance.error(
@@ -41,8 +43,8 @@ export const createGlobalErrorHandler =
     res.status(statusCode).json({
       status: 'error',
       statusCode,
-      message,
-      ...(env.NODE_ENV !== 'production' && { stack: err.stack }),
+      message: responseMessage,
+      ...(!isProduction && { stack: err.stack }),
     });
   };
 

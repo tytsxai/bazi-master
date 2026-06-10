@@ -54,11 +54,7 @@ export const buildCreatedAtRange = ({
     const localDay = shiftedNow.getUTCDay();
     const daysFromMonday = (localDay + 6) % 7;
     const startLocalMs =
-      Date.UTC(
-        shiftedNow.getUTCFullYear(),
-        shiftedNow.getUTCMonth(),
-        shiftedNow.getUTCDate()
-      ) -
+      Date.UTC(shiftedNow.getUTCFullYear(), shiftedNow.getUTCMonth(), shiftedNow.getUTCDate()) -
       daysFromMonday * DAY_MS;
     return {
       gte: new Date(startLocalMs - offsetMs),

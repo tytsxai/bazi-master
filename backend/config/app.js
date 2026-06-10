@@ -2,14 +2,13 @@ const readNumber = (value, fallback) => {
   if (value === undefined || value === null || value === '') {
     return Number(fallback);
   }
-  return Number(value);
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number(fallback);
 };
 
 const parseAdminEmails = (raw, nodeEnv = '') => {
   if (typeof raw !== 'string' || raw.trim() === '') {
-    throw new Error(
-      `ADMIN_EMAILS must be configured (comma-separated)${nodeEnv ? ` for NODE_ENV=${nodeEnv}` : ''}.`
-    );
+    return nodeEnv === 'production' ? new Set() : new Set(['admin@example.com']);
   }
   return new Set(
     raw
@@ -63,7 +62,7 @@ const parseTrustProxy = (raw) => {
 };
 
 export const getServerConfig = () => {
-  const port = process.env.PORT || 4000;
+  const port = readNumber(process.env.PORT, 4000);
   const jsonBodyLimit = process.env.JSON_BODY_LIMIT || '50mb';
   const maxUrlLength = readNumber(process.env.MAX_URL_LENGTH, 16384);
   const nodeEnv = process.env.NODE_ENV || '';

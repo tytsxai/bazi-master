@@ -205,10 +205,18 @@ export const createAuthorizeToken = ({
       throw new Error('Session expired');
     }
     if (current - lastSeen > sessionIdleMs) {
-      sessionStore.delete(token);
+      if (sessionStore.deleteAsync) {
+        await sessionStore.deleteAsync(token);
+      } else {
+        sessionStore.delete(token);
+      }
       throw new Error('Session expired');
     }
-    sessionStore.set(token, current);
+    if (sessionStore.setAsync) {
+      await sessionStore.setAsync(token, current);
+    } else {
+      sessionStore.set(token, current);
+    }
 
     const userId = parsed.userId;
     const user = await prisma.user.findUnique({ where: { id: userId } });

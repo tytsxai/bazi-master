@@ -35,6 +35,24 @@ describe('server startup coverage', () => {
       assert.deepEqual(errors, []);
       assert.deepEqual(warnings, []);
     }
+
+    {
+      const { errors } = validateProductionConfig({
+        env: {
+          SESSION_TOKEN_SECRET: 'x'.repeat(32),
+          DATABASE_URL: 'postgresql://example/db',
+          REDIS_URL: 'redis://localhost:6379',
+          FRONTEND_URL: 'https://example.com',
+          BACKEND_BASE_URL: 'https://api.example.com',
+          PASSWORD_RESET_ENABLED: '0',
+        },
+      });
+      assert.ok(
+        !errors.includes(
+          'SMTP_HOST and SMTP_FROM must be configured when password reset is enabled'
+        )
+      );
+    }
   });
 
   it('initRedisMirrors no-ops when initRedis returns null', async () => {
@@ -122,9 +140,7 @@ describe('server startup coverage', () => {
     assert.ok(
       calls.some(
         (c) =>
-          c[0] === 'setResetTokenMirrors' &&
-          c[1] === 'reset-token:' &&
-          c[2] === 'reset-token-user:'
+          c[0] === 'setResetTokenMirrors' && c[1] === 'reset-token:' && c[2] === 'reset-token-user:'
       )
     );
     assert.ok(calls.some((c) => c[0] === 'setOauthStateMirror' && c[1] === 'oauth-state:'));

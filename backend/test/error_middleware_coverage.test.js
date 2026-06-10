@@ -69,6 +69,38 @@ describe('error middleware coverage', () => {
     assert.equal(logged.body.deep.a.b.c.d.e, '[Truncated]');
   });
 
+  it('globalErrorHandler hides production 5xx messages', () => {
+    const logger = { error() {} };
+    const req = { method: 'GET', originalUrl: '/boom', body: {}, query: {}, params: {} };
+    const res = {
+      statusCode: null,
+      jsonBody: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(body) {
+        this.jsonBody = body;
+        return this;
+      },
+    };
+
+    const handler = createGlobalErrorHandler({
+      loggerInstance: logger,
+      env: { NODE_ENV: 'production' },
+    });
+    handler(
+      { statusCode: 500, message: 'database password leaked', stack: 'STACK' },
+      req,
+      res,
+      () => {}
+    );
+
+    assert.equal(res.statusCode, 500);
+    assert.equal(res.jsonBody.message, 'Internal Server Error');
+    assert.equal('stack' in res.jsonBody, false);
+  });
+
   it('globalErrorHandler includes stack outside production', () => {
     const logger = { error() {} };
     const req = { method: 'GET', originalUrl: '/', body: {}, query: {}, params: {} };
