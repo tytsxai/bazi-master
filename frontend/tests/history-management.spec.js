@@ -7,15 +7,16 @@ test('History management flow: filter, sort, delete, restore', async ({ page }) 
   });
 
   const timestamp = Date.now();
+  const searchScope = `E2E_History_${timestamp}`;
   const recordA = {
     birth: { year: '1989', month: '6', day: '12', hour: '9' },
     gender: 'female',
-    location: `E2E_History_${timestamp}_Alpha`,
+    location: `${searchScope}_Alpha`,
   };
   const recordB = {
     birth: { year: '1999', month: '2', day: '3', hour: '15' },
     gender: 'male',
-    location: `E2E_History_${timestamp}_Beta`,
+    location: `${searchScope}_Beta`,
   };
 
   await page.goto('/login');
@@ -105,6 +106,9 @@ test('History management flow: filter, sort, delete, restore', async ({ page }) 
   await expect(recordCards.filter({ hasText: recordB.location }).first()).toBeVisible({
     timeout: 20000,
   });
+
+  await searchInput.fill(searchScope);
+  await expect(page).toHaveURL(new RegExp(`q=${encodeURIComponent(searchScope)}`));
 
   const sortSelect = page.getByRole('combobox', { name: /^Sort/i });
   await sortSelect.selectOption('birth-asc');

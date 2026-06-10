@@ -79,6 +79,15 @@ export default function History() {
     tarotHistoryError,
     loadTarotHistory,
   } = useHistoryData({ t });
+  const safeDeepLinkState = deepLinkState || { status: 'idle', record: null };
+  const safeRecords = Array.isArray(records) ? records : [];
+  const safeOrderedDeletedRecords = Array.isArray(orderedDeletedRecords)
+    ? orderedDeletedRecords
+    : [];
+  const safeFilteredRecords = Array.isArray(filteredRecords) ? filteredRecords : [];
+  const safeSelectedIds = Array.isArray(selectedIds) ? selectedIds : [];
+  const safeSelectedSet = selectedSet instanceof Set ? selectedSet : new Set();
+  const safeTarotHistory = Array.isArray(tarotHistory) ? tarotHistory : [];
 
   return (
     <main id="main-content" tabIndex={-1} className="responsive-container pb-16">
@@ -223,24 +232,24 @@ export default function History() {
             </div>
           )}
         </section>
-        {deepLinkState.status === 'loading' && (
+        {safeDeepLinkState.status === 'loading' && (
           <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/70">
             {t('history.recordLoading')}
           </div>
         )}
-        {deepLinkState.status === 'missing' && (
+        {safeDeepLinkState.status === 'missing' && (
           <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
             <p className="font-semibold text-rose-100">{t('history.recordMissing')}</p>
             <p className="mt-1 text-rose-100/80">{t('history.sharedMissingDesc')}</p>
           </div>
         )}
-        {deepLinkState.status === 'error' && (
+        {safeDeepLinkState.status === 'error' && (
           <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
             <p className="font-semibold text-rose-100">{t('history.errorLoadingShared')}</p>
             <p className="mt-1 text-rose-100/80">{t('history.sharedErrorDesc')}</p>
           </div>
         )}
-        {deepLinkState.status === 'found' && deepLinkState.record && (
+        {safeDeepLinkState.status === 'found' && safeDeepLinkState.record && (
           <div
             data-testid="history-shared-record"
             className="mt-5 rounded-2xl border border-gold-400/30 bg-gold-500/10 p-4 text-sm text-gold-100"
@@ -264,8 +273,8 @@ export default function History() {
                   {t('history.birth')}
                 </p>
                 <p className="text-sm text-gold-100">
-                  {deepLinkState.record.birthYear}-{deepLinkState.record.birthMonth}-
-                  {deepLinkState.record.birthDay} · {deepLinkState.record.birthHour}:00
+                  {safeDeepLinkState.record.birthYear}-{safeDeepLinkState.record.birthMonth}-
+                  {safeDeepLinkState.record.birthDay} · {safeDeepLinkState.record.birthHour}:00
                 </p>
               </div>
               <div>
@@ -273,8 +282,9 @@ export default function History() {
                   {t('history.profile')}
                 </p>
                 <p className="text-sm text-gold-100">
-                  {deepLinkState.record.gender} · {deepLinkState.record.birthLocation || '—'} ·{' '}
-                  {deepLinkState.record.timezone || 'UTC'}
+                  {safeDeepLinkState.record.gender} ·{' '}
+                  {safeDeepLinkState.record.birthLocation || '—'} ·{' '}
+                  {safeDeepLinkState.record.timezone || 'UTC'}
                 </p>
               </div>
             </div>
@@ -284,7 +294,7 @@ export default function History() {
           <button
             type="button"
             onClick={handleExport}
-            disabled={!records.length || isExporting}
+            disabled={!safeRecords.length || isExporting}
             className="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isExporting ? t('history.exporting') : t('history.exportFiltered')}
@@ -330,15 +340,15 @@ export default function History() {
           onResetFilters={handleResetFilters}
         />
         <HistoryList
-          orderedDeletedRecords={orderedDeletedRecords}
+          orderedDeletedRecords={safeOrderedDeletedRecords}
           primaryRestoreId={primaryRestoreId}
           showDeletedLocation={showDeletedLocation}
           onRestore={handleRestore}
           onRequestHardDelete={requestHardDelete}
-          filteredRecords={filteredRecords}
+          filteredRecords={safeFilteredRecords}
           highlightRecordId={highlightRecordId}
-          selectedIds={selectedIds}
-          selectedSet={selectedSet}
+          selectedIds={safeSelectedIds}
+          selectedSet={safeSelectedSet}
           allFilteredSelected={allFilteredSelected}
           onToggleSelectAll={toggleSelectAll}
           onClearSelected={clearSelected}
@@ -392,13 +402,13 @@ export default function History() {
             {tarotHistoryError}
           </p>
         )}
-        {!tarotHistoryError && tarotHistory.length === 0 && !tarotHistoryLoading && (
+        {!tarotHistoryError && safeTarotHistory.length === 0 && !tarotHistoryLoading && (
           <div className="mt-4 rounded-2xl border border-dashed border-white/20 bg-white/5 p-4 text-sm text-white/60">
             {t('history.noTarotYet')}
           </div>
         )}
         <div className="mt-5 space-y-4">
-          {tarotHistory.map((record) => (
+          {safeTarotHistory.map((record) => (
             <article
               key={record.id}
               data-testid="history-tarot-entry"

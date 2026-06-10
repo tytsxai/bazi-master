@@ -16,10 +16,11 @@ vi.mock('../../auth/AuthContext', () => ({
 }));
 
 vi.mock('../../auth/useAuthFetch', () => ({
-  useAuthFetch: () => vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve({}),
-  }),
+  useAuthFetch: () =>
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    }),
 }));
 
 vi.mock('../../utils/aiProvider', () => ({

@@ -17,6 +17,10 @@ export default function BaziResult({
   maxTenGodStrength,
   luckCyclesList,
 }) {
+  const safeZiweiStatus = ziweiStatus || { type: 'idle', message: '' };
+  const safeTenGodsList = Array.isArray(tenGodsList) ? tenGodsList : [];
+  const safeLuckCyclesList = Array.isArray(luckCyclesList) ? luckCyclesList : [];
+
   if (variant === 'details') {
     return (
       <>
@@ -39,8 +43,8 @@ export default function BaziResult({
           >
             <h2 className="font-display text-2xl text-gold-400">{t('bazi.tenGods')}</h2>
             <div className="mt-4 grid gap-x-10 gap-y-3 3xl:grid-cols-2" data-testid="ten-gods-list">
-              {tenGodsList.length ? (
-                tenGodsList.map((item) => (
+              {safeTenGodsList.length ? (
+                safeTenGodsList.map((item) => (
                   <div
                     key={item.name}
                     className="flex items-center gap-4"
@@ -75,8 +79,8 @@ export default function BaziResult({
               className="mt-4 grid gap-3 sm:grid-cols-2 3xl:grid-cols-3"
               data-testid="luck-cycles-list"
             >
-              {luckCyclesList.length ? (
-                luckCyclesList.map((cycle) => (
+              {safeLuckCyclesList.length ? (
+                safeLuckCyclesList.map((cycle) => (
                   <div
                     key={cycle.range}
                     className="rounded-2xl border border-white/10 bg-white/5 p-4"
@@ -177,17 +181,17 @@ export default function BaziResult({
             {ziweiLoading ? `${t('profile.calculating')}...` : t('ziwei.generateChart')}
           </button>
         </div>
-        {ziweiStatus.type !== 'idle' && (
+        {safeZiweiStatus.type !== 'idle' && (
           <p
             data-testid="bazi-ziwei-status"
-            role={ziweiStatus.type === 'error' ? 'alert' : 'status'}
-            aria-live={ziweiStatus.type === 'error' ? 'assertive' : 'polite'}
+            role={safeZiweiStatus.type === 'error' ? 'alert' : 'status'}
+            aria-live={safeZiweiStatus.type === 'error' ? 'assertive' : 'polite'}
             className={`mt-4 text-sm ${
-              ziweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
+              safeZiweiStatus.type === 'error' ? 'text-rose-200' : 'text-emerald-200'
             }`}
           >
-            {ziweiStatus.message ||
-              (ziweiStatus.type === 'loading' ? `${t('profile.calculating')}...` : '')}
+            {safeZiweiStatus.message ||
+              (safeZiweiStatus.type === 'loading' ? `${t('profile.calculating')}...` : '')}
           </p>
         )}
         {ziweiResult && (

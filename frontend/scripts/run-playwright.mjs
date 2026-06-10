@@ -59,6 +59,10 @@ if (!process.env.ADMIN_EMAILS) {
 if (!process.env.SESSION_TOKEN_SECRET) {
   process.env.SESSION_TOKEN_SECRET = 'test-session-secret-for-auth-me-test';
 }
+// Evidence screenshots should not fail the flow when remote webfonts stall.
+if (!process.env.PW_TEST_SCREENSHOT_NO_FONTS_READY) {
+  process.env.PW_TEST_SCREENSHOT_NO_FONTS_READY = '1';
+}
 
 const isWindows = process.platform === 'win32';
 const playwrightBin = path.join(
