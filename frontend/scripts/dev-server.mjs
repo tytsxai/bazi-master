@@ -3,7 +3,13 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureLocalPostgres, stopLocalPostgres } from '../../backend/scripts/local-postgres.mjs';
+import { ensureLocalPostgres } from '../../backend/scripts/local-postgres.mjs';
+import {
+  e2ePostgresDataDir,
+  e2ePostgresDbName,
+  e2ePostgresPort,
+  stopE2EPostgres,
+} from './e2e-postgres.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -359,7 +365,6 @@ let shuttingDown = false;
 let backendRestarting = false;
 let frontendRestarting = false;
 let postgresStartedByScript = false;
-const postgresDataDir = path.join(rootDir, 'prisma', '.pgdata-e2e');
 
 const wireBackendExitHandler = () => {
   if (!backendProcess) return;
@@ -471,7 +476,9 @@ const shutdown = () => {
   if (frontendProcess) frontendProcess.kill('SIGTERM');
   if (backendProcess) backendProcess.kill('SIGTERM');
   if (postgresStartedByScript) {
-    stopLocalPostgres({ dataDir: postgresDataDir, mode: 'fast' });
+    // best-effort：Playwright 关 webServer 时会连着 pg_ctl 一起杀，这里经常来不及跑完。
+    // 真正保证回收的是 run-playwright.mjs——它在 Playwright 退出之后才停，不会被打断。
+    stopE2EPostgres();
   }
 };
 
@@ -507,14 +514,11 @@ if (
 
   const providedE2eDatabaseUrl = process.env.E2E_DATABASE_URL;
   let e2eDatabaseUrl = providedE2eDatabaseUrl;
-  // 5434 而不是 5433：5433 是 `bazi stack` 开发库的端口。共用端口时 ensureLocalPostgres
-  // 会发现端口已占用就直接复用开发库那个实例，于是 e2e 到底跑在自己的集群上还是开发库上，
-  // 取决于当时开发栈开没开——这不是设计，是巧合。给 e2e 自己的端口，两种状态下行为一致。
-  const pgPort = Number(process.env.PG_E2E_PORT || 5434);
-  const pgDbName = process.env.PG_E2E_DB || 'bazi_master_e2e';
+  const pgPort = e2ePostgresPort;
+  const pgDbName = e2ePostgresDbName;
   if (!e2eDatabaseUrl) {
     const result = await ensureLocalPostgres({
-      dataDir: postgresDataDir,
+      dataDir: e2ePostgresDataDir,
       port: pgPort,
       dbName: pgDbName,
     });
