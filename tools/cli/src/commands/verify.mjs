@@ -62,11 +62,14 @@ const assertDependencies = async (scripts) => {
   const status = await collectStackStatus(buildEnv());
   const missing = status.components.filter((c) => needed.has(c.name) && !c.running);
   if (missing.length) {
-    throw envError(`校验脚本需要 ${[...needed].join(' / ')} 在跑，但 ${missing.map((m) => m.name).join(' / ')} 没起来`, {
-      hint: missing.map((m) => `${m.name}: ${m.detail}`).join('; '),
-      next: 'bazi stack up',
-      details: { status },
-    });
+    throw envError(
+      `校验脚本需要 ${[...needed].join(' / ')} 在跑，但 ${missing.map((m) => m.name).join(' / ')} 没起来`,
+      {
+        hint: missing.map((m) => `${m.name}: ${m.detail}`).join('; '),
+        next: 'bazi stack up',
+        details: { status },
+      }
+    );
   }
 };
 
@@ -167,7 +170,10 @@ export const verifyCommand = defineCommand({
       run: ({ flags, out }) => {
         const scripts = discover().filter((s) => !flags.scope || s.scope === flags.scope);
         return out.ok(
-          { count: scripts.length, scripts: scripts.map(({ name, scope, needs, file }) => ({ name, scope, needs, file })) },
+          {
+            count: scripts.length,
+            scripts: scripts.map(({ name, scope, needs, file }) => ({ name, scope, needs, file })),
+          },
           (d) =>
             d.scripts
               .map((s) => `${s.scope.padEnd(9)} ${s.name.padEnd(32)} 需要: ${s.needs.join(',')}`)

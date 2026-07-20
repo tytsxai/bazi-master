@@ -58,12 +58,20 @@ export const initEnvFile = ({ force = false, rotateSecret = false } = {}) => {
     return { created: false, changed: [], path: paths.envFile };
   }
 
-  const base = exists && !force ? fs.readFileSync(paths.envFile, 'utf8') : fs.readFileSync(paths.envExample, 'utf8');
+  const base =
+    exists && !force
+      ? fs.readFileSync(paths.envFile, 'utf8')
+      : fs.readFileSync(paths.envExample, 'utf8');
   const current = parseEnvFile(base);
   const updates = {};
 
   const secret = current.SESSION_TOKEN_SECRET || '';
-  if (rotateSecret || !exists || secret.length < 32 || secret.startsWith('dev_secret_change_in_production')) {
+  if (
+    rotateSecret ||
+    !exists ||
+    secret.length < 32 ||
+    secret.startsWith('dev_secret_change_in_production')
+  ) {
     updates.SESSION_TOKEN_SECRET = generateSecret();
   }
   if (!exists || force || !current.DATABASE_URL) {
@@ -95,7 +103,10 @@ export const envCommand = defineCommand({
       ],
       run: ({ flags, out }) => {
         if (flags['dry-run']) {
-          return out.ok({ dryRun: true, target: paths.envFile }, () => `[dry-run] 会写入 ${paths.envFile}`);
+          return out.ok(
+            { dryRun: true, target: paths.envFile },
+            () => `[dry-run] 会写入 ${paths.envFile}`
+          );
         }
         const result = initEnvFile({ force: flags.force, rotateSecret: flags['rotate-secret'] });
         return out.ok(result, (d) =>
@@ -132,7 +143,10 @@ export const envCommand = defineCommand({
         const db = describeDatabaseUrl(effective.DATABASE_URL || '');
         return out.ok({ entries, database: db }, (d) =>
           d.entries
-            .map((e) => `${e.key.padEnd(28)} ${e.value || '(空)'}${e.source === '.env' ? '' : `   <- ${e.source}`}`)
+            .map(
+              (e) =>
+                `${e.key.padEnd(28)} ${e.value || '(空)'}${e.source === '.env' ? '' : `   <- ${e.source}`}`
+            )
             .join('\n')
         );
       },
@@ -152,7 +166,9 @@ export const envCommand = defineCommand({
         }
         const data = { ok: problems.length === 0, problems };
         if (problems.length) {
-          out.render(data, () => problems.map((p) => `✗ ${p.key}: ${p.problem} — ${p.why}`).join('\n'));
+          out.render(data, () =>
+            problems.map((p) => `✗ ${p.key}: ${p.problem} — ${p.why}`).join('\n')
+          );
           throw envError(`${problems.length} 项必填配置有问题`, {
             hint: problems.map((p) => `${p.key}=${p.problem}`).join(', '),
             next: 'bazi env init',
@@ -170,7 +186,9 @@ export const envCommand = defineCommand({
       args: [{ name: 'assignments', required: true, summary: 'KEY=VALUE 形式，可多个' }],
       run: ({ positionals, flags, out }) => {
         if (!positionals.length) {
-          throw usageError('至少给一个 KEY=VALUE', { next: 'bazi env set ADMIN_EMAILS=me@example.com' });
+          throw usageError('至少给一个 KEY=VALUE', {
+            next: 'bazi env set ADMIN_EMAILS=me@example.com',
+          });
         }
         const updates = {};
         for (const item of positionals) {
@@ -182,8 +200,9 @@ export const envCommand = defineCommand({
           throw envError('.env 不存在', { next: 'bazi env init' });
         }
         if (flags['dry-run']) {
-          return out.ok({ dryRun: true, updates: Object.keys(updates) }, (d) =>
-            `[dry-run] 会写入：${d.updates.join(', ')}`
+          return out.ok(
+            { dryRun: true, updates: Object.keys(updates) },
+            (d) => `[dry-run] 会写入：${d.updates.join(', ')}`
           );
         }
         const content = fs.readFileSync(paths.envFile, 'utf8');

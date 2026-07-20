@@ -11,7 +11,10 @@
  */
 import fs from 'node:fs';
 
-import { ensureLocalPostgres, stopLocalPostgres } from '../../../../backend/scripts/local-postgres.mjs';
+import {
+  ensureLocalPostgres,
+  stopLocalPostgres,
+} from '../../../../backend/scripts/local-postgres.mjs';
 
 const [action, resultFile] = process.argv.slice(2);
 

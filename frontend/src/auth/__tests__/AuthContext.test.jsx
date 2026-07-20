@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AuthProvider, useAuth } from '../AuthContext';
@@ -24,7 +25,10 @@ const TestComponent = () => {
 // Simplified Test Component that exposes methods via window for testing to avoid fireEvent complexities with context
 const TestConsumer = () => {
   const auth = useAuth();
-  window.authTest = auth;
+  // Writing to window during render is a side effect, so it belongs in an effect.
+  useEffect(() => {
+    window.authTest = auth;
+  }, [auth]);
   return null;
 };
 

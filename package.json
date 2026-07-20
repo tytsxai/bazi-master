@@ -49,7 +49,7 @@
     "test": "npm -C backend test && npm -C frontend test",
     "test:backend": "npm -C backend test",
     "test:frontend": "npm -C frontend test",
-    "lint": "eslint .",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx,.mjs,.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

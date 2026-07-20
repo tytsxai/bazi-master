@@ -17,7 +17,9 @@ export const run = (command, args, { cwd, env = process.env, stdio = 'inherit' }
         }
       });
     }
-    child.on('error', (error) => resolve({ code: 127, signal: null, stdout, stderr: error.message }));
+    child.on('error', (error) =>
+      resolve({ code: 127, signal: null, stdout, stderr: error.message })
+    );
     child.on('close', (code, signal) =>
       resolve({ code: code ?? (signal ? 1 : 0), signal, stdout, stderr })
     );

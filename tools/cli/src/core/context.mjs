@@ -146,7 +146,12 @@ export const describeDatabaseUrl = (url) => {
  * 这条规则刻意不放进 SKILL.md —— 文档是软约束，模型会漏读、会在长上下文里衰减。
  * 任何会写库的命令都必须先过这里。
  */
-export const assertDestructiveAllowed = ({ action, env = buildEnv(), yes = false, allowRemote = false }) => {
+export const assertDestructiveAllowed = ({
+  action,
+  env = buildEnv(),
+  yes = false,
+  allowRemote = false,
+}) => {
   const url = resolveDatabaseUrl(env);
   const info = describeDatabaseUrl(url);
 

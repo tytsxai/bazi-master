@@ -57,7 +57,12 @@ const probeHealth = async (port) => {
     const body = await response.json().catch(() => null);
     return { reachable: true, status: response.status, healthy: response.ok, body };
   } catch (error) {
-    return { reachable: false, status: null, healthy: false, error: error?.message || String(error) };
+    return {
+      reachable: false,
+      status: null,
+      healthy: false,
+      error: error?.message || String(error),
+    };
   }
 };
 
@@ -125,7 +130,10 @@ const diagnose = (name, fallbackNext) => {
 const spawnDetached = ({ name, command, args, cwd, env }) => {
   ensureStateDirs();
   const fd = fs.openSync(logFile(name), 'a');
-  fs.writeSync(fd, `\n[bazi-cli ${new Date().toISOString()}] start: ${command} ${args.join(' ')}\n`);
+  fs.writeSync(
+    fd,
+    `\n[bazi-cli ${new Date().toISOString()}] start: ${command} ${args.join(' ')}\n`
+  );
   const child = spawn(command, args, {
     cwd,
     env,
@@ -603,7 +611,8 @@ export const stackCommand = defineCommand({
         const status = flags['dry-run'] ? null : await collectStatus(env);
         return out.ok({ started: results, status }, (d) => {
           const lines = d.started.map(
-            (r) => `${out.statusIcon(r.status === 'foreign' ? 'warn' : 'ok')} ${r.component.padEnd(5)} ${r.status}${r.detail ? ` — ${r.detail}` : ''}`
+            (r) =>
+              `${out.statusIcon(r.status === 'foreign' ? 'warn' : 'ok')} ${r.component.padEnd(5)} ${r.status}${r.detail ? ` — ${r.detail}` : ''}`
           );
           if (d.status) lines.push('', renderStatus(out)(d.status));
           return lines.join('\n');
@@ -634,7 +643,10 @@ export const stackCommand = defineCommand({
         }
         return out.ok({ stopped: results }, (d) =>
           d.stopped
-            .map((r) => `${r.status === 'foreign' ? '!' : '-'} ${r.component.padEnd(5)} ${r.status}${r.detail ? ` — ${r.detail}` : ''}`)
+            .map(
+              (r) =>
+                `${r.status === 'foreign' ? '!' : '-'} ${r.component.padEnd(5)} ${r.status}${r.detail ? ` — ${r.detail}` : ''}`
+            )
             .join('\n')
         );
       },
@@ -686,7 +698,10 @@ export const stackCommand = defineCommand({
         }
         const file = name === 'db' ? path.join(paths.logs, 'postgres.log') : logFile(name);
         if (!fileExists(file)) {
-          return out.ok({ component: name, file, lines: [], note: '还没有日志' }, () => `（${file} 不存在，说明这个组件还没被 bazi 启动过）`);
+          return out.ok(
+            { component: name, file, lines: [], note: '还没有日志' },
+            () => `（${file} 不存在，说明这个组件还没被 bazi 启动过）`
+          );
         }
         if (flags.follow) {
           if (flags.json) {

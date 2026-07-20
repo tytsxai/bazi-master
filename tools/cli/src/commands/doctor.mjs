@@ -50,7 +50,13 @@ const collectChecks = async () => {
 
   const npmPath = which('npm');
   results.push(
-    check('npm', 'npm 可用', npmPath ? 'ok' : 'fail', npmPath || '未找到 npm', '安装 Node.js 自带的 npm')
+    check(
+      'npm',
+      'npm 可用',
+      npmPath ? 'ok' : 'fail',
+      npmPath || '未找到 npm',
+      '安装 Node.js 自带的 npm'
+    )
   );
 
   // --- 依赖 ---
@@ -205,14 +211,13 @@ const collectChecks = async () => {
     ['port:frontend', `前端端口 ${frontendPort}`, frontendPort],
   ]) {
     const open = await checkPort(port, '127.0.0.1', 400);
-    results.push(
-      check(id, label, 'ok', open ? '已被占用（服务可能已在运行）' : '空闲', null)
-    );
+    results.push(check(id, label, 'ok', open ? '已被占用（服务可能已在运行）' : '空闲', null));
   }
 
   // --- E2E ---
   const pwCache = playwrightCacheDir();
-  const pwReady = fileExists(pwCache) && fs.readdirSync(pwCache).some((n) => n.startsWith('chromium'));
+  const pwReady =
+    fileExists(pwCache) && fs.readdirSync(pwCache).some((n) => n.startsWith('chromium'));
   results.push(
     check(
       'e2e:browsers',
@@ -241,7 +246,8 @@ const AUTO_FIXES = [
   {
     id: 'deps:root',
     label: '安装根依赖',
-    exec: (opts) => run('npm', ['install', '--no-audit', '--no-fund'], { cwd: paths.root, ...opts }),
+    exec: (opts) =>
+      run('npm', ['install', '--no-audit', '--no-fund'], { cwd: paths.root, ...opts }),
   },
   {
     id: 'deps:backend',
@@ -283,7 +289,11 @@ export const doctorCommand = defineCommand({
     '每一项检查都带 fix 字段（一条可以直接复制运行的命令）。\n' +
     '有 fail 时退出码为 3（env），Agent 据此判断"该修环境"而不是"代码有问题"。',
   flags: [
-    { name: 'fix', type: 'boolean', summary: '自动执行安全的修复（装依赖、建 .env、生成 Prisma Client）' },
+    {
+      name: 'fix',
+      type: 'boolean',
+      summary: '自动执行安全的修复（装依赖、建 .env、生成 Prisma Client）',
+    },
     { name: 'only', type: 'string', summary: '只跑 id 前缀匹配的检查，如 --only db' },
   ],
   examples: [
@@ -314,7 +324,11 @@ export const doctorCommand = defineCommand({
         }
         out.step(fix.label);
         const result = await fix.exec({ stdio: out.childStdio });
-        applied.push({ id: fix.id, label: fix.label, status: result.code === 0 ? 'done' : 'failed' });
+        applied.push({
+          id: fix.id,
+          label: fix.label,
+          status: result.code === 0 ? 'done' : 'failed',
+        });
         if (result.code !== 0) out.warn(`${fix.label} 失败：${(result.stderr || '').slice(-400)}`);
       }
       if (applied.length && !flags['dry-run']) {

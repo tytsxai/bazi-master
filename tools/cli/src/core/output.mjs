@@ -59,9 +59,7 @@ export const createOutput = ({ json = false, quiet = false, command = '' } = {})
     /** 成功收尾。renderText 只在非 json 模式调用，用来打人类可读结果。 */
     ok(data = {}, renderText) {
       if (json) {
-        process.stdout.write(
-          `${JSON.stringify({ ok: true, command, data, notes }, null, 2)}\n`
-        );
+        process.stdout.write(`${JSON.stringify({ ok: true, command, data, notes }, null, 2)}\n`);
       } else if (typeof renderText === 'function') {
         const text = renderText(data);
         if (text) process.stdout.write(`${text}\n`);

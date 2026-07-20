@@ -6,7 +6,10 @@ import { logger } from '../config/logger.js';
 // deployment. Short enough to bound that window, long enough to absorb request bursts.
 const DEFAULT_LOCAL_CACHE_MS = 10_000;
 
-export const createSessionStore = ({ ttlMs = null, localCacheMs = DEFAULT_LOCAL_CACHE_MS } = {}) => {
+export const createSessionStore = ({
+  ttlMs = null,
+  localCacheMs = DEFAULT_LOCAL_CACHE_MS,
+} = {}) => {
   const store = new Map();
   // key -> timestamp after which the local copy must be re-checked against the mirror.
   const localFresh = new Map();

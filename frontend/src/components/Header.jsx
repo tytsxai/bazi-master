@@ -92,8 +92,10 @@ export default function Header() {
     closeMenu();
   };
 
+  // Collapse the mobile menu on navigation. Guarded so the effect only schedules a
+  // render when the menu is actually open, instead of on every route change.
   useEffect(() => {
-    setIsMenuOpen(false);
+    setIsMenuOpen((open) => (open ? false : open));
   }, [location.pathname, location.search]);
 
   useEffect(() => {
@@ -112,7 +114,10 @@ export default function Header() {
     };
   }, []);
 
-  const NavLinks = ({ mobile = false }) => (
+  // A plain render function, not a component. Declaring a component inside render
+  // creates a new component type on every render, so React unmounts and remounts the
+  // whole nav subtree each time — losing focus and any internal state.
+  const renderNavLinks = (mobile = false) => (
     <>
       {visiblePrimaryLinks.map((link) => (
         <Link
@@ -179,7 +184,7 @@ export default function Header() {
 
       {/* Desktop Navigation */}
       <nav className="hidden lg:flex items-center gap-4 text-sm">
-        <NavLinks />
+        {renderNavLinks()}
         {isGuest ? (
           <Link
             to="/login"
@@ -229,7 +234,7 @@ export default function Header() {
       {/* Mobile Navigation */}
       {isMenuOpen && (
         <nav className="mobile-nav">
-          <NavLinks mobile />
+          {renderNavLinks(true)}
           <div className="flex flex-col gap-4 mt-2">
             {isGuest ? (
               <Link

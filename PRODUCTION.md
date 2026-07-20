@@ -6,14 +6,25 @@
 
 ## 0. 准备配置
 
-1. 复制 `env.production.template`（完整）或 `.env.production.example`（精简）为 `.env.production`，并按需修改：
-   - `DATABASE_URL=postgresql://user:pass@postgres:5432/bazi_master`
+1. 复制 `env.production.template` 为 `.env.production`，至少改掉这几项：
+   - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`
    - `SESSION_TOKEN_SECRET=<32+ 随机字符>`
    - `FRONTEND_URL=https://your-domain.com`
    - `BACKEND_BASE_URL=https://api.your-domain.com`
-   - `REDIS_URL=redis://redis:6379` (强烈推荐生产开启)
+   - `ADMIN_EMAILS`、`DOCS_PASSWORD`
    - AI 密钥可选：`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`
 2. 将 `.env.production` 与 `docker-compose.prod.yml` 放在同一目录。
+
+> **`DATABASE_URL` 和 `REDIS_URL` 在这套编排里不要自己写。**
+> compose 会用 `POSTGRES_*` 三个值拼出 `DATABASE_URL`，`REDIS_URL` 固定指向内置的 redis
+> 服务；在 `.env.production` 里单独设这两个值不会生效。只有当后端跑在 compose 之外、
+> 或者要接托管数据库时才直接设置它们，同时也要改 compose 的 `environment` 段。
+>
+> `POSTGRES_PASSWORD` 没有默认值：留空会让整个栈直接启动失败，而不是悄悄用弱口令跑起来。
+
+> 后端和前端端口默认只绑定在 `127.0.0.1`，由前面的 nginx 终止 TLS。
+> Docker 的端口发布会绕过 ufw/firewalld 直接写 iptables，所以不要随手改成 `0.0.0.0`；
+> 确有需要时通过 `BACKEND_BIND_ADDR` / `FRONTEND_BIND_ADDR` 显式放开。
 
 > `docker compose --env-file` 只用于变量替换，不会自动把所有变量注入容器。
 > `docker-compose.prod.yml` 已显式透传生产必需的后端变量（SMTP、Docs、Cookie、Sentry、超时、会话等）；新增生产变量时必须同步加入 compose `environment` 或使用受控的 `env_file`。
