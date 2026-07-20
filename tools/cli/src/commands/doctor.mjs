@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 
 import { defineCommand } from '../core/registry.mjs';
@@ -13,6 +12,7 @@ import {
   readPrismaProvider,
   resolveDatabaseUrl,
 } from '../core/context.mjs';
+import { PLAYWRIGHT_INSTALL_HINT, probePlaywrightBrowsers } from '../core/playwright.mjs';
 
 const MIN_NODE_MAJOR = 20;
 
@@ -20,71 +20,12 @@ const check = (id, label, status, detail, fix) => ({ id, label, status, detail, 
 
 const depsInstalled = (dir) => fileExists(path.join(dir, 'node_modules'));
 
-const PLAYWRIGHT_CLI = path.join(paths.frontend, 'node_modules', 'playwright', 'cli.js');
-const PLAYWRIGHT_INSTALL_HINT = 'npm --prefix frontend exec -- playwright install chromium';
-
-const dirHasContent = (target) => {
-  try {
-    return fs.statSync(target).isDirectory() && fs.readdirSync(target).length > 0;
-  } catch {
-    return false;
-  }
-};
-
-/**
- * 问 Playwright 自己"这个版本需要哪些浏览器、装在哪"，再逐个核实目录真的在。
- *
- * 不能只看 ms-playwright 缓存目录下有没有 chromium* 开头的条目：别的项目留下的
- * 旧版本（chromium-1193 之类）会让检查误判成 ok，而本项目实际需要的版本
- * （含 chromium_headless_shell-<rev>，headless 跑 e2e 用的就是它）其实是缺的。
- * 那种"体检全绿、一跑 e2e 全红"比没有检查更浪费时间。
- */
-const checkPlaywrightBrowsers = () => {
-  if (!depsInstalled(paths.frontend) || !fileExists(PLAYWRIGHT_CLI)) {
-    return {
-      status: 'skip',
-      detail: '前端依赖未安装，无法确认浏览器状态',
-      fix: 'bazi setup --with-frontend',
-    };
-  }
-
-  const probe = capture(process.execPath, [PLAYWRIGHT_CLI, 'install', '--dry-run', 'chromium']);
-  if (probe.code !== 0) {
-    const reason = (probe.stderr || probe.stdout || '未知错误').split('\n')[0];
-    return {
-      status: 'warn',
-      detail: `无法确认浏览器状态：${reason}`,
-      fix: PLAYWRIGHT_INSTALL_HINT,
-    };
-  }
-
-  const locations = [
-    ...new Set(
-      [...probe.stdout.matchAll(/^\s*Install location:\s*(.+)$/gm)].map((m) => m[1].trim())
-    ),
-  ];
-  if (!locations.length) {
-    return {
-      status: 'warn',
-      detail: '解析 playwright install --dry-run 输出失败，无法确认浏览器状态',
-      fix: PLAYWRIGHT_INSTALL_HINT,
-    };
-  }
-
-  const missing = locations.filter((dir) => !dirHasContent(dir));
-  if (missing.length) {
-    return {
-      status: 'warn',
-      detail: `缺少 ${missing.map((d) => path.basename(d)).join('、')}，e2e 无法运行`,
-      fix: PLAYWRIGHT_INSTALL_HINT,
-    };
-  }
-
-  return {
-    status: 'ok',
-    detail: `${locations.map((d) => path.basename(d)).join('、')} 已就绪`,
-    fix: null,
-  };
+/** 探针在 core/playwright.mjs，setup 用同一份，避免两处各自维护"浏览器装没装"的判断。 */
+const PLAYWRIGHT_CHECK = {
+  ready: { status: 'ok', fix: null },
+  missing: { status: 'warn', fix: PLAYWRIGHT_INSTALL_HINT },
+  unknown: { status: 'warn', fix: PLAYWRIGHT_INSTALL_HINT },
+  'no-deps': { status: 'skip', fix: 'bazi setup --with-frontend' },
 };
 
 const collectChecks = async () => {
@@ -271,8 +212,10 @@ const collectChecks = async () => {
   }
 
   // --- E2E ---
-  const pw = checkPlaywrightBrowsers();
-  results.push(check('e2e:browsers', 'Playwright 浏览器', pw.status, pw.detail, pw.fix));
+  const pw = probePlaywrightBrowsers();
+  // 兜底：doctor 是排障工具，不该因为多出一个没见过的 state 就自己崩掉。
+  const pwCheck = PLAYWRIGHT_CHECK[pw.state] || { status: 'warn', fix: PLAYWRIGHT_INSTALL_HINT };
+  results.push(check('e2e:browsers', 'Playwright 浏览器', pwCheck.status, pw.detail, pwCheck.fix));
 
   const dockerPath = which('docker');
   results.push(
