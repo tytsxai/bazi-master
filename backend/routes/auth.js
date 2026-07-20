@@ -9,6 +9,7 @@ import {
   sessionStore,
   isAdminUser,
 } from '../middleware/auth.js';
+import { createRateLimitMiddleware } from '../middleware/rateLimit.middleware.js';
 import { hashPassword } from '../utils/passwords.js';
 import { deleteUserCascade } from '../userCleanup.js';
 import { setSessionCookie } from '../utils/sessionCookie.js';
@@ -29,6 +30,40 @@ import {
 
 const router = express.Router();
 
+// The global limiter (120/min) is far too loose for credential endpoints: it still
+// allows ~170k password guesses per day from a single address. These add a second,
+// much tighter budget on both the source address and the targeted account, so
+// rotating IPs does not buy an attacker unlimited attempts against one email.
+const AUTH_RATE_LIMIT_MAX = Number(process.env.AUTH_RATE_LIMIT_MAX) || 10;
+const AUTH_RATE_LIMIT_WINDOW_MS = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
+const AUTH_RATE_LIMIT_ENABLED = process.env.NODE_ENV !== 'test';
+
+const normalizeEmailKey = (req) => {
+  const email = req.body?.email;
+  if (typeof email !== 'string' || !email.trim()) return null;
+  return email.trim().toLowerCase();
+};
+
+const authRateLimiters = AUTH_RATE_LIMIT_ENABLED
+  ? [
+      createRateLimitMiddleware({
+        RATE_LIMIT_ENABLED: true,
+        RATE_LIMIT_MAX: AUTH_RATE_LIMIT_MAX,
+        RATE_LIMIT_WINDOW_MS: AUTH_RATE_LIMIT_WINDOW_MS,
+        redisKeyPrefix: 'rate-limit:auth-ip:',
+        setHeaders: false,
+      }),
+      createRateLimitMiddleware({
+        RATE_LIMIT_ENABLED: true,
+        RATE_LIMIT_MAX: AUTH_RATE_LIMIT_MAX,
+        RATE_LIMIT_WINDOW_MS: AUTH_RATE_LIMIT_WINDOW_MS,
+        redisKeyPrefix: 'rate-limit:auth-email:',
+        resolveKey: normalizeEmailKey,
+        setHeaders: false,
+      }),
+    ]
+  : [];
+
 const readBearerToken = (req) => {
   const auth = req.headers.authorization || '';
   if (typeof auth !== 'string') return null;
@@ -43,21 +78,21 @@ const sanitizeNextPath = (value) => {
 };
 
 // Auth routes
-router.post('/register', handleRegister);
-router.post('/login', handleLogin);
+router.post('/register', ...authRateLimiters, handleRegister);
+router.post('/login', ...authRateLimiters, handleLogin);
 router.post('/logout', requireAuth, handleLogout);
 
 /**
  * Request Password Reset
  * POST /api/auth/password/request
  */
-router.post('/password/request', handlePasswordResetRequest);
+router.post('/password/request', ...authRateLimiters, handlePasswordResetRequest);
 
 /**
  * Reset Password
  * POST /api/auth/password/reset
  */
-router.post('/password/reset', handlePasswordResetConfirm);
+router.post('/password/reset', ...authRateLimiters, handlePasswordResetConfirm);
 
 // OAuth redirect entry points
 router.get('/google', async (req, res, next) => {

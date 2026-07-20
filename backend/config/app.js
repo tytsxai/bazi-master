@@ -55,10 +55,17 @@ const parseOriginList = (value) => {
     .flatMap(expandLoopbackOrigins);
 };
 
+// TRUST_PROXY=1 must mean "trust exactly one hop", not Express's boolean `true`
+// ("trust every proxy"). With `true`, req.ip is taken from the leftmost X-Forwarded-For
+// entry, which is fully attacker-controlled — rate limiting becomes bypassable by
+// sending a forged header. Numeric values are therefore kept numeric.
 const parseTrustProxy = (raw) => {
-  if (raw === '1' || raw === 'true') return true;
-  if (raw === '0' || raw === 'false') return false;
-  return raw || false;
+  if (raw === undefined || raw === null || raw === '') return false;
+  const normalized = String(raw).trim();
+  if (/^\d+$/.test(normalized)) return Number(normalized);
+  if (normalized.toLowerCase() === 'true') return true;
+  if (normalized.toLowerCase() === 'false') return false;
+  return normalized;
 };
 
 export const getServerConfig = () => {
