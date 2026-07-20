@@ -2,6 +2,7 @@ import { defineCommand } from '../core/registry.mjs';
 import { CliError, EXIT } from '../core/errors.mjs';
 import { run } from '../core/proc.mjs';
 import { buildEnv, fileExists, paths } from '../core/context.mjs';
+import { installPlaywrightBrowsers, probePlaywrightBrowsers } from '../core/playwright.mjs';
 import { initEnvFile } from './env.mjs';
 import path from 'node:path';
 
@@ -31,6 +32,16 @@ const buildSteps = ({ withFrontend, skipInstall }) => {
         skipIf: () => fileExists(path.join(paths.frontend, 'node_modules')),
         exec: (opts) =>
           run('npm', ['install', '--no-audit', '--no-fund'], { cwd: paths.frontend, ...opts }),
+      });
+      // npm install 不会带上浏览器二进制。少了这步，--with-frontend 号称"要跑 e2e 就用它"
+      // 却依然跑不了 e2e：Playwright 会在每个用例上报 Executable doesn't exist，一屏红。
+      steps.push({
+        id: 'install:browsers',
+        label: '安装 Playwright 浏览器（较慢，约 90MB）',
+        // no-deps 说明 node_modules 在但 playwright 不在（半截的安装）。这时候没有可执行的
+        // CLI 可调，硬跑只会得到一句 MODULE_NOT_FOUND；交给 doctor 去报，别在这里制造噪音。
+        skipIf: () => ['ready', 'no-deps'].includes(probePlaywrightBrowsers().state),
+        exec: (opts) => installPlaywrightBrowsers(opts),
       });
     }
   }
@@ -65,13 +76,13 @@ export const setupCommand = defineCommand({
   name: 'setup',
   summary: '一次性把本地开发环境准备好（幂等，可反复跑）',
   description:
-    '装依赖 -> 建 .env -> 生成 Prisma Client。\n' +
+    '装依赖 -> 建 .env -> 生成 Prisma Client；--with-frontend 时还会补齐 Playwright 浏览器。\n' +
     '不启动任何服务，也不碰数据库数据；起服务用 bazi stack up。',
   flags: [
     {
       name: 'with-frontend',
       type: 'boolean',
-      summary: '同时安装前端依赖（体积大，只有要跑 UI/e2e 才需要）',
+      summary: '同时安装前端依赖与 Playwright 浏览器（体积大，只有要跑 UI/e2e 才需要）',
     },
     {
       name: 'skip-install',
