@@ -172,6 +172,48 @@ export const getResetTokenEntryAsync = async (token) => {
   return normalized;
 };
 
+/**
+ * Fetch a reset token entry and delete it in the same step.
+ *
+ * Reading and then deleting leaves a window where two concurrent confirm requests both
+ * see a valid token. Redis GETDEL closes it; without a mirror the local Map is the only
+ * store and a delete right after the read is equivalent, since Node is single-threaded
+ * between awaits.
+ */
+export const consumeResetTokenEntryAsync = async (token) => {
+  if (!token) return null;
+  const mirror = resetTokenStore.getMirror();
+
+  if (mirror?.getAndDelete) {
+    const remote = await mirror.getAndDelete(token);
+    const normalized = normalizeTokenEntry(remote);
+    // The local copy is now stale either way.
+    resetTokenStore.delete(token);
+    if (!normalized || isExpiredEntry(normalized)) return null;
+    if (resetTokenByUser.get(normalized.userId) === token) {
+      await resetTokenByUser.deleteAsync(normalized.userId);
+    }
+    return normalized;
+  }
+
+  // No mirror: read and delete with no await in between, so two callers cannot both
+  // observe the token. An await here would yield the loop and reopen the race.
+  const local = getResetTokenEntry(token);
+  if (local?.userId) {
+    deleteResetToken(token, local.userId);
+    return local;
+  }
+
+  // Not held locally but a mirror without getAndDelete may still have it.
+  const entry = await getResetTokenEntryAsync(token);
+  if (!entry?.userId) return null;
+  const stillPresent = getResetTokenEntry(token);
+  if (!stillPresent) return null;
+  deleteResetToken(token, entry.userId);
+  await deleteResetTokenAsync(token, entry.userId);
+  return entry;
+};
+
 export const getResetTokenForUserAsync = async (userId) => {
   const normalizedUserId = normalizeUserId(userId);
   if (!normalizedUserId) return null;

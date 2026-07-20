@@ -100,6 +100,21 @@ export const createRedisMirror = (
         return null;
       }
     },
+    // Atomic read-and-delete, used for single-use values such as password reset tokens
+    // where a read followed by a delete would let two concurrent requests both succeed.
+    async getAndDelete(key) {
+      if (!key) return null;
+      try {
+        const raw =
+          typeof client.getDel === 'function'
+            ? await client.getDel(resolveKey(key))
+            : await client.multi().get(resolveKey(key)).del(resolveKey(key)).exec().then((r) => r?.[0]);
+        return fromJson(raw);
+      } catch (error) {
+        logger.warn('[redis] getAndDelete failed:', error?.message || error);
+        return null;
+      }
+    },
     async set(key, value, overrideTtlMs = null) {
       if (!key) return;
       const payload = toJson(value);

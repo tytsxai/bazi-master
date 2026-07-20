@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { getSessionConfig } from '../config/app.js';
 import { logger } from '../config/logger.js';
+import { getCredentialsChangedAtAsync } from './credentialRevocation.service.js';
 
 // The exact set of failures authorizeToken raises. Anything outside this set is treated
 // as an internal error rather than an authentication failure.
@@ -191,6 +192,7 @@ export const createAuthorizeToken = ({
   sessionIdleMs = DEFAULT_SESSION_IDLE_MS,
   now = () => Date.now(),
   tokenSecret = '',
+  getCredentialsChangedAt = getCredentialsChangedAtAsync,
 }) => {
   const resolvedSecret = resolveTokenSecret(tokenSecret);
   return async (token) => {
@@ -215,6 +217,13 @@ export const createAuthorizeToken = ({
     }
     if (now() - parsed.issuedAt > tokenTtlMs) {
       throw new Error('Token expired');
+    }
+
+    // Any token minted before the user last changed their credentials is dead, so a
+    // password reset actually evicts a stolen session instead of leaving it valid.
+    const credentialsChangedAt = await getCredentialsChangedAt(parsed.userId);
+    if (Number.isFinite(credentialsChangedAt) && parsed.issuedAt < credentialsChangedAt) {
+      throw new Error('Session expired');
     }
 
     const current = now();
