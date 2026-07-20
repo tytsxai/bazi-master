@@ -5,6 +5,7 @@ import { getChatSystemPrompt, buildZiweiPrompt } from './prompts.service.js';
 import { authorizeToken } from '../middleware/auth.js';
 import { createAiGuard } from '../lib/concurrency.js';
 import { prisma } from '../config/prisma.js';
+import { initAppConfig } from '../config/app.js';
 
 const PING_INTERVAL_MS = 30000;
 const MAX_MESSAGE_BYTES = 1_000_000;
@@ -12,6 +13,21 @@ const wsAiGuard = createAiGuard();
 const AI_CONCURRENCY_ERROR = 'AI request already in progress. Please wait.';
 
 let wssInstance = null;
+
+// Same allow-list the CORS middleware uses. Resolved lazily so config changes in tests
+// (and the app config initialising after this module loads) are picked up.
+const isAllowedWebsocketOrigin = (origin) => {
+  // Non-browser clients (curl, native apps, health probes) send no Origin at all.
+  // Browsers always do, which is what the check is here to constrain.
+  if (!origin) return true;
+  const { allowedOrigins } = initAppConfig();
+  if (!allowedOrigins || allowedOrigins.size === 0) return false;
+  try {
+    return allowedOrigins.has(new URL(origin).origin);
+  } catch {
+    return false;
+  }
+};
 
 const parseCookieHeader = (header) => {
   if (!header || typeof header !== 'string') return {};
@@ -34,16 +50,33 @@ export const initWebsocketServer = (server) => {
   wssInstance = wss;
 
   server.on('upgrade', (request, socket, head) => {
-    const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
-
-    if (pathname === '/ws/ai') {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
-      });
+    // A malformed Host header makes `new URL` throw. This runs outside Express, so an
+    // exception here reaches the process-level handler and takes the server down —
+    // one unauthenticated request would be enough.
+    let pathname = null;
+    try {
+      pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+    } catch {
+      socket.destroy();
       return;
     }
 
-    socket.destroy();
+    if (pathname !== '/ws/ai') {
+      socket.destroy();
+      return;
+    }
+
+    // The WebSocket handshake is not covered by CORS, so without this check any origin
+    // could open an authenticated socket using the victim's cookie.
+    if (!isAllowedWebsocketOrigin(request.headers.origin)) {
+      logger.warn({ origin: request.headers.origin }, '[ws] Rejected upgrade from origin');
+      socket.destroy();
+      return;
+    }
+
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
   });
 
   wss.on('connection', (ws, req) => {

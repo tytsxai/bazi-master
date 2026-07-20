@@ -11,8 +11,10 @@ const router = express.Router();
  * Query params: search (string)
  */
 router.get('/', async (req, res) => {
-  const { search } = req.query;
-  if (!search || search.length < 2) {
+  // A repeated query parameter (?search=a&search=b) arrives as an array, which has a
+  // length but no toLowerCase. Only accept the string form.
+  const search = typeof req.query.search === 'string' ? req.query.search : '';
+  if (search.length < 2) {
     return res.json([]);
   }
 
