@@ -1,0 +1,3 @@
+#!/bin/sh
+# 仓库根的薄 shim：不管在哪个子目录，`./bazi ...` 都能用，不需要 npm link。
+exec node "$(dirname "$0")/tools/cli/bin/bazi.mjs" "$@"

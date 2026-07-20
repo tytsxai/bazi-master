@@ -44,6 +44,7 @@
     "openapi"
   ],
   "scripts": {
+    "bazi": "node tools/cli/bin/bazi.mjs",
     "dev": "npm -C frontend run dev",
     "test": "npm -C backend test && npm -C frontend test",
     "test:backend": "npm -C backend test",
@@ -64,5 +65,8 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"
+  },
+  "bin": {
+    "bazi": "tools/cli/bin/bazi.mjs"
   }
 }
