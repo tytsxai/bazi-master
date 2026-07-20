@@ -6,6 +6,11 @@ CONTAINER_NAME="${CONTAINER_NAME:-bazi_postgres}"
 DB_USER="${DB_USER:-postgres}"
 DB_NAME="${DB_NAME:-bazi_master}"
 SKIP_CONFIRMATION="${SKIP_CONFIRMATION:-false}"
+# Floor for the post-restore sanity check. The schema has well over a dozen tables, so
+# anything below this means the restore did not bring the data back.
+MIN_EXPECTED_TABLES="${MIN_EXPECTED_TABLES:-5}"
+# Set to 1 to keep the pre-restore snapshot even after a successful restore.
+KEEP_PRE_RESTORE_BACKUP="${KEEP_PRE_RESTORE_BACKUP:-0}"
 
 # Color output
 RED='\033[0;31m'
@@ -204,11 +209,24 @@ docker exec "$CONTAINER_NAME" psql -U "$DB_USER" -d postgres -c "
 " >/dev/null
 
 # Perform restore
+#
+# --exit-on-error matters: by default pg_restore keeps going after a failed object and
+# still exits 0, so a partial restore was indistinguishable from a complete one. The
+# original database has already been dropped at this point, which makes a false success
+# the most damaging outcome this script has.
 log_info "Restoring database from backup..."
+restore_failed=0
 if [[ "$BACKUP_FILE" == *.gz ]]; then
-    gunzip -c "$BACKUP_FILE" | docker exec -i "$CONTAINER_NAME" pg_restore -U "$DB_USER" -d "$DB_NAME" --verbose --no-owner --no-privileges
+    gunzip -c "$BACKUP_FILE" | docker exec -i "$CONTAINER_NAME" pg_restore -U "$DB_USER" -d "$DB_NAME" --verbose --no-owner --no-privileges --exit-on-error || restore_failed=1
 else
-    docker exec -i "$CONTAINER_NAME" pg_restore -U "$DB_USER" -d "$DB_NAME" --verbose --no-owner --no-privileges < "$BACKUP_FILE"
+    docker exec -i "$CONTAINER_NAME" pg_restore -U "$DB_USER" -d "$DB_NAME" --verbose --no-owner --no-privileges --exit-on-error < "$BACKUP_FILE" || restore_failed=1
+fi
+
+if [ "$restore_failed" -ne 0 ]; then
+    log_error "pg_restore reported errors; the restore is incomplete"
+    log_info "Pre-restore backup retained at: $PRE_RESTORE_BACKUP"
+    log_info "To roll back: $0 $PRE_RESTORE_BACKUP"
+    exit 1
 fi
 
 # Post-restore validation
@@ -222,18 +240,33 @@ if ! docker exec "$CONTAINER_NAME" psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1
 fi
 
 # Get basic statistics
-TABLE_COUNT=$(docker exec "$CONTAINER_NAME" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null || echo "unknown")
+TABLE_COUNT=$(docker exec "$CONTAINER_NAME" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' ' || echo "")
 DB_SIZE=$(docker exec "$CONTAINER_NAME" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT pg_size_pretty(pg_database_size('$DB_NAME'));" 2>/dev/null | tr -d ' ' || echo "unknown")
+
+# The table count used to be collected and never checked, so an empty database passed
+# validation. Assert it instead.
+if ! [[ "$TABLE_COUNT" =~ ^[0-9]+$ ]] || [ "$TABLE_COUNT" -lt "$MIN_EXPECTED_TABLES" ]; then
+    log_error "Post-restore validation failed: expected at least $MIN_EXPECTED_TABLES tables, found '${TABLE_COUNT:-none}'"
+    log_info "Pre-restore backup retained at: $PRE_RESTORE_BACKUP"
+    log_info "To roll back: $0 $PRE_RESTORE_BACKUP"
+    exit 1
+fi
+log_success "Post-restore validation passed: $TABLE_COUNT tables present"
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 
 log_success "Database restore completed successfully in ${DURATION}s"
 
-# Cleanup pre-restore backup
+# Only now is it safe to drop the rollback copy. Previously this ran unconditionally,
+# so a bad restore destroyed the last route back.
 if [ -n "$PRE_RESTORE_BACKUP" ] && [ -f "$PRE_RESTORE_BACKUP" ]; then
-    rm -f "$PRE_RESTORE_BACKUP"
-    log_info "Cleaned up temporary pre-restore backup"
+    if [ "${KEEP_PRE_RESTORE_BACKUP:-0}" = "1" ]; then
+        log_info "Pre-restore backup kept at: $PRE_RESTORE_BACKUP"
+    else
+        rm -f "$PRE_RESTORE_BACKUP"
+        log_info "Cleaned up temporary pre-restore backup"
+    fi
 fi
 
 echo

@@ -90,6 +90,22 @@ zcat backup.sql.gz | docker compose -f docker-compose.prod.yml exec -T postgres 
 
 > `restore-db.sh` 会校验 gzip 和 `.sha256`。生产恢复会覆盖数据库，执行前必须先确认目标环境、备份时间点和回滚方案。
 
+### Pre-deploy backup（必做）
+
+`RUN_MIGRATIONS_ON_START` 默认 `true`，也就是说每次容器启动都会 `migrate deploy`。
+一旦新版本的迁移已经 apply，回滚旧镜像时数据库 schema 已经变了，而 Prisma 没有
+down migration —— 这时唯一的退路就是备份。
+
+定时备份是每天 02:30 跑一次，中午部署出问题最坏会丢 10 小时数据。所以**部署前必须
+先备份，备份失败就中止部署**：
+
+```bash
+BACKUP_DIR=/var/backups/bazi ./scripts/backup-db.sh \
+  && docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+```
+
+用 `&&` 而不是分号：`backup-db.sh` 失败时不要继续往下走。
+
 ## 4. Rollback Procedure
 
 If a deployment fails, follow these steps to roll back:
@@ -102,12 +118,16 @@ If a deployment fails, follow these steps to roll back:
     ```
 3.  **Redeploy**: Trigger the CI/CD pipeline to deploy the reverted version.
 4.  **Database Rollback** (if migrations were applied):
-    - Ideally, write non-destructive migrations.
+    - 迁移遵守「只加不减」：加列必须 nullable 或带 default，删列/改名分两次发布。
+      做到这一点，旧镜像回滚时仍然能跑在新 schema 上，这比任何工具都管用。
     - If necessary, use Prisma Migrate to roll back:
       ```bash
       npx prisma migrate resolve --rolled-back <migration_name>
       ```
     - _Note_: Down-migrations are not natively supported by Prisma in a simple way; restoring from backup is often safer for major data incidents.
+    - 恢复用部署前那份备份：`./scripts/restore-db.sh /var/backups/bazi/<file>.dump.gz`。
+      脚本会先做一份 pre-restore 快照，只有在 `pg_restore` 无错**且**表数量校验通过后
+      才删除它；失败时会保留并打印回滚命令。
 
 ## 4.1 Migration Strategy (Multi-Instance)
 
