@@ -1,3 +1,6 @@
+// Must come first: installs the async-handler patch on express.Router before the route
+// modules below construct their routers.
+import './bootstrap/asyncRoutes.js';
 import express from 'express';
 import http from 'http';
 import compression from 'compression';
@@ -397,8 +400,18 @@ const setupGracefulShutdown = (
 
   processRef.once('SIGTERM', () => void closeServer('SIGTERM'));
   processRef.once('SIGINT', () => void closeServer('SIGINT'));
+  // An uncaught exception leaves the process in an undefined state, so shutting down is
+  // the honest response.
   processRef.once('uncaughtException', (error) => void closeServer('uncaughtException', error));
-  processRef.once('unhandledRejection', (reason) => void closeServer('unhandledRejection', reason));
+  // A rejected promise does not carry the same guarantee, and tearing the whole service
+  // down for one bad request is a much worse outcome than one failed request. Handlers
+  // are wrapped (see utils/express.js) so these should be rare — log loudly instead.
+  processRef.on('unhandledRejection', (reason) => {
+    loggerInstance.error({ err: reason }, 'Unhandled promise rejection');
+    if (process.env.SENTRY_DSN && NODE_ENV === 'production') {
+      Sentry.captureException(reason);
+    }
+  });
 };
 
 const parseEnabledFlag = (value, fallback = true) => {
