@@ -51,7 +51,11 @@ const checkPlaywrightBrowsers = () => {
   const probe = capture(process.execPath, [PLAYWRIGHT_CLI, 'install', '--dry-run', 'chromium']);
   if (probe.code !== 0) {
     const reason = (probe.stderr || probe.stdout || '未知错误').split('\n')[0];
-    return { status: 'warn', detail: `无法确认浏览器状态：${reason}`, fix: PLAYWRIGHT_INSTALL_HINT };
+    return {
+      status: 'warn',
+      detail: `无法确认浏览器状态：${reason}`,
+      fix: PLAYWRIGHT_INSTALL_HINT,
+    };
   }
 
   const locations = [

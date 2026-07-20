@@ -1,4 +1,3 @@
-import { logger } from './config/logger.js';
 import { parseAuthToken } from './services/auth.service.js';
 
 const deleteUserResetTokens = (userId, resetTokenStore, resetTokenByUser) => {
@@ -64,28 +63,30 @@ export const deleteUserCascade = async ({ prisma, userId, cleanupUserMemory = nu
     throw new Error('Missing prisma or userId for deleteUserCascade');
   }
 
-  await prisma.$transaction([
+  // BaziRecordTrash has no foreign key to User, so nothing cleans it up implicitly.
+  // It used to be deleted after the transaction committed, with failures swallowed by a
+  // warning — meaning a deleted user could leave rows behind permanently. It belongs in
+  // the same transaction: either the account and all its traces go, or nothing does.
+  const operations = [
     prisma.favorite.deleteMany({ where: { userId } }),
     prisma.tarotRecord.deleteMany({ where: { userId } }),
     prisma.ichingRecord.deleteMany({ where: { userId } }),
     prisma.ziweiRecord.deleteMany({ where: { userId } }),
     prisma.baziRecord.deleteMany({ where: { userId } }),
     prisma.userSettings.deleteMany({ where: { userId } }),
-    prisma.user.delete({ where: { id: userId } }),
-  ]);
+  ];
 
-  try {
-    // Attempt to delete from BaziRecordTrash using Prisma Client if available
-    if (prisma.baziRecordTrash) {
-      await prisma.baziRecordTrash.deleteMany({ where: { userId } });
-    } else {
-      // Fallback to raw SQL if the model is somehow missing from the client
-      // 表名必须加引号，否则 PostgreSQL 会折成小写而找不到表。
-      await prisma.$executeRaw`DELETE FROM "BaziRecordTrash" WHERE "userId" = ${userId}`;
-    }
-  } catch (error) {
-    logger.warn('Failed to clear BaziRecordTrash for deleted user:', error?.message || error);
+  if (prisma.baziRecordTrash) {
+    operations.push(prisma.baziRecordTrash.deleteMany({ where: { userId } }));
+  } else {
+    // Fallback for a client generated without the model. Identifiers must be quoted or
+    // PostgreSQL folds them to lower case and the statement fails.
+    operations.push(prisma.$executeRaw`DELETE FROM "BaziRecordTrash" WHERE "userId" = ${userId}`);
   }
+
+  operations.push(prisma.user.delete({ where: { id: userId } }));
+
+  await prisma.$transaction(operations);
 
   if (typeof cleanupUserMemory === 'function') {
     await cleanupUserMemory(userId);
