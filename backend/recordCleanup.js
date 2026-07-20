@@ -10,9 +10,14 @@ export const deleteBaziRecordHard = async ({ prisma, userId, recordId } = {}) =>
   ]);
 
   try {
-    await prisma.$executeRaw`
-      DELETE FROM BaziRecordTrash WHERE userId = ${userId} AND recordId = ${recordId}
-    `;
+    if (prisma.baziRecordTrash) {
+      await prisma.baziRecordTrash.deleteMany({ where: { userId, recordId } });
+    } else {
+      // 模型缺失时的兜底：表名必须加引号，否则 PostgreSQL 会折成小写而找不到表。
+      await prisma.$executeRaw`
+        DELETE FROM "BaziRecordTrash" WHERE "userId" = ${userId} AND "recordId" = ${recordId}
+      `;
+    }
   } catch (error) {
     logger.warn('Failed to clear BaziRecordTrash for hard delete:', error?.message || error);
   }

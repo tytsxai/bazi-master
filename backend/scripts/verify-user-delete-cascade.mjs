@@ -1,21 +1,16 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { buildAuthToken } from '../services/auth.service.js';
 import { cleanupUserInMemory, deleteUserCascade } from '../userCleanup.js';
 import { logger } from '../config/logger.js';
 import { createSessionStore } from '../services/session.service.js';
+import { ensureBaziRecordTrashTable, ensureSoftDeleteTables } from '../services/schema.service.js';
 
 const prisma = new PrismaClient();
 
+// 复用运行时的建表逻辑，避免脚本自己手搓 DDL 又跟 provider（postgresql）对不上。
 const ensureTrashTable = async () => {
-  await prisma.$executeRaw(Prisma.sql`
-    CREATE TABLE IF NOT EXISTS BaziRecordTrash (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER NOT NULL,
-      recordId INTEGER NOT NULL,
-      deletedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(userId, recordId)
-    );
-  `);
+  await ensureSoftDeleteTables({ prismaClient: prisma });
+  await ensureBaziRecordTrashTable({ prismaClient: prisma, logger });
 };
 
 const buildTestUser = () => {
@@ -94,10 +89,11 @@ try {
     },
   });
 
-  await prisma.$executeRaw`
-    INSERT OR IGNORE INTO BaziRecordTrash (userId, recordId)
-    VALUES (${user.id}, ${baziRecord.id})
-  `;
+  await prisma.baziRecordTrash.upsert({
+    where: { userId_recordId: { userId: user.id, recordId: baziRecord.id } },
+    create: { userId: user.id, recordId: baziRecord.id },
+    update: {},
+  });
 
   const sessionStore = createSessionStore();
   const resetTokenStore = new Map();
@@ -145,12 +141,8 @@ try {
   assertCount('ichingRecord', ichingCount);
   assertCount('userSettings', settingsCount);
 
-  const trashRows = await prisma.$queryRaw`
-    SELECT id FROM BaziRecordTrash WHERE userId = ${user.id}
-  `;
-  if (trashRows.length !== 0) {
-    throw new Error(`BaziRecordTrash expected 0 but got ${trashRows.length}`);
-  }
+  const trashCount = await prisma.baziRecordTrash.count({ where: { userId: user.id } });
+  assertCount('BaziRecordTrash', trashCount);
 
   if (sessionStore.has(token)) {
     throw new Error('Session token still present after cleanup');

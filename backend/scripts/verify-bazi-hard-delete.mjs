@@ -1,19 +1,14 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { deleteBaziRecordHard } from '../recordCleanup.js';
 import { logger } from '../config/logger.js';
+import { ensureBaziRecordTrashTable, ensureSoftDeleteTables } from '../services/schema.service.js';
 
 const prisma = new PrismaClient();
 
+// 复用运行时的建表逻辑，避免脚本自己手搓 DDL 又跟 provider（postgresql）对不上。
 const ensureTrashTable = async () => {
-  await prisma.$executeRaw(Prisma.sql`
-    CREATE TABLE IF NOT EXISTS BaziRecordTrash (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER NOT NULL,
-      recordId INTEGER NOT NULL,
-      deletedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(userId, recordId)
-    );
-  `);
+  await ensureSoftDeleteTables({ prismaClient: prisma });
+  await ensureBaziRecordTrashTable({ prismaClient: prisma, logger });
 };
 
 const buildTestUser = () => {
@@ -62,10 +57,11 @@ try {
     },
   });
 
-  await prisma.$executeRaw`
-    INSERT OR IGNORE INTO BaziRecordTrash (userId, recordId)
-    VALUES (${user.id}, ${record.id})
-  `;
+  await prisma.baziRecordTrash.upsert({
+    where: { userId_recordId: { userId: user.id, recordId: record.id } },
+    create: { userId: user.id, recordId: record.id },
+    update: {},
+  });
 
   const { deletedCount } = await deleteBaziRecordHard({
     prisma,
@@ -85,12 +81,10 @@ try {
   assertZero('baziRecord', recordCount);
   assertZero('favorite', favoriteCount);
 
-  const trashRows = await prisma.$queryRaw`
-    SELECT id FROM BaziRecordTrash WHERE userId = ${user.id} AND recordId = ${record.id}
-  `;
-  if (trashRows.length !== 0) {
-    throw new Error(`BaziRecordTrash expected 0 but got ${trashRows.length}`);
-  }
+  const trashCount = await prisma.baziRecordTrash.count({
+    where: { userId: user.id, recordId: record.id },
+  });
+  assertZero('BaziRecordTrash', trashCount);
 
   logger.info('Bazi hard delete verified.');
 } finally {

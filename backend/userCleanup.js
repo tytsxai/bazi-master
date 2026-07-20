@@ -80,7 +80,8 @@ export const deleteUserCascade = async ({ prisma, userId, cleanupUserMemory = nu
       await prisma.baziRecordTrash.deleteMany({ where: { userId } });
     } else {
       // Fallback to raw SQL if the model is somehow missing from the client
-      await prisma.$executeRaw`DELETE FROM BaziRecordTrash WHERE userId = ${userId}`;
+      // 表名必须加引号，否则 PostgreSQL 会折成小写而找不到表。
+      await prisma.$executeRaw`DELETE FROM "BaziRecordTrash" WHERE "userId" = ${userId}`;
     }
   } catch (error) {
     logger.warn('Failed to clear BaziRecordTrash for deleted user:', error?.message || error);
