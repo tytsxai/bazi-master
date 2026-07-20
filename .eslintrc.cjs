@@ -27,6 +27,17 @@ module.exports = {
   },
   overrides: [
     {
+      // tools/cli 是纯 Node 的 CLI，跟 React 无关。
+      // 不关掉 react-hooks 规则的话，任何叫 useXxx 的普通函数都会被误判成 Hook。
+      files: ['tools/cli/**/*.mjs'],
+      env: { browser: false, node: true, es2023: true },
+      rules: {
+        'react-hooks/rules-of-hooks': 'off',
+        'react-hooks/exhaustive-deps': 'off',
+        'react-refresh/only-export-components': 'off',
+      },
+    },
+    {
       files: ['**/*.ts', '**/*.tsx'],
       parser: '@typescript-eslint/parser',
       plugins: ['@typescript-eslint'],
