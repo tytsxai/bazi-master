@@ -37,11 +37,15 @@ let exitSignal = null;
 
 try {
   if (!testEnv.DATABASE_URL) {
+    // 端口和库名都必须避开开发栈（5433 / bazi_master）。下面紧接着就是
+    // `migrate reset --force`：只要这两个默认值指向开发库，开发栈开着的时候
+    // ensureLocalPostgres 会复用那个实例、认领那个同名库，然后把它清空。
+    // 库名是最后一道闸——端口万一被显式改回 5433，不同名也不会误伤。
     const result = await ensureLocalPostgres({
       dataDir,
       host: '127.0.0.1',
-      port: Number(process.env.PG_TEST_PORT || 5433),
-      dbName: process.env.PG_TEST_DB || 'bazi_master',
+      port: Number(process.env.PG_TEST_PORT || 5435),
+      dbName: process.env.PG_TEST_DB || 'bazi_master_test',
       logFile,
     });
     testEnv.DATABASE_URL = result.url;
