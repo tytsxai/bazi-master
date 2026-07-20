@@ -158,6 +158,11 @@ describe('server startup coverage', () => {
       once(signal, handler) {
         registered.set(signal, handler);
       },
+      // unhandledRejection is registered with `on` (and no longer terminates the
+      // process), so the stub needs both registration methods.
+      on(signal, handler) {
+        registered.set(signal, handler);
+      },
       exit(code) {
         exits.push(code);
       },
@@ -218,6 +223,7 @@ describe('server startup coverage', () => {
           exits.push(code);
         },
         once() {},
+        on() {},
         exitCode: 0,
       },
     });
@@ -249,6 +255,7 @@ describe('server startup coverage', () => {
           exits.push(code);
         },
         once() {},
+        on() {},
         exitCode: 0,
       },
     });
@@ -275,6 +282,7 @@ describe('server startup coverage', () => {
           exits.push(code);
         },
         once() {},
+        on() {},
         exitCode: 0,
       },
     });
@@ -310,6 +318,7 @@ describe('server startup coverage', () => {
           exits.push(code);
         },
         once() {},
+        on() {},
         exitCode: 0,
       },
     });

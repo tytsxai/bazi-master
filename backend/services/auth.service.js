@@ -1,5 +1,16 @@
 import crypto from 'crypto';
 import { getSessionConfig } from '../config/app.js';
+import { logger } from '../config/logger.js';
+
+// The exact set of failures authorizeToken raises. Anything outside this set is treated
+// as an internal error rather than an authentication failure.
+const AUTH_FAILURE_MESSAGES = new Set([
+  'Unauthorized',
+  'Invalid token',
+  'Token expired',
+  'Session expired',
+  'User not found',
+]);
 
 const DEFAULT_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const { sessionIdleMs: DEFAULT_SESSION_IDLE_MS } = getSessionConfig();
@@ -53,8 +64,18 @@ const buildLegacyTokenSignature = (secret, payload) => {
   hmac.update(buildLegacySignatureBase(payload));
   return hmac.digest('hex');
 };
-const deriveTokenKey = (secret) =>
-  crypto.scryptSync(secret, TOKEN_ENCRYPTION_SALT, TOKEN_KEY_BYTES);
+// scryptSync is deliberately expensive (~20ms) and it runs on the main thread. It was
+// being called on every token decrypt, i.e. on every authenticated request, which caps
+// throughput at roughly one request per derivation and stalls the event loop. The salt
+// is a fixed constant, so the result only depends on the secret — derive once and keep it.
+const tokenKeyCache = new Map();
+const deriveTokenKey = (secret) => {
+  const cached = tokenKeyCache.get(secret);
+  if (cached) return cached;
+  const key = crypto.scryptSync(secret, TOKEN_ENCRYPTION_SALT, TOKEN_KEY_BYTES);
+  tokenKeyCache.set(secret, key);
+  return key;
+};
 
 const encodePayload = (value) => Buffer.from(value).toString('base64url');
 
@@ -243,12 +264,20 @@ export const createRequireAuth = ({ authorizeToken, allowSessionExpiredSilent = 
       req.user = user;
       next();
     } catch (error) {
-      const message = typeof error?.message === 'string' ? error.message : '';
+      const rawMessage = typeof error?.message === 'string' ? error.message : '';
+      // Only messages this module raises itself are safe to return. Anything else is an
+      // infrastructure failure (e.g. Prisma losing the database) and must not be
+      // reported as 401 with the driver's message, which leaks host and port.
+      const isAuthFailure = AUTH_FAILURE_MESSAGES.has(rawMessage);
+      if (!isAuthFailure) {
+        logger.error({ err: error, requestId: req.id }, '[auth] Authorization check failed');
+        return res.status(500).json({ error: 'Internal Server Error' });
+      }
       if (silentExpired) {
         res.set('x-session-expired', '1');
-        return res.status(200).json({ error: message || 'Unauthorized', sessionExpired: true });
+        return res.status(200).json({ error: rawMessage, sessionExpired: true });
       }
-      res.status(401).json({ error: message || 'Unauthorized' });
+      res.status(401).json({ error: rawMessage });
     }
   };
 };

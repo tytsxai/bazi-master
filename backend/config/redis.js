@@ -1,5 +1,10 @@
 import { logger as appLogger } from './logger.js';
 const getRedisUrl = (env = process.env) => env.REDIS_URL || '';
+
+const readTimeoutMs = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
 let redisClient = null;
 let redisInitPromise = null;
 
@@ -28,7 +33,18 @@ export const initRedis = async ({
     try {
       const redisModule = await importRedis();
       const { createClient } = redisModule;
-      redisClient = createClient({ url: redisUrl });
+      // disableOfflineQueue is the important one: without it node-redis silently queues
+      // commands while the socket is down and they never settle, so every request that
+      // touches Redis (rate limiting, sessions) hangs until the server request timeout.
+      // Rejecting immediately lets callers fall back to their in-memory paths.
+      redisClient = createClient({
+        url: redisUrl,
+        disableOfflineQueue: true,
+        socket: {
+          connectTimeout: readTimeoutMs(env.REDIS_CONNECT_TIMEOUT_MS, 3000),
+          reconnectStrategy: (retries) => Math.min(1000 * 2 ** Math.min(retries, 5), 30000),
+        },
+      });
       redisClient.on('error', (error) => {
         logger.error('[redis] client error:', error);
       });

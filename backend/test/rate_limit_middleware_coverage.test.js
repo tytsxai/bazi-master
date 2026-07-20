@@ -162,13 +162,21 @@ describe('Rate limit middleware coverage', () => {
     assert.equal(res.getHeader('X-RateLimit-Remaining'), 9);
   });
 
-  it('getRateLimitKey respects trust proxy ips', () => {
+  it('getRateLimitKey uses req.ip and ignores client-supplied forwarded addresses', () => {
+    // req.ips is derived from X-Forwarded-For, which the client controls. Express
+    // already applies the configured trust-proxy hop count when computing req.ip, so
+    // keying off req.ips[0] would let anyone pick their own rate-limit bucket.
     const req = {
       ip: '1.1.1.1',
       ips: ['9.9.9.9'],
       app: { get: (k) => k === 'trust proxy' },
     };
-    assert.equal(getRateLimitKey(req), '9.9.9.9');
+    assert.equal(getRateLimitKey(req), '1.1.1.1');
+  });
+
+  it('getRateLimitKey falls back to the socket address', () => {
+    assert.equal(getRateLimitKey({ connection: { remoteAddress: '5.5.5.5' } }), '5.5.5.5');
+    assert.equal(getRateLimitKey({}), 'unknown');
   });
 
   it('isLocalAddress detects loopback variants', () => {
