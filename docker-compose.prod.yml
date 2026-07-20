@@ -139,6 +139,12 @@ services:
         limits:
           memory: ${BACKEND_MEMORY_LIMIT:-1g}
     stop_grace_period: 30s
+    labels:
+      # Opts this container into the autoheal watcher below. `restart: always` only
+      # covers a process that exits; a container that stays up while failing its
+      # healthcheck (stalled event loop, exhausted connection pool) is never restarted
+      # by compose on its own.
+      autoheal: 'true'
     healthcheck:
       test:
         [
@@ -166,6 +172,8 @@ services:
       - backend
     ports:
       - '${FRONTEND_BIND_ADDR:-127.0.0.1}:3000:80'
+    labels:
+      autoheal: 'true'
     healthcheck:
       test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1/ || exit 1']
       interval: 30s
@@ -173,6 +181,39 @@ services:
       retries: 3
       start_period: 10s
     stop_grace_period: 15s
+
+  # Restarts any container labelled autoheal=true once its healthcheck reports
+  # unhealthy. Plain `docker compose` never does this itself — that behaviour belongs to
+  # Swarm/Kubernetes — so without this a wedged backend sits unhealthy indefinitely with
+  # nobody watching.
+  #
+  # Deliberately NOT applied to postgres or redis: they are stateful, and bouncing a
+  # database on a failing healthcheck tends to turn one problem into two. If those go
+  # unhealthy a human should look.
+  #
+  # Tradeoff, stated plainly: this needs the Docker socket, which is equivalent to root
+  # on the host. Mounting it :ro does not actually restrict what can be asked over the
+  # socket — it only makes the file node read-only — so treat this container as
+  # privileged and pin the image tag. If that is unacceptable, drop this service and use
+  # the host-cron fallback in scripts/install-cron.sh instead.
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    container_name: bazi_autoheal
+    restart: always
+    logging: *default-logging
+    network_mode: none
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      # Seconds between checks.
+      AUTOHEAL_INTERVAL: ${AUTOHEAL_INTERVAL:-10}
+      # Grace period after this watcher starts, so a still-booting stack is not bounced.
+      AUTOHEAL_START_PERIOD: ${AUTOHEAL_START_PERIOD:-60}
+      # Seconds to wait for a graceful stop before killing. Keep at or above the
+      # backend's stop_grace_period (30s) or restarts will truncate in-flight requests —
+      # which is the very thing the graceful shutdown path exists to avoid.
+      DOCKER_TIMEOUT: ${AUTOHEAL_DOCKER_TIMEOUT:-40}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   postgres_data:
