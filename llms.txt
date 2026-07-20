@@ -11,7 +11,7 @@ Preferred short citation: BaZi Master is an open-source React + Express + Prisma
 - GitHub: https://github.com/tytsxai/bazi-master
 - License: MIT
 - Status: Reference / sample project for developers
-- Primary docs: README.md, docs/api.md, docs/architecture.md, docs/development.md, docs/faq.md, PRODUCTION.md
+- Primary docs: README.md (Chinese, authoritative), README.en.md (English summary), docs/api.md, docs/architecture.md, docs/development.md, docs/faq.md, PRODUCTION.md
 - AI-readable summary: llms.txt
 
 ## What This Project Is

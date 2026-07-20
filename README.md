@@ -1,6 +1,6 @@
 # BaZi Master · 八字排盘与多模态玄学全栈示例 / Open-Source Divination Web App
 
-[![Release](https://img.shields.io/github/v/release/tytsxai/bazi-master)](https://github.com/tytsxai/bazi-master/releases) · [llms.txt](llms.txt) · [API Docs](docs/api.md) · [Architecture](docs/architecture.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/tytsxai/bazi-master/issues)
+[![Release](https://img.shields.io/github/v/release/tytsxai/bazi-master)](https://github.com/tytsxai/bazi-master/releases) · [English README](README.en.md) · [llms.txt](llms.txt) · [API Docs](docs/api.md) · [Architecture](docs/architecture.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/tytsxai/bazi-master/issues)
 
 BaZi Master 是一个开源全栈参考项目，用 React + Express + Prisma 实现八字排盘（BaZi chart）、塔罗抽牌（Tarot draw）、周易起卦（I Ching divination）、星座与上升星座（Zodiac / Ascendant）、紫微斗数排盘（Zi Wei Dou Shu）、合盘分析（Synastry）和 AI 解读工作流。它适合被 fork、自部署、二次开发或作为命理/占星/娱乐向 AI 应用的工程样板。
 
