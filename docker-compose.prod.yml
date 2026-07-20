@@ -1,24 +1,41 @@
+# Docker's default json-file log driver has no size cap, so every service below pins one.
+# Without it the host disk fills up over weeks and postgres is the first thing to break.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '20m'
+    max-file: '5'
+
 services:
   postgres:
     image: postgres:16
     container_name: bazi_postgres
     restart: always
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      # No default on purpose: a missing password must fail the deploy, not silently
+      # start postgres with a well-known weak credential.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-bazi_master}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres -d bazi_master']
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-bazi_master}',
+        ]
       interval: 5s
       timeout: 3s
       retries: 10
+    stop_grace_period: 30s
 
   redis:
     image: redis:7
     container_name: bazi_redis
     restart: always
+    logging: *default-logging
     volumes:
       - redis_data:/data
     healthcheck:
@@ -26,6 +43,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    stop_grace_period: 15s
 
   backend:
     build:
@@ -33,6 +51,7 @@ services:
       dockerfile: backend/Dockerfile
     container_name: bazi_backend
     restart: always
+    logging: *default-logging
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,10 +113,36 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       ALLOW_DEV_OAUTH: ${ALLOW_DEV_OAUTH:-false}
       SEED_DEFAULT_USER: ${SEED_DEFAULT_USER:-false}
+      SEED_USER_EMAIL: ${SEED_USER_EMAIL:-}
+      SEED_USER_PASSWORD: ${SEED_USER_PASSWORD:-}
+      SEED_USER_NAME: ${SEED_USER_NAME:-}
+      ALLOW_RUNTIME_SCHEMA_SYNC: ${ALLOW_RUNTIME_SCHEMA_SYNC:-}
+      LOG_LEVEL: ${LOG_LEVEL:-}
+      JSON_BODY_LIMIT: ${JSON_BODY_LIMIT:-}
+      MAX_URL_LENGTH: ${MAX_URL_LENGTH:-}
+      MAX_INPUT_ARRAY_LENGTH: ${MAX_INPUT_ARRAY_LENGTH:-}
+      MAX_INPUT_DEPTH: ${MAX_INPUT_DEPTH:-}
+      MAX_INPUT_KEYS: ${MAX_INPUT_KEYS:-}
+      MAX_INPUT_STRING_LENGTH: ${MAX_INPUT_STRING_LENGTH:-}
+      BAZI_CACHE_TTL_MS: ${BAZI_CACHE_TTL_MS:-}
+      BAZI_CACHE_MAX_ENTRIES: ${BAZI_CACHE_MAX_ENTRIES:-}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-}
+      AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
+      SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-}
       # Make sure to set these in .env or CI secrets
       ADMIN_EMAILS: ${ADMIN_EMAILS}
     ports:
-      - '4000:4000'
+      # Loopback by default: TLS termination and the public edge belong to nginx.
+      # Publishing to 0.0.0.0 writes iptables rules that bypass ufw/firewalld.
+      - '${BACKEND_BIND_ADDR:-127.0.0.1}:4000:4000'
+    deploy:
+      resources:
+        limits:
+          memory: ${BACKEND_MEMORY_LIMIT:-1g}
+    stop_grace_period: 30s
     healthcheck:
       test:
         [
@@ -120,10 +165,18 @@ services:
         VITE_CDN_URL: ${VITE_CDN_URL:-/}
     container_name: bazi_frontend
     restart: always
+    logging: *default-logging
     depends_on:
       - backend
     ports:
-      - '3000:80'
+      - '${FRONTEND_BIND_ADDR:-127.0.0.1}:3000:80'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1/ || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 15s
 
 volumes:
   postgres_data:

@@ -20,14 +20,18 @@ RUN npm ci
 # Copy backend source code
 COPY backend ./
 
-# Switch Prisma provider to postgresql for production build
-RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/g' ../prisma/schema.prisma
-
 # Generate Prisma Client
 RUN npm run prisma:generate
 
+# Drop root. Everything under /app is build output, so a single chown is enough.
+RUN chown -R node:node /app
+USER node
+
 # Expose port
 EXPOSE 4000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:4000/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # Start command
 CMD ["npm", "run", "start"]
