@@ -286,9 +286,10 @@ test_load() {
 
     for i in {1..10}; do
         (
-            if ! http_request "$API_BASE_URL/health" >/dev/null 2>&1; then
-                echo "failed"
-            fi
+            # `exit 1`, not `echo`: the parent decides pass/fail from the subshell's
+            # exit status, and echo always succeeds — so this test used to pass
+            # unconditionally, even with every request failing.
+            http_request "$API_BASE_URL/health" >/dev/null 2>&1 || exit 1
         ) &
         pids+=($!)
     done
@@ -296,7 +297,7 @@ test_load() {
     # Wait for all requests to complete
     for pid in "${pids[@]}"; do
         if ! wait "$pid" 2>/dev/null; then
-            ((failed++))
+            failed=$((failed + 1))
         fi
     done
 
@@ -312,21 +313,39 @@ test_load() {
 test_openapi() {
     log_step "8. Testing OpenAPI documentation"
 
-    # Test API docs endpoint
-    log_info "Testing OpenAPI specification endpoint..."
-    if ! http_request "$API_BASE_URL/api-docs.json" >/dev/null; then
-        log_error "OpenAPI specification not accessible"
-        return 1
+    # /api-docs is behind Basic Auth in production, so an unauthenticated probe gets
+    # 401 — which is the correct, healthy response. Expecting 200 made this test fail
+    # on every production run, and a check that is always red stops being read.
+    local auth_args=()
+    if [ -n "${DOCS_PASSWORD:-}" ]; then
+        auth_args=(-u "${DOCS_USER:-admin}:${DOCS_PASSWORD}")
     fi
-    log_success "OpenAPI specification is accessible"
 
-    # Test Swagger UI
+    log_info "Testing OpenAPI specification endpoint..."
+    local spec_status
+    spec_status=$(curl -s -o /dev/null -w '%{http_code}' "${auth_args[@]}" \
+        "$API_BASE_URL/api-docs.json" || echo "000")
+    case "$spec_status" in
+        200) log_success "OpenAPI specification is accessible" ;;
+        401) log_success "OpenAPI specification is protected by Basic Auth (401)" ;;
+        *)
+            log_error "OpenAPI specification returned unexpected status: $spec_status"
+            return 1
+            ;;
+    esac
+
     log_info "Testing Swagger UI..."
-    if ! curl -f -s "$API_BASE_URL/api-docs/" >/dev/null 2>&1; then
-        log_error "Swagger UI not accessible"
-        return 1
-    fi
-    log_success "Swagger UI is accessible"
+    local ui_status
+    ui_status=$(curl -s -o /dev/null -w '%{http_code}' "${auth_args[@]}" \
+        "$API_BASE_URL/api-docs/" || echo "000")
+    case "$ui_status" in
+        200) log_success "Swagger UI is accessible" ;;
+        401) log_success "Swagger UI is protected by Basic Auth (401)" ;;
+        *)
+            log_error "Swagger UI returned unexpected status: $ui_status"
+            return 1
+            ;;
+    esac
 }
 
 # Main function
@@ -354,13 +373,16 @@ main() {
         "test_openapi"
     )
 
+    # Plain arithmetic assignment rather than ((x++)): post-increment evaluates to the
+    # old value, so the first increment from 0 returns status 1 and `set -e` aborts the
+    # whole run before a single test reports.
     for test_func in "${tests[@]}"; do
-        ((test_count++))
+        test_count=$((test_count + 1))
         echo
         if $test_func; then
-            ((pass_count++))
+            pass_count=$((pass_count + 1))
         else
-            ((fail_count++))
+            fail_count=$((fail_count + 1))
             log_error "Test '$test_func' failed"
         fi
     done
