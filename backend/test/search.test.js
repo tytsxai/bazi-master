@@ -46,12 +46,14 @@ describe('recordMatchesQuery', () => {
 });
 
 describe('buildSearchOr', () => {
-  it('builds a prisma OR filter for search terms', () => {
+  it('builds a case-insensitive prisma OR filter for search terms', () => {
+    // Case-insensitive on purpose: PostgreSQL `contains` is case-sensitive by default,
+    // which made server-side search disagree with recordMatchesQuery.
     assert.deepEqual(buildSearchOr('alpha'), [
-      { birthLocation: { contains: 'alpha' } },
-      { timezone: { contains: 'alpha' } },
-      { gender: { contains: 'alpha' } },
-      { pillars: { contains: 'alpha' } },
+      { birthLocation: { contains: 'alpha', mode: 'insensitive' } },
+      { timezone: { contains: 'alpha', mode: 'insensitive' } },
+      { gender: { contains: 'alpha', mode: 'insensitive' } },
+      { pillars: { contains: 'alpha', mode: 'insensitive' } },
     ]);
   });
 });

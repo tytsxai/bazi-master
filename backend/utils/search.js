@@ -20,11 +20,15 @@ const parseSearchTerms = (input) => {
   return terms;
 };
 
+// mode: 'insensitive' matters on PostgreSQL, where `contains` is case-sensitive by
+// default — searching "beijing" would not match a stored "Beijing". The client-side
+// recordMatchesQuery below has always been case-insensitive, so without this the two
+// search paths disagreed about what matches.
 const buildSearchOr = (term) => [
-  { birthLocation: { contains: term } },
-  { timezone: { contains: term } },
-  { gender: { contains: term } },
-  { pillars: { contains: term } },
+  { birthLocation: { contains: term, mode: 'insensitive' } },
+  { timezone: { contains: term, mode: 'insensitive' } },
+  { gender: { contains: term, mode: 'insensitive' } },
+  { pillars: { contains: term, mode: 'insensitive' } },
 ];
 
 export { buildSearchOr, parseSearchTerms, recordMatchesQuery };

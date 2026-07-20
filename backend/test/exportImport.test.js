@@ -75,8 +75,8 @@ test('recordMatchesQuery checks searchable fields', () => {
 test('buildSearchOr creates Prisma conditions', () => {
   const clauses = buildSearchOr('abc');
   assert.equal(clauses.length, 4);
-  assert.deepEqual(clauses[0], { birthLocation: { contains: 'abc' } });
-  assert.deepEqual(clauses[3], { pillars: { contains: 'abc' } });
+  assert.deepEqual(clauses[0], { birthLocation: { contains: 'abc', mode: 'insensitive' } });
+  assert.deepEqual(clauses[3], { pillars: { contains: 'abc', mode: 'insensitive' } });
 });
 
 test('buildImportRecord builds a normalized record with fallback timezone', async () => {
