@@ -1,4 +1,6 @@
 import { getServerConfig as getServerConfigFromEnv } from '../config/app.js';
+import { logger } from '../config/logger.js';
+import { fetchWithTimeout } from '../utils/http.js';
 
 const getAiConfig = () => {
   const config = getServerConfigFromEnv();
@@ -15,21 +17,7 @@ const getAiConfig = () => {
   };
 };
 
-const fetchWithTimeout = async (url, options, timeoutMs) => {
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return fetch(url, options);
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-};
+// Shared with the OAuth callbacks, which need the same deadline behaviour.
 
 const ensureMinDuration = async (startedAtMs, minDurationMs) => {
   if (!Number.isFinite(minDurationMs) || minDurationMs <= 0) return;
@@ -356,6 +344,21 @@ const generateAIContent = async ({ system, user, messages, fallback, provider, o
     }
 
     return result;
+  } catch (error) {
+    // Without this the only signal of an expired key, an exhausted quota or a provider
+    // timeout is a generic client-side error — you would have to reconcile against the
+    // provider's dashboard to find out what happened.
+    logger.error(
+      {
+        err: error,
+        provider: resolvedProvider,
+        model: resolvedProvider === 'anthropic' ? config.anthropicModel : config.openaiModel,
+        streaming: Boolean(onChunk),
+        durationMs: Date.now() - startedAt,
+      },
+      '[ai] Provider request failed'
+    );
+    throw error;
   } finally {
     await ensureMinDuration(startedAt, config.resetRequestMinDurationMs);
   }

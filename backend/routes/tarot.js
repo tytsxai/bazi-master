@@ -80,11 +80,20 @@ ${cardList}
     return res.status(429).json({ error: AI_CONCURRENCY_ERROR });
   }
 
+  // Generation and persistence are separated on purpose. Previously a failed AI call
+  // was swallowed by the same catch as a failed insert, and the handler still replied
+  // 200 with an empty string — the client had no way to tell success from failure.
   let content = '';
   try {
     content = await generateAIContent({ system, user: userPrompt, fallback, provider });
+  } catch (error) {
+    logger.error({ err: error, requestId: req.id, provider }, 'Tarot AI interpretation failed');
+    return res.status(503).json({ error: 'AI interpretation is currently unavailable' });
+  } finally {
+    release();
+  }
 
-    // Persist the record
+  try {
     await prisma.tarotRecord.create({
       data: {
         userId: req.user.id,
@@ -95,10 +104,9 @@ ${cardList}
       },
     });
   } catch (error) {
-    logger.error('Tarot interpret error:', error);
-    // Don't fail if persistence fails
-  } finally {
-    release();
+    // History is a convenience; the interpretation itself already succeeded, so a
+    // failed insert should not lose it.
+    logger.error({ err: error, requestId: req.id }, 'Failed to persist tarot record');
   }
 
   res.json({ content });
