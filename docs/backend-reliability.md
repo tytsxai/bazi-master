@@ -238,20 +238,37 @@ Redis检查: 1000ms
 
 ### 数据备份策略
 
+**现状（已实现）：**
+
 ```
-每日全量备份: PostgreSQL pg_dump
-实时增量备份: WAL归档
-备份存储: 外部对象存储 (S3/兼容)
-保留策略: 7天每日备份 + 30天每周备份
+全量备份: scripts/backup-db.sh —— custom 格式 pg_dump + gzip + .sha256
+完整性校验: 备份后立即在容器内跑 pg_restore --list
+保留策略: RETENTION_DAYS 控制，默认 7 天
+备份存储: 本地 BACKUP_DIR（默认 ./backups）
+调度: 无内置调度，需要自己配 cron，见 production-runbook.md
 ```
+
+**未实现（要做需自行接入）：**
+
+```
+WAL 归档 / 实时增量备份 —— 没有任何 archive_command / wal_level 配置
+异地备份 —— 备份默认与数据库同宿主，磁盘损坏会一起丢
+定期恢复演练 —— 只在备份当下校验可读性，没有周期性恢复验证
+```
+
+> 备份和数据库放在同一台机器上，只能防误删，防不了硬件故障。
+> 上线前至少把 `BACKUP_DIR` 指向独立卷，并加一步对象存储上传。
 
 ### 灾难恢复
 
-```
-RTO (Recovery Time Objective): 1小时
-RPO (Recovery Point Objective): 15分钟
-恢复流程: 自动故障转移 + 手动备份恢复
-```
+目前**没有**自动故障转移：这是单实例 Docker Compose 部署，postgres 挂了就要人工介入。
+恢复手段只有一条——从 `scripts/backup-db.sh` 的备份用 `scripts/restore-db.sh` 恢复。
+
+实际的 RPO 取决于你配的 cron 频率（按 runbook 的每日示例就是最坏丢 24 小时，
+所以部署前必须额外手动备份一次）。RTO 取决于备份体积和人工响应速度，没有测量过。
+
+> 下面这些数字是**目标**，不是当前能力，在做过恢复演练并测量之前不要写进 SLA：
+> RTO 1 小时 / RPO 15 分钟。要达到 RPO 15 分钟必须先上 WAL 归档。
 
 ## 安全加固
 

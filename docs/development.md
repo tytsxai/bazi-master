@@ -46,7 +46,7 @@ npm -C frontend run dev                      # http://localhost:3000
 
 ```bash
 npm -C backend test       # 后端 Node.js test
-npm -C frontend test:unit # 前端 Vitest 单元测试
+npm -C frontend run test:unit:run # 前端 Vitest 单元测试（一次性；test:unit 是 watch 模式）
 npm -C frontend test      # 前端 Playwright E2E
 npm test                 # 组合执行
 ```

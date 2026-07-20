@@ -17,9 +17,7 @@
     "ai-app"
   ],
   "scripts": {
-    "predev": "npm run asbuild && node scripts/sync-wasm.mjs",
     "dev": "node scripts/dev-server.mjs",
-    "prebuild": "npm run asbuild && node scripts/sync-wasm.mjs",
     "build": "vite build",
     "preview": "vite preview --port 3000",
     "test": "node scripts/run-playwright.mjs",
@@ -27,14 +25,9 @@
     "test:unit:run": "node scripts/vitest-run.mjs",
     "analyze": "vite build --mode analyze",
     "typecheck": "tsc --noEmit",
-    "test:lh": "npm run build && lhci autorun --config=./lighthouserc.cjs",
-    "sync:wasm": "node scripts/sync-wasm.mjs",
-    "asbuild:untouched": "asc assembly/index.ts --target debug",
-    "asbuild:optimized": "asc assembly/index.ts --target release",
-    "asbuild": "npm run asbuild:untouched && npm run asbuild:optimized"
+    "test:lh": "npm run build && lhci autorun --config=./lighthouserc.cjs"
   },
   "dependencies": {
-    "@assemblyscript/loader": "^0.19.23",
     "@sentry/react": "^10.32.1",
     "html2canvas": "^1.4.1",
     "i18next": "^23.11.5",
@@ -62,8 +55,6 @@
     "@vitejs/plugin-react": "^4.3.3",
     "@vitest/coverage-v8": "^1.6.0",
     "@vitest/ui": "^1.3.1",
-    "asbuild": "^0.2.0",
-    "assemblyscript": "^0.19.23",
     "autoprefixer": "^10.4.19",
     "axe-core": "^4.11.0",
     "jsdom": "^24.1.3",

@@ -2,7 +2,27 @@
 
 > 版本: v0.1.3-dev | 更新: 2025-12-30
 >
-> 说明：当前项目未内置 Prometheus 指标或分布式追踪导出。本指南为推荐指标与工具栈，需要自行接入（如 prom-client / OpenTelemetry）。
+> **本文大部分内容是规划，不是现状。** 读之前先看清楚这条分界线：
+>
+> **代码里真实存在的：**
+>
+> - Pino 结构化 JSON 日志打到 stdout，含 request id、method、url、status、耗时、userId；
+>   已配置 redact 兜底，不会把 password/token/cookie 写进日志
+> - 日志按状态码分级：5xx 走 error，4xx 走 warn（扫描器探测不会污染 error 日志）
+> - 健康探针 `/live`（纯进程）、`/health`、`/api/ready`（带超时的 DB/Redis 深度检查）
+> - Sentry 错误上报（采样率、environment、release 均可通过环境变量配置）
+> - Docker 日志轮转：`docker-compose.prod.yml` 每个服务 20MB × 5
+>
+> **代码里没有的（下文的 PromQL、告警规则、容量数字全部属于这一类）：**
+>
+> - `/metrics` 端点、Prometheus 指标、分布式追踪导出 —— 一个都没有，
+>   下面所有 `http_requests_total` 之类的指标名都是示意，查不到
+> - 告警规则、日志集中收集、日志保留策略、容量自动扩展
+>
+> 小团队不建议直接照搬 Prometheus + Grafana 这一套，运维成本不划算。
+> 先用好 Sentry + `docker logs | jq`；真需要指标时再引入 `prom-client`，
+> 从请求数、延迟直方图、进程内存、DB 连接池这四个核心指标开始，
+> 不要照抄下面那份指标清单。
 
 ## 监控指标体系
 
@@ -304,13 +324,20 @@ CPU规划
 
 ### 备份验证
 
+**已实现**：`scripts/backup-db.sh` 在每次备份完成后，立即在容器内执行
+`pg_restore --list` 校验归档可读，并生成 `.sha256`。`scripts/restore-db.sh`
+在恢复后会断言表数量，不达标则保留 pre-restore 快照并退出非零。
+
+**未实现**（下面是规划，别当成现状）：
+
 ```
-自动化测试
-├── 每日恢复测试
-├── 完整性检查: pg_dump --format=custom | pg_restore --list
-├── 性能测试: 恢复后运行基准测试
-└── 报告生成: 自动发送验证结果
+每日自动恢复演练
+恢复后基准性能测试
+验证报告自动推送
 ```
+
+> 「备份能读」不等于「能恢复」。上线后至少手动做一次完整的
+> restore 演练，把耗时记下来，这才是 RTO 的依据。
 
 ## 部署验证
 
