@@ -11,12 +11,17 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 FILENAME="$BACKUP_DIR/${DB_NAME}_${TIMESTAMP}.sql.gz"
 CHECKSUM_FILE="$FILENAME.sha256"
 
-# Color output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+# Color output, but only when attached to a terminal. Under cron stdout is a log file,
+# where escape sequences are just noise that makes grepping harder.
+if [ -t 1 ]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+else
+    RED='' GREEN='' YELLOW='' BLUE='' NC=''
+fi
 
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"

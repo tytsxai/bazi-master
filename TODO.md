@@ -22,10 +22,10 @@
 - [ ] CDN 资源分发
 - [ ] 恢复演练：跑一次完整的 `restore-db.sh`，测出真实 RTO 并回填
       `docs/backend-reliability.md`（目前那里的 RTO/RPO 只是目标值）
-- [ ] 备份异地化：`BACKUP_DIR` 指向独立卷 + 对象存储上传
-      （现在备份和数据库同宿主，防不了硬件故障）
-- [ ] 容器 unhealthy 后无人自愈：compose 不会因 unhealthy 重启容器，
-      需要 autoheal sidecar 或宿主 cron 兜底
+- [ ] 备份异地化：`BACKUP_DIR` 已可指向独立卷，但对象存储上传仍需自行接入
+      （备份默认还是和数据库同宿主，防不了硬件故障）
+- [ ] 在真实部署机上验证备份 cron：装完跑一次 `./scripts/cron-backup.sh`，
+      确认 cron 环境下能找到 docker、能写日志（本机没装 Docker，只验到失败路径）
 - [ ] 后端覆盖率门槛：`test:coverage` 存在但无阈值，CI 也没跑
 
 ## 已完成
@@ -50,6 +50,8 @@
 - [x] Virtual scrolling 大数据列表
 - [x] 多语言完善 (日语/韩语)
 - [x] `./bazi` 程序化 CLI
+- [x] 容器自愈 (autoheal，只覆盖无状态服务)
+- [x] 备份定时调度 (`scripts/install-cron.sh` + `cron-backup.sh`，带锁和失败告警)
 
 ## 已放弃
 

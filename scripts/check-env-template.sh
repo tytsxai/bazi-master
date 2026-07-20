@@ -13,8 +13,10 @@ cd "$(dirname "$0")/.."
 
 TEMPLATE="env.production.template"
 
-# Variables that are intentionally absent from the production template.
-IGNORED='^(CI|NODE_ENV|USER|PGUSER|DATABASE_URL|REDIS_URL|PG_TEST_[A-Z_]+|BAZI_(CLI|HELPER|PG|WEB)_[A-Z_]+)$'
+# Variables that are intentionally absent from the production template: process/shell
+# environment inherited from the host (LANG, USER, PATH-adjacent), local development
+# helpers, and the two connection strings compose assembles itself.
+IGNORED='^(CI|NODE_ENV|USER|PGUSER|LANG|LC_ALL|DATABASE_URL|REDIS_URL|PG_TEST_[A-Z_]+|BAZI_(CLI|HELPER|PG|WEB)_[A-Z_]+)$'
 
 code_vars="$(
   grep -rhoE 'env\.[A-Z][A-Z_0-9]+' backend \

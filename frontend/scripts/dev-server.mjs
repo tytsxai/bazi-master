@@ -3,7 +3,13 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureLocalPostgres, stopLocalPostgres } from '../../backend/scripts/local-postgres.mjs';
+import { ensureLocalPostgres } from '../../backend/scripts/local-postgres.mjs';
+import {
+  e2ePostgresDataDir,
+  e2ePostgresDbName,
+  e2ePostgresPort,
+  stopE2EPostgres,
+} from './e2e-postgres.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -137,6 +143,26 @@ process.env.FRONTEND_URL = process.env.FRONTEND_URL || `http://127.0.0.1:${front
 
 process.env.AI_PROVIDER = process.env.AI_PROVIDER || 'mock';
 
+const e2eDefaultEmail = process.env.E2E_DEFAULT_EMAIL || 'test@example.com';
+const e2eDefaultPassword = process.env.E2E_DEFAULT_PASSWORD || 'password123';
+const e2eDefaultName = process.env.E2E_DEFAULT_NAME || 'Test User';
+
+// The E2E default user is also the admin fixture (run-playwright.mjs puts it in ADMIN_EMAILS),
+// and the backend refuses to create any ADMIN_EMAILS address through /api/auth/register —
+// admin accounts must be provisioned out of band. Hand the backend its own seed path instead:
+// ensureDefaultUser() runs before the first login and bypasses the self-signup restriction.
+if (forceRestart) {
+  process.env.SEED_DEFAULT_USER = 'true';
+  process.env.SEED_USER_EMAIL = process.env.SEED_USER_EMAIL || e2eDefaultEmail;
+  process.env.SEED_USER_PASSWORD = process.env.SEED_USER_PASSWORD || e2eDefaultPassword;
+  process.env.SEED_USER_NAME = process.env.SEED_USER_NAME || e2eDefaultName;
+
+  // /api/auth/{register,login} 默认每个邮箱 15 分钟只放 10 次。整套 e2e 有近百个用例，
+  // 几乎每个都用同一个默认账号登录一次，跑到第 9 个用例就把配额耗光，之后全部 429 ——
+  // 表现是登录后停在 /login，看起来像登录功能坏了。没有任何用例是在测限流本身。
+  process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX || '100000';
+}
+
 console.log(`[dev-server] Using ports: frontend=${frontendPort}, backend=${backendPort}`);
 
 const checkBackendHealth = async () => {
@@ -181,9 +207,9 @@ const ensureE2EDefaultUser = async () => {
   if (!forceRestart) return;
   if (process.env.E2E_SKIP_SEED === '1' || process.env.PW_SKIP_SEED === '1') return;
 
-  const email = process.env.E2E_DEFAULT_EMAIL || 'test@example.com';
-  const password = process.env.E2E_DEFAULT_PASSWORD || 'password123';
-  const name = process.env.E2E_DEFAULT_NAME || 'Test User';
+  const email = e2eDefaultEmail;
+  const password = e2eDefaultPassword;
+  const name = e2eDefaultName;
   const baseUrl = `http://127.0.0.1:${backendPort}`;
 
   const tryLogin = async () => {
@@ -211,7 +237,12 @@ const ensureE2EDefaultUser = async () => {
   }
 
   if (!(await tryLogin())) {
-    throw new Error('[dev-server] E2E default user seed succeeded but login still fails.');
+    // A 409 here does not prove the account exists: the backend answers 409 for reserved
+    // ADMIN_EMAILS addresses too, precisely so the allow-list is not enumerable.
+    throw new Error(
+      `[dev-server] Unable to seed E2E default user ${email} (register status ${registerRes.status}, login still fails). ` +
+        'If it is listed in ADMIN_EMAILS, self-signup is blocked by design — seed it via SEED_USER_EMAIL/SEED_USER_PASSWORD instead.'
+    );
   }
 };
 
@@ -334,7 +365,6 @@ let shuttingDown = false;
 let backendRestarting = false;
 let frontendRestarting = false;
 let postgresStartedByScript = false;
-const postgresDataDir = path.join(rootDir, 'prisma', '.pgdata-e2e');
 
 const wireBackendExitHandler = () => {
   if (!backendProcess) return;
@@ -446,7 +476,9 @@ const shutdown = () => {
   if (frontendProcess) frontendProcess.kill('SIGTERM');
   if (backendProcess) backendProcess.kill('SIGTERM');
   if (postgresStartedByScript) {
-    stopLocalPostgres({ dataDir: postgresDataDir, mode: 'fast' });
+    // best-effort：Playwright 关 webServer 时会连着 pg_ctl 一起杀，这里经常来不及跑完。
+    // 真正保证回收的是 run-playwright.mjs——它在 Playwright 退出之后才停，不会被打断。
+    stopE2EPostgres();
   }
 };
 
@@ -482,11 +514,11 @@ if (
 
   const providedE2eDatabaseUrl = process.env.E2E_DATABASE_URL;
   let e2eDatabaseUrl = providedE2eDatabaseUrl;
-  const pgPort = Number(process.env.PG_E2E_PORT || 5433);
-  const pgDbName = process.env.PG_E2E_DB || 'bazi_master_e2e';
+  const pgPort = e2ePostgresPort;
+  const pgDbName = e2ePostgresDbName;
   if (!e2eDatabaseUrl) {
     const result = await ensureLocalPostgres({
-      dataDir: postgresDataDir,
+      dataDir: e2ePostgresDataDir,
       port: pgPort,
       dbName: pgDbName,
     });
