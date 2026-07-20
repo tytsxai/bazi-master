@@ -41,6 +41,10 @@ import { buildOpenApiSpec } from './services/apiSchema.service.js';
 import { setBaziCacheMirror } from './services/cache.service.js';
 import { setResetTokenMirrors } from './services/resetTokens.service.js';
 import { OAUTH_STATE_TTL_MS, setOauthStateMirror } from './services/oauth.service.js';
+import {
+  CREDENTIAL_REVOCATION_TTL_MS,
+  setCredentialRevocationMirror,
+} from './services/credentialRevocation.service.js';
 
 // Import routes
 import apiRouter from './routes/api.js';
@@ -284,6 +288,7 @@ const initRedisMirrors = async ({
   setBaziCacheMirrorFn = setBaziCacheMirror,
   setResetTokenMirrorsFn = setResetTokenMirrors,
   setOauthStateMirrorFn = setOauthStateMirror,
+  setCredentialRevocationMirrorFn = setCredentialRevocationMirror,
   loggerInstance = logger,
   sessionIdleMs = SESSION_IDLE_MS,
   baziCacheTtlMs = BAZI_CACHE_TTL_MS,
@@ -320,7 +325,15 @@ const initRedisMirrors = async ({
       ttlMs: oauthStateTtlMs,
     })
   );
-  loggerInstance.info('[redis] session, bazi cache, oauth state, reset tokens mirrors enabled');
+  setCredentialRevocationMirrorFn(
+    createRedisMirrorFn(client, {
+      prefix: 'credential-revoked:',
+      ttlMs: CREDENTIAL_REVOCATION_TTL_MS,
+    })
+  );
+  loggerInstance.info(
+    '[redis] session, bazi cache, oauth state, reset token and credential revocation mirrors enabled'
+  );
 };
 
 // Graceful shutdown handling

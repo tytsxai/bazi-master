@@ -11,6 +11,7 @@ import {
   isAdminUser,
 } from '../middleware/auth.js';
 import { hashPassword, verifyPassword } from '../utils/passwords.js';
+import { fetchWithTimeout, OAUTH_FETCH_TIMEOUT_MS } from '../utils/http.js';
 import {
   buildOauthRedirectUrl,
   consumeOauthStateAsync,
@@ -22,10 +23,10 @@ import {
   resetTokenStore,
   resetTokenByUser,
   pruneResetTokens,
-  getResetTokenEntryAsync,
+  consumeResetTokenEntryAsync,
   setResetTokenForUser,
-  deleteResetTokenAsync,
 } from '../services/resetTokens.service.js';
+import { markCredentialsChanged } from '../services/credentialRevocation.service.js';
 import {
   ensurePasswordResetDeliveryReady,
   sendPasswordResetEmail,
@@ -74,9 +75,20 @@ const redirectOauthError = (res, { provider, error, nextPath, frontendUrl }) => 
   return res.redirect(appendProviderParam(redirectUrl, provider));
 };
 
+// Admin rights are derived purely from the email string in ADMIN_EMAILS, and signup is
+// open with no ownership check on the address. On a fresh deployment, where the
+// configured admin address has no account yet, whoever registers it first becomes
+// admin. Admin accounts therefore must not be creatable through self-service; they are
+// provisioned out of band (seed/migration) and only then match the allow-list.
+const isReservedAdminEmail = (email) => {
+  const { adminEmails } = getServerConfig();
+  return Boolean(email) && adminEmails.has(email);
+};
+
 const createOauthUser = async ({ email, name }) => {
   let user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
+    if (isReservedAdminEmail(email)) return null;
     const randomPassword = crypto.randomBytes(24).toString('hex');
     const hashed = await hashPassword(randomPassword);
     if (!hashed) return null;
@@ -108,6 +120,10 @@ export const handleRegister = async (req, res) => {
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
+    return res.status(409).json({ error: 'Email already registered' });
+  }
+  if (isReservedAdminEmail(email)) {
+    // Same response as an existing account, so the allow-list is not enumerable.
     return res.status(409).json({ error: 'Email already registered' });
   }
 
@@ -244,14 +260,14 @@ export const handlePasswordResetConfirm = async (req, res) => {
   }
 
   pruneResetTokens();
-  const entry = await getResetTokenEntryAsync(token);
+  // Consume up front so two concurrent requests cannot both redeem the same token.
+  const entry = await consumeResetTokenEntryAsync(token);
   if (!entry?.userId) {
     return res.status(400).json({ error: 'Invalid or expired token' });
   }
 
   const user = await prisma.user.findUnique({ where: { id: entry.userId } });
   if (!user) {
-    await deleteResetTokenAsync(token, entry.userId);
     return res.status(400).json({ error: 'Invalid or expired token' });
   }
 
@@ -261,7 +277,9 @@ export const handlePasswordResetConfirm = async (req, res) => {
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { password: hashed } });
-  await deleteResetTokenAsync(token, user.id);
+  // Invalidate every session issued before now. Without this, resetting the password
+  // leaves an attacker's stolen session working — the victim's only remedy is a no-op.
+  await markCredentialsChanged(user.id);
 
   return res.json({ status: 'ok' });
 };
@@ -347,17 +365,21 @@ export const handleGoogleCallback = async (req, res) => {
   }
 
   try {
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: GOOGLE_REDIRECT_URI,
-        grant_type: 'authorization_code',
-      }),
-    });
+    const tokenRes = await fetchWithTimeout(
+      'https://oauth2.googleapis.com/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          redirect_uri: GOOGLE_REDIRECT_URI,
+          grant_type: 'authorization_code',
+        }),
+      },
+      OAUTH_FETCH_TIMEOUT_MS
+    );
 
     if (!tokenRes.ok) {
       return redirectOauthError(res, {
@@ -379,9 +401,11 @@ export const handleGoogleCallback = async (req, res) => {
       });
     }
 
-    const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const profileRes = await fetchWithTimeout(
+      'https://www.googleapis.com/oauth2/v2/userinfo',
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+      OAUTH_FETCH_TIMEOUT_MS
+    );
 
     if (!profileRes.ok) {
       return redirectOauthError(res, {
@@ -400,6 +424,17 @@ export const handleGoogleCallback = async (req, res) => {
       return redirectOauthError(res, {
         provider: 'google',
         error: 'missing_email',
+        nextPath,
+        frontendUrl: FRONTEND_URL,
+      });
+    }
+
+    // An unverified Google address proves nothing about ownership, and accounts here
+    // are keyed by email — accepting one would let a caller claim someone else's.
+    if (profile?.verified_email === false) {
+      return redirectOauthError(res, {
+        provider: 'google',
+        error: 'email_not_verified',
         nextPath,
         frontendUrl: FRONTEND_URL,
       });
@@ -505,7 +540,7 @@ export const handleWeChatCallback = async (req, res) => {
     tokenUrl.searchParams.set('code', code);
     tokenUrl.searchParams.set('grant_type', 'authorization_code');
 
-    const tokenRes = await fetch(tokenUrl.toString());
+    const tokenRes = await fetchWithTimeout(tokenUrl.toString(), undefined, OAUTH_FETCH_TIMEOUT_MS);
 
     if (!tokenRes.ok) {
       return redirectOauthError(res, {
@@ -543,7 +578,11 @@ export const handleWeChatCallback = async (req, res) => {
     userInfoUrl.searchParams.set('openid', openId);
     userInfoUrl.searchParams.set('lang', 'en');
 
-    const profileRes = await fetch(userInfoUrl.toString());
+    const profileRes = await fetchWithTimeout(
+      userInfoUrl.toString(),
+      undefined,
+      OAUTH_FETCH_TIMEOUT_MS
+    );
     if (!profileRes.ok) {
       return redirectOauthError(res, {
         provider: 'wechat',
