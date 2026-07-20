@@ -97,7 +97,6 @@ bazi-master/
 │   │   ├── i18n/              # 多语言 (en/zh-CN/zh-TW/ja/ko)
 │   │   └── utils/             # 工具函数
 │   ├── tests/                 # Playwright E2E 测试
-│   ├── assembly/              # WebAssembly 模块
 │   └── scripts/               # 开发脚本
 │
 ├── prisma/                    # 数据库 schema & migrations

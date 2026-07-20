@@ -38,6 +38,26 @@ English summary: **BaZi Master is an open-source full-stack divination web app s
 
 前置要求：Node.js 20+、npm、Docker（用于本地 PostgreSQL / Redis）。当前仓库不自动加载 `.env` 文件；如需自定义环境变量，请通过 shell、进程管理器或部署平台注入。
 
+### 用 `./bazi`（推荐）
+
+仓库根有一个 CLI，把环境准备、起停本地栈、迁移、测试都收敛成了一条链路，
+比手敲下面那串命令更不容易出错：
+
+```bash
+git clone https://github.com/tytsxai/bazi-master.git
+cd bazi-master
+
+./bazi setup --with-frontend   # 装依赖 + 生成 .env + 生成 Prisma Client
+./bazi doctor                  # 体检环境，每项失败都带可执行的修复命令
+./bazi stack up                # 起 db + api + web
+./bazi test                    # 跑测试
+```
+
+所有命令都支持 `--json`，退出码有明确约定，方便脚本和 agent 调用。
+完整能力清单：`./bazi help --json`。
+
+### 手动步骤
+
 ```bash
 git clone https://github.com/tytsxai/bazi-master.git
 cd bazi-master
@@ -135,7 +155,8 @@ curl -X POST http://127.0.0.1:4000/api/tarot/draw \
 - `SMTP_HOST` / `SMTP_FROM`: 启用密码重置时需要配置
 - `ADMIN_EMAILS`: 管理员健康检查白名单
 - `DOCS_USER` / `DOCS_PASSWORD`: 生产环境保护 `/api-docs`
-- `TRUST_PROXY`: 有反向代理时设置，影响客户端 IP 与限流
+- `TRUST_PROXY`: 有反向代理时设置成**跳数**（一层 nginx 就填 `1`）。填 `true` 表示
+  信任所有代理，此时 `X-Forwarded-For` 完全由客户端控制，限流可被一个请求头绕过
 - `SENTRY_DSN` / `VITE_SENTRY_DSN`: 可选错误与性能监控
 
 ## FAQ / 常见问题
@@ -188,7 +209,7 @@ bazi-master/
 npm -C backend test
 
 # 前端单元测试
-npm -C frontend run test:unit
+npm -C frontend run test:unit:run
 
 # 前端 Playwright E2E；需要浏览器依赖
 npm -C frontend test
