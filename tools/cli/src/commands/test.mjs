@@ -64,6 +64,11 @@ export const testCommand = defineCommand({
     { name: 'all', type: 'boolean', summary: '包含 e2e 在内全部跑一遍' },
     { name: 'bail', type: 'boolean', summary: '第一个失败就停，不跑后面的' },
     {
+      name: 'fail-on-skip',
+      type: 'boolean',
+      summary: '有目标因依赖缺失被跳过时也算失败（CI 用，避免"什么都没跑"报成通过）',
+    },
+    {
       name: 'use-dev-db',
       type: 'boolean',
       summary: '让测试直连 .env 里的开发库（危险：会对它执行迁移/重置）',
@@ -139,13 +144,14 @@ export const testCommand = defineCommand({
     }
 
     const failed = results.filter((r) => r.status === 'failed');
+    const skipped = results.filter((r) => r.status === 'skipped');
     const data = {
       targets,
       results,
       summary: {
         passed: results.filter((r) => r.status === 'passed').length,
         failed: failed.length,
-        skipped: results.filter((r) => r.status === 'skipped').length,
+        skipped: skipped.length,
       },
     };
 
@@ -164,6 +170,20 @@ export const testCommand = defineCommand({
         code: 'tests_failed',
         hint: failed.map((f) => f.target).join(', '),
         next: `bazi test ${failed[0].target}   # 单独重跑看完整输出`,
+        details: data,
+      });
+    }
+
+    // 依赖没装导致的跳过默认只是 warn，本地开发不该被前端依赖卡住。
+    // 但 CI 里"什么都没跑"和"全跑过了"都返回 0 是最危险的绿灯，所以给一个显式开关。
+    // 退出码用 ENV 而不是 FAILED：跳过的原因是环境未就绪，该去装依赖而不是查代码。
+    if (skipped.length && flags['fail-on-skip']) {
+      out.render(data, render);
+      throw new CliError(`${skipped.length} 个测试目标因依赖缺失被跳过`, {
+        exit: EXIT.ENV,
+        code: 'targets_skipped',
+        hint: skipped.map((s) => s.target).join(', '),
+        next: 'bazi setup --with-frontend',
         details: data,
       });
     }
