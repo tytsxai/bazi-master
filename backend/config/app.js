@@ -70,7 +70,11 @@ const parseTrustProxy = (raw) => {
 
 export const getServerConfig = () => {
   const port = readNumber(process.env.PORT, 4000);
-  const jsonBodyLimit = process.env.JSON_BODY_LIMIT || '50mb';
+  // Was 50mb, applied to every route including unauthenticated ones. express.json()
+  // buffers and parses the whole body, so a handful of concurrent max-size requests
+  // amplify into gigabytes of heap and OOM the container. Nothing here needs more than
+  // a megabyte; bulk import is chunked via IMPORT_BATCH_SIZE.
+  const jsonBodyLimit = process.env.JSON_BODY_LIMIT || '1mb';
   const maxUrlLength = readNumber(process.env.MAX_URL_LENGTH, 16384);
   const nodeEnv = process.env.NODE_ENV || '';
   const isProduction = nodeEnv === 'production';
