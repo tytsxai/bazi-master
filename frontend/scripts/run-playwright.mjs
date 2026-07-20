@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stopE2EPostgres } from './e2e-postgres.mjs';
 
 const UNSAFE_BROWSER_PORTS = new Set([
   1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102,
@@ -90,7 +91,10 @@ const child = spawn(playwrightBin, ['test', ...args], {
   env: process.env,
 });
 
+// Playwright 已经完全退出，webServer 也收完了，这里停 e2e 库不会再被进程组信号打断。
+// 不停的话 5434 上会留一个 `bazi stack down` 管不到的 postmaster。
 child.on('exit', (code, signal) => {
+  stopE2EPostgres();
   if (signal) {
     process.kill(process.pid, signal);
     return;
