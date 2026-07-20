@@ -3,9 +3,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 
+// macOS + Homebrew PostgreSQL：LANG/LC_ALL 为空时 postmaster 会在启动期间"变成多线程的"
+// 然后直接退出，日志里只有一行看不懂的致命错误。initdb 同理。所有 initdb/pg_ctl 调用都从
+// 这里过，locale 兜底就放在这一层——不要求调用方（或 Agent）自己去 export 一个 locale。
+const pgEnv = () => ({
+  ...process.env,
+  LC_ALL: process.env.LC_ALL || 'C',
+  LANG: process.env.LANG || 'C',
+});
+
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
     stdio: 'inherit',
+    env: pgEnv(),
     ...options,
   });
   if (result.error) throw result.error;
@@ -17,6 +27,7 @@ const run = (command, args, options = {}) => {
 const runCapture = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
     encoding: 'utf8',
+    env: pgEnv(),
     stdio: ['ignore', 'pipe', 'pipe'],
     ...options,
   });

@@ -244,11 +244,8 @@ const startDb = async ({ env, out, dryRun }) => {
         BAZI_HELPER_PG_PORT: String(target.port),
         BAZI_HELPER_PG_DB: target.database || 'bazi_master',
         BAZI_HELPER_PG_LOG: path.join(paths.logs, 'postgres.log'),
-        // macOS + Homebrew PostgreSQL：LANG/LC_ALL 为空时 postmaster 会在启动期间
-        // "变成多线程的" 然后直接退出，日志里只有一行看不懂的致命错误。
-        // 这类环境坑由能力层兜掉，不指望使用者（或 Agent）自己去 export 一个 locale。
-        LC_ALL: env.LC_ALL || 'C',
-        LANG: env.LANG || 'C',
+        // locale 兜底（macOS 上 postmaster 会因为空 LANG/LC_ALL 起不来）在
+        // backend/scripts/local-postgres.mjs 里，所有 initdb/pg_ctl 调用方共用一份。
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
