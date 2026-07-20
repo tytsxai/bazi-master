@@ -81,13 +81,24 @@ if (process.env.SENTRY_DSN && NODE_ENV === 'production') {
     logger.warn({ err: error }, '[sentry] Profiling integration unavailable');
   }
 
+  const readSampleRate = (value, fallback) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : fallback;
+  };
+
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
     integrations,
-    // Performance Monitoring
-    tracesSampleRate: 1.0, //  Capture 100% of the transactions
-    // Set sampling rate for profiling - this is relative to tracesSampleRate
-    profilesSampleRate: 1.0,
+    // Environment and release are what let you tell staging from production and tie an
+    // error to the deployment that introduced it — i.e. decide whether to roll back.
+    environment: process.env.SENTRY_ENVIRONMENT || NODE_ENV,
+    release: process.env.SENTRY_RELEASE || undefined,
+    // These were both pinned at 1.0. Tracing every request (and profiling it) burns
+    // through a small team's quota within days, after which Sentry drops events —
+    // monitoring goes dark exactly when something is going wrong. Profiling also costs
+    // measurable CPU, so it is off unless asked for.
+    tracesSampleRate: readSampleRate(process.env.SENTRY_TRACES_SAMPLE_RATE, 0.1),
+    profilesSampleRate: readSampleRate(process.env.SENTRY_PROFILES_SAMPLE_RATE, 0),
   });
 }
 
@@ -110,9 +121,20 @@ app.use(validationMiddleware);
 
 // HTTP Request Logger
 import pinoHttp from 'pino-http';
+// Orchestrator and load-balancer probes hit these every few seconds. Logging them
+// produces thousands of lines a day that say nothing, and drowns real traffic.
+const HEALTH_PROBE_PATHS = new Set(['/live', '/health', '/api/health', '/api/ready']);
+
 app.use(
   pinoHttp({
     logger,
+    autoLogging: {
+      ignore: (req) => HEALTH_PROBE_PATHS.has((req.url || '').split('?')[0]),
+    },
+    // Attaches the authenticated user to the completed-request line. Evaluated at
+    // response time, so it sees req.user even though requireAuth runs after this
+    // middleware. Without it, "it broke for me at 3pm" can only be traced by IP.
+    customProps: (req) => ({ userId: req.user?.id ?? null }),
     // Define a custom success message
     customSuccessMessage: function (req, res) {
       if (res.statusCode === 404) {
@@ -202,6 +224,9 @@ app.use(
     '/api/bazi/ai-interpret',
     '/api/bazi/full-analysis',
     '/api/tarot/ai-interpret',
+    // Image generation is the most expensive call the service makes and was only
+    // covered by the global limiter.
+    '/api/media/soul-portrait',
   ],
   strictRateLimitMiddleware
 );

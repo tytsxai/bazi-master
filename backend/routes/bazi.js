@@ -164,6 +164,7 @@ router.post('/calculate', async (req, res) => {
     }
     res.json({ ...result, ...timeMeta });
   } catch (error) {
+    logger.error({ err: error, requestId: req.id }, 'Bazi calculation failed');
     res.status(500).json({ error: 'Calculation error' });
   }
 });
@@ -194,6 +195,11 @@ router.post('/ai-interpret', requireAuth, async (req, res) => {
   try {
     const content = await generateAIContent({ system, user, fallback, provider });
     res.json({ content });
+  } catch (error) {
+    // An upstream provider being down is not our bug; report it as such rather than
+    // letting it surface as a generic 500.
+    logger.error({ err: error, requestId: req.id, provider }, 'Bazi AI interpretation failed');
+    res.status(503).json({ error: 'AI interpretation is currently unavailable' });
   } finally {
     release();
   }
@@ -242,7 +248,7 @@ router.post('/full-analysis', requireAuth, async (req, res) => {
       release();
     }
   } catch (error) {
-    logger.error('Full analysis failed:', error);
+    logger.error({ err: error, requestId: req.id }, 'Full analysis failed');
     res.status(500).json({ error: 'Analysis error' });
   }
 });
@@ -281,7 +287,7 @@ router.get('/records', requireAuth, async (req, res) => {
       hasMore: query.safePage * query.safePageSize < filteredCount,
     });
   } catch (error) {
-    logger.error(error);
+    logger.error({ err: error, requestId: req.id }, 'Request failed');
     res.status(500).json({ error: 'Failed to fetch records' });
   }
 });
@@ -371,7 +377,7 @@ router.post('/records/import', requireAuth, async (req, res) => {
     }
     res.json({ created: createdCount });
   } catch (err) {
-    logger.error(err);
+    logger.error({ err, requestId: req.id }, 'Request failed');
     res.status(500).json({ error: 'Import failed' });
   }
 });
@@ -440,7 +446,7 @@ router.post('/records/bulk-delete', requireAuth, async (req, res) => {
     await prisma.$transaction(operations);
     res.json({ status: 'ok', updated: ownedRecords.length });
   } catch (err) {
-    logger.error(err);
+    logger.error({ err, requestId: req.id }, 'Request failed');
     res.status(500).json({ error: 'Bulk delete failed' });
   }
 });
@@ -492,7 +498,7 @@ router.put('/records/:id', requireAuth, async (req, res) => {
     if (error?.code === 'P2025') {
       return res.status(404).json({ error: 'Record not found' });
     }
-    logger.error(error);
+    logger.error({ err: error, requestId: req.id }, 'Request failed');
     res.status(500).json({ error: 'Failed to update record' });
   }
 });
