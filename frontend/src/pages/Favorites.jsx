@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import Breadcrumbs from '../components/Breadcrumbs';
@@ -45,6 +45,7 @@ export default function Favorites() {
   const [shareStatus, setShareStatus] = useState(null);
   const [pendingAddIds, setPendingAddIds] = useState(() => new Set());
   const [pendingDeleteIds, setPendingDeleteIds] = useState(() => new Set());
+  const tempIdCounterRef = useRef(0);
 
   const readErrorMessage = (res, fallback) => readApiErrorMessage(res, fallback);
 
@@ -155,7 +156,10 @@ export default function Favorites() {
     setStatus(null);
     if (favorites.some((item) => item.recordId === record.id)) return;
 
-    const tempId = `temp-${record.id}-${Date.now()}`;
+    // A monotonic counter rather than Date.now(): the id only has to be unique within
+    // this component's lifetime, and a clock read here is flagged as impure.
+    tempIdCounterRef.current += 1;
+    const tempId = `temp-${record.id}-${tempIdCounterRef.current}`;
     const optimisticFavorite = {
       id: tempId,
       recordId: record.id,

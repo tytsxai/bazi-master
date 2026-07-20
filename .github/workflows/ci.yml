@@ -28,7 +28,9 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x]
+        # The project requires Node 20+ (see README and docs); testing 18 verified a
+        # version that is not supported.
+        node-version: [20.x, 22.x]
 
     steps:
       - uses: actions/checkout@v4
@@ -58,10 +60,17 @@ jobs:
           # ("schema is not empty").
           node scripts/prisma.mjs migrate reset --force --skip-seed --schema=../prisma/schema.prisma
 
-      - name: Check Backend Linting/Formatting (Skip if not configured)
+      # ESLint and Prettier are configured at the repository root, not in backend/.
+      # This step used to run `npm run lint --if-present` inside backend/, where no
+      # lint script exists, so it always passed without checking anything.
+      - name: Lint & Format Check
         run: |
-          cd backend
-          npm run lint --if-present
+          npm ci
+          npm run lint
+          npm run format:check
+
+      - name: Check env template covers every variable the code reads
+        run: ./scripts/check-env-template.sh
 
       - name: Run Backend Tests
         run: |
@@ -77,7 +86,14 @@ jobs:
           cd frontend
           npm ci
 
-      - name: Run Frontend Tests
+      # Unit tests are fast and were never wired into CI, so a green pipeline said
+      # nothing about them. Run them before the much slower Playwright suite.
+      - name: Run Frontend Unit Tests
+        run: |
+          cd frontend
+          npm run test:unit:run
+
+      - name: Run Frontend E2E Tests
         run: |
           cd frontend
           npm test

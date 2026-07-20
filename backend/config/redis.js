@@ -108,7 +108,12 @@ export const createRedisMirror = (
         const raw =
           typeof client.getDel === 'function'
             ? await client.getDel(resolveKey(key))
-            : await client.multi().get(resolveKey(key)).del(resolveKey(key)).exec().then((r) => r?.[0]);
+            : await client
+                .multi()
+                .get(resolveKey(key))
+                .del(resolveKey(key))
+                .exec()
+                .then((r) => r?.[0]);
         return fromJson(raw);
       } catch (error) {
         logger.warn('[redis] getAndDelete failed:', error?.message || error);

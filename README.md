@@ -123,7 +123,7 @@ curl -X POST http://127.0.0.1:4000/api/tarot/draw \
 
 ## 环境变量 / Configuration
 
-本地开发可参考 [.env.example](.env.example)，生产部署可参考 [env.production.template](env.production.template) 与 [.env.production.example](.env.production.example)。项目本身不会自动读取 dotenv 文件，需要由运行环境注入。
+本地开发可参考 [.env.example](.env.example)，生产部署可参考 [env.production.template](env.production.template)。项目本身不会自动读取 dotenv 文件，需要由运行环境注入。
 
 关键配置：
 

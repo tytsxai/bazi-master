@@ -24,6 +24,11 @@ module.exports = {
     'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     'react/prop-types': 'off',
     'no-unused-vars': 'warn',
+    // Downgraded from error. Syncing state to a route change (closing the mobile menu
+    // on navigation) and kicking off a fetch on mount are exactly what an effect is
+    // for, and the rule flags both. Kept as a warning so genuinely cascading renders
+    // still get surfaced without failing the build on correct code.
+    'react-hooks/set-state-in-effect': 'warn',
   },
   overrides: [
     {

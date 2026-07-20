@@ -82,9 +82,14 @@ export const dbCommand = defineCommand({
     defineCommand({
       name: 'migrate',
       summary: '应用待执行的迁移（migrate deploy，不会丢数据）',
-      description: '要新建一份迁移文件用 --new <名字>：只生成不应用，生成后再跑一次 bazi db migrate 应用。',
+      description:
+        '要新建一份迁移文件用 --new <名字>：只生成不应用，生成后再跑一次 bazi db migrate 应用。',
       flags: [
-        { name: 'new', type: 'string', summary: '新建迁移（--create-only，不自动应用，也不会触发交互式重置）' },
+        {
+          name: 'new',
+          type: 'string',
+          summary: '新建迁移（--create-only，不自动应用，也不会触发交互式重置）',
+        },
       ],
       examples: [
         { note: '把待执行迁移跑掉', command: 'bazi db migrate --json' },
@@ -132,8 +137,9 @@ export const dbCommand = defineCommand({
         });
         await requireReachable(env);
         if (flags['dry-run']) {
-          return out.ok({ dryRun: true, database: info.redacted }, (d) =>
-            `[dry-run] 会清空并重建 ${d.database}`
+          return out.ok(
+            { dryRun: true, database: info.redacted },
+            (d) => `[dry-run] 会清空并重建 ${d.database}`
           );
         }
         out.warn(`正在重置 ${info.redacted}`);
@@ -173,10 +179,14 @@ export const dbCommand = defineCommand({
         }
         fs.mkdirSync(path.dirname(target), { recursive: true });
         out.step(`pg_dump -> ${target}`);
-        const result = await run('pg_dump', ['-Fc', '-f', target, toLibpqUrl(resolveDatabaseUrl(env))], {
-          env,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
+        const result = await run(
+          'pg_dump',
+          ['-Fc', '-f', target, toLibpqUrl(resolveDatabaseUrl(env))],
+          {
+            env,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          }
+        );
         if (result.code !== 0) {
           // pg_dump 会先建文件再失败，留下一个 0 字节的"备份"。
           // 半份备份比没有备份更危险 —— 它会让人以为自己有退路。
@@ -189,8 +199,9 @@ export const dbCommand = defineCommand({
           });
         }
         const size = fs.statSync(target).size;
-        return out.ok({ file: target, bytes: size, database: info.redacted }, (d) =>
-          `已备份 ${d.database} -> ${d.file}（${d.bytes} 字节）`
+        return out.ok(
+          { file: target, bytes: size, database: info.redacted },
+          (d) => `已备份 ${d.database} -> ${d.file}（${d.bytes} 字节）`
         );
       },
     }),
@@ -204,7 +215,8 @@ export const dbCommand = defineCommand({
       flags: [{ name: 'allow-remote', type: 'boolean', summary: '允许恢复到非本地数据库（危险）' }],
       run: async ({ positionals, flags, out }) => {
         const file = positionals[0];
-        if (!file) throw usageError('要给一个备份文件路径', { next: 'bazi db restore <file> --yes' });
+        if (!file)
+          throw usageError('要给一个备份文件路径', { next: 'bazi db restore <file> --yes' });
         const resolved = path.resolve(paths.root, file);
         if (!fs.existsSync(resolved)) {
           throw usageError(`备份文件不存在：${resolved}`);
@@ -219,14 +231,22 @@ export const dbCommand = defineCommand({
         await requireReachable(env);
         requirePgTool('pg_restore');
         if (flags['dry-run']) {
-          return out.ok({ dryRun: true, file: resolved, database: info.redacted }, (d) =>
-            `[dry-run] 会把 ${d.file} 恢复进 ${d.database}`
+          return out.ok(
+            { dryRun: true, file: resolved, database: info.redacted },
+            (d) => `[dry-run] 会把 ${d.file} 恢复进 ${d.database}`
           );
         }
         out.warn(`正在把 ${resolved} 恢复进 ${info.redacted}`);
         const result = await run(
           'pg_restore',
-          ['--clean', '--if-exists', '--no-owner', '-d', toLibpqUrl(resolveDatabaseUrl(env)), resolved],
+          [
+            '--clean',
+            '--if-exists',
+            '--no-owner',
+            '-d',
+            toLibpqUrl(resolveDatabaseUrl(env)),
+            resolved,
+          ],
           { env, stdio: ['ignore', 'pipe', 'pipe'] }
         );
         // pg_restore 常常带着无害的 warning 返回非 0，把输出原样交给调用方判断。
@@ -239,8 +259,9 @@ export const dbCommand = defineCommand({
             next: 'bazi db status --json',
           });
         }
-        return out.ok({ file: resolved, database: info.redacted, output: text }, (d) =>
-          `已恢复 ${d.file} -> ${d.database}`
+        return out.ok(
+          { file: resolved, database: info.redacted, output: text },
+          (d) => `已恢复 ${d.file} -> ${d.database}`
         );
       },
     }),
@@ -279,7 +300,10 @@ export const dbCommand = defineCommand({
             next: 'bazi setup --skip-install',
           });
         }
-        return out.ok({ ok: true }, () => 'Prisma Client 已重新生成。改了 schema 之后记得重启 api。');
+        return out.ok(
+          { ok: true },
+          () => 'Prisma Client 已重新生成。改了 schema 之后记得重启 api。'
+        );
       },
     }),
   ],

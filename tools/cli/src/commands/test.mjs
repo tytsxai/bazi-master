@@ -111,11 +111,15 @@ export const testCommand = defineCommand({
 
       out.step(`${name} — ${target.label}`);
       const startedAt = Date.now();
-      const result = await run('npm', [...target.args, ...(passthrough.length ? ['--', ...passthrough] : [])], {
-        cwd,
-        env,
-        stdio: out.childStdio,
-      });
+      const result = await run(
+        'npm',
+        [...target.args, ...(passthrough.length ? ['--', ...passthrough] : [])],
+        {
+          cwd,
+          env,
+          stdio: out.childStdio,
+        }
+      );
       const durationMs = Date.now() - startedAt;
       const passed = result.code === 0;
       results.push({
@@ -124,7 +128,9 @@ export const testCommand = defineCommand({
         exitCode: result.code,
         durationMs,
         // json 模式下子进程输出被 pipe 走了，失败时把尾巴带回来，否则 Agent 什么都看不到
-        output: passed ? undefined : `${result.stdout}\n${result.stderr}`.trim().slice(-4000) || undefined,
+        output: passed
+          ? undefined
+          : `${result.stdout}\n${result.stderr}`.trim().slice(-4000) || undefined,
       });
       if (!passed && flags.bail) {
         out.warn(`${name} 失败，--bail 生效，停止后续目标`);

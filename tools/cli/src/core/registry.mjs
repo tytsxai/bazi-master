@@ -177,9 +177,7 @@ export const renderHelp = (node, commandPath) => {
   } else if (node.commands.length) {
     lines.push(`  ${full} <子命令> [选项]`);
   } else {
-    const argSig = node.args
-      .map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`))
-      .join(' ');
+    const argSig = node.args.map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`)).join(' ');
     lines.push(`  ${full} ${argSig} [选项]`.replace(/\s+/g, ' '));
   }
   lines.push('');
@@ -221,10 +219,7 @@ export const renderHelp = (node, commandPath) => {
     }
   }
 
-  lines.push(
-    '',
-    '提示: `bazi help --json` 输出完整命令树（机器可读），这是能力清单的唯一真源。'
-  );
+  lines.push('', '提示: `bazi help --json` 输出完整命令树（机器可读），这是能力清单的唯一真源。');
 
   return lines.join('\n');
 };
