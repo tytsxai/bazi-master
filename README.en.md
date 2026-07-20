@@ -15,17 +15,17 @@ It is meant to be forked, self-hosted, studied, and extended — not consumed as
 
 ## Project snapshot
 
-| Field | Answer |
-| --- | --- |
-| Project type | Open-source full-stack divination / astrology web app reference implementation |
-| Problem solved | Gives a runnable code skeleton covering BaZi, Tarot, I Ching, Zodiac, Zi Wei, AI interpretation, auth, history, favorites, and deployment |
-| Who it is for | Frontend / full-stack / AI application developers who want to learn from or extend a metaphysics product, and teams that need a self-hosted reference architecture |
-| Tech stack | React 18, Vite, Tailwind CSS, Express 4, Node.js 20+, Prisma, PostgreSQL, Redis, Playwright, Vitest |
-| Local dependencies | Prisma schema targets PostgreSQL; `docker-compose.yml` provides local PostgreSQL + Redis |
-| AI capability | mock / OpenAI / Anthropic text interpretation; Soul Portrait image generation via OpenAI or a mock placeholder |
-| Main entry points | Pages in `frontend/src/pages`, API routes in `backend/routes`, data model in `prisma/schema.prisma` |
-| Key limitation | Output is for entertainment, cultural research, or product prototyping only — never medical, legal, financial, or life advice |
-| License | MIT |
+| Field              | Answer                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Project type       | Open-source full-stack divination / astrology web app reference implementation                                                                                     |
+| Problem solved     | Gives a runnable code skeleton covering BaZi, Tarot, I Ching, Zodiac, Zi Wei, AI interpretation, auth, history, favorites, and deployment                          |
+| Who it is for      | Frontend / full-stack / AI application developers who want to learn from or extend a metaphysics product, and teams that need a self-hosted reference architecture |
+| Tech stack         | React 18, Vite, Tailwind CSS, Express 4, Node.js 20+, Prisma, PostgreSQL, Redis, Playwright, Vitest                                                                |
+| Local dependencies | Prisma schema targets PostgreSQL; `docker-compose.yml` provides local PostgreSQL + Redis                                                                           |
+| AI capability      | mock / OpenAI / Anthropic text interpretation; Soul Portrait image generation via OpenAI or a mock placeholder                                                     |
+| Main entry points  | Pages in `frontend/src/pages`, API routes in `backend/routes`, data model in `prisma/schema.prisma`                                                                |
+| Key limitation     | Output is for entertainment, cultural research, or product prototyping only — never medical, legal, financial, or life advice                                      |
+| License            | MIT                                                                                                                                                                |
 
 ## Core features
 
