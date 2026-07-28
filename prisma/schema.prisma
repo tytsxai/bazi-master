@@ -40,6 +40,12 @@ model BaziRecord {
 
   user      User        @relation(fields: [userId], references: [id])
   favorites Favorite[]
+
+  // PostgreSQL does not index foreign keys automatically (unlike MySQL). Every history
+  // listing is `where userId = ? order by createdAt desc`, which without this is a
+  // sequential scan plus a sort over the whole table — fine on an empty database, and
+  // the first thing to fall over once real users accumulate records.
+  @@index([userId, createdAt])
 }
 
 model Favorite {
@@ -52,6 +58,9 @@ model Favorite {
   record BaziRecord @relation(fields: [recordId], references: [id])
 
   @@unique([userId, recordId])
+  // The unique index already covers lookups by userId. recordId is only reachable via a
+  // scan, which is what deleting a record has to do to clear its favorites.
+  @@index([recordId])
 }
 
 model TarotRecord {
@@ -64,6 +73,8 @@ model TarotRecord {
   createdAt     DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 model UserSettings {
@@ -91,6 +102,8 @@ model IchingRecord {
   createdAt        DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 model ZiweiRecord {
@@ -105,6 +118,8 @@ model ZiweiRecord {
   createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 model BaziRecordTrash {
