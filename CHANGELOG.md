@@ -4,6 +4,77 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Production-readiness pass. No behaviour or API changes; every item below closes a gap
+that would have surfaced during a deploy or under real traffic.
+
+### Added
+
+- Indexes on `userId` for `BaziRecord`, `TarotRecord`, `IchingRecord` and `ZiweiRecord`,
+  and on `Favorite.recordId`. PostgreSQL does not index foreign keys automatically, so
+  every history listing was a sequential scan plus a sort over the whole table.
+  Migration `20260728022702_add_user_id_indexes` is purely additive.
+- Connection draining on SIGTERM (`SHUTDOWN_DRAIN_MS`, default 5000 in production).
+  `/health` and `/api/ready` report 503 with `status: "shutting_down"` immediately, while
+  the process keeps serving, so a load balancer can drain the instance before its socket
+  closes. `/live` deliberately keeps returning 200.
+- An idle deadline on streamed AI responses. The existing timeout only covered the
+  response headers; a provider that stalled mid-stream held the connection — and the
+  caller's single-in-flight AI slot on `/ws/ai` — until the process restarted.
+- `WS_MAX_CONNECTIONS` (default 500). The `/ws/ai` upgrade handshake is served before
+  Express and never passes through the HTTP rate limiter, so nothing previously bounded
+  socket memory. Over the limit the handshake gets a 503 rather than a bare reset.
+
+### Fixed
+
+- The backend container's healthcheck used `/api/ready`, a deep check, and that
+  healthcheck drives autoheal. A brief database outage therefore restarted the backend,
+  which then exits at startup when it cannot reach the database — turning a self-healing
+  blip into a `restart: always` crash loop. It now uses `/live`.
+- The backend image started via `npm run start`, putting npm and a shell between PID 1
+  and `scripts/start.mjs`. Neither reliably forwards SIGTERM, so the graceful shutdown
+  that script exists to enable never ran and Docker SIGKILLed the tree instead.
+- `index.html`, `sw.js`, `registerSW.js` and `manifest.webmanifest` are served
+  `no-cache`, and `/assets/` (content-hashed) `immutable`. Without this a cached
+  `index.html` outlives a deploy and requests chunks that no longer exist — a blank page
+  until the user hard-refreshes.
+- The session cookie's `maxAge` was pinned at 30 minutes while the server expired
+  sessions at `SESSION_IDLE_MS`. Raising that value silently did nothing: the browser
+  still dropped the cookie on the old schedule.
+- `client_max_body_size` in the frontend nginx config was 50m against a 1mb backend
+  limit, so oversized bodies were buffered in full before being rejected. Now matched.
+
+### Tooling — `./bazi` CLI
+
+Developer/agent tooling only; the deployed application is untouched.
+
+- A contract test suite for the CLI itself (`tools/cli/test/`, `./bazi test cli`, ~2s).
+  It pins the three things every caller depends on and nothing previously guarded:
+  exit-code semantics, "`--json` writes exactly one JSON document to stdout", and the
+  destructive-command safety gate. It also checks the capability listing is
+  self-consistent — every example command and flag in `bazi help --json` must actually
+  resolve, and no command-local flag may shadow a global one.
+- `bazi help --json` now includes `tree.globalFlags`. It was documented as the single
+  source of truth for what the CLI can do, but omitted `--json`, `--quiet`, `--dry-run`,
+  `--yes` and `--help` entirely — so a caller reading only the JSON could not discover
+  `--yes`, the one flag that resolves an exit 7.
+- `--dry-run` no longer requires `--yes` on `db reset` / `db restore`, and no longer
+  requires a reachable database. The blocked-command hint told the caller to add
+  `--dry-run` to preview, but the confirmation gate rejected that too and returned the
+  same hint — a loop whose only exit was the `--yes` the gate exists to withhold.
+  The other two gates are unchanged: `NODE_ENV=production` is still refused outright and
+  a non-local `DATABASE_URL` still requires `--allow-remote`, dry run or not.
+- `bazi <group>` and `bazi <group> --json` returned different exit codes (2 and 0) for
+  the same input, and the `--json` form emitted a bare command tree instead of the
+  `{ok, command, data}` envelope every other command uses. Both forms now exit 2 and
+  share one envelope with `bazi help --json`.
+- `bazi test` reports a target whose npm script is missing as `skipped` rather than
+  `failed`. Those mean different things to the caller — one is "go install something",
+  the other is "go read the code" — and `--fail-on-skip` now covers both.
+- `bazi test` gained a `cli` target, first in the default set: if the tool itself is
+  broken, every later result is suspect.
+
 ## [0.1.0] - 2026-05-19
 
 First tagged release of BaZi Master — codifies the v0.1 reference implementation surface.
