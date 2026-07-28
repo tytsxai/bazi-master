@@ -14,8 +14,10 @@ module.exports = {
     'build',
     'frontend/tests',
     'backend/test',
-    'scripts',
-    'docs',
+    // 只忽略仓库根的 scripts/（全是 shell）。原来写 'scripts' 会匹配任意层级，
+    // 把 frontend/scripts/ 下 19 个巡检脚本一起排除掉了，那些是实打实的 JS。
+    '/scripts',
+    '/docs',
   ],
   parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
   settings: { react: { version: '18.3' } },
