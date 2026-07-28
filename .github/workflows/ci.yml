@@ -35,6 +35,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Cheap and dependency-free, so it runs before anything is installed. Guards against
+      # re-committing the verification screenshots and database fixtures that had grown the
+      # history to 735MB for a 5MB source tree.
+      - name: Check no build/test artifacts are committed
+        run: ./scripts/check-repo-artifacts.sh
+
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:

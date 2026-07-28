@@ -1,25 +1,32 @@
+# 目录型规则（结尾带 /、中间不带 /）在任意层级都生效，所以这里一条顶原来的三条：
+# node_modules/ 同时覆盖 frontend/ 和 backend/ 下的，verification/ 同时覆盖仓库根和
+# frontend/ 下的。CI 里另有 scripts/check-repo-artifacts.sh 兜底，防止 git add -f 绕过。
+
+# 依赖与构建产物
 node_modules/
-frontend/node_modules/
-backend/node_modules/
 dist/
-frontend/dist/
-backend/dist/
+build/
+.vite/
+.tmp/
+
+# 本地环境与系统噪音
+.env
 *.log
+.DS_Store
+
+# 数据库状态：开发用 SQLite + e2e 用的 PostgreSQL 数据目录
 *.db
 *.db-wal
 *.db-shm
 *.db-journal
-.env
-.DS_Store
-frontend/test-results/
-test-results/
+.pgdata-e2e/
+
+# 测试与巡检产物。
+# frontend/scripts/verify-*.mjs 的证据截图落在 verification/，历史上这些整页 PNG
+# 单张 3~6MB，被提交后把仓库撑到 735MB，务必保持忽略。
 verification/
-frontend/verification/
-.tmp/
-frontend/.vite/
-prisma/.pgdata-e2e/
+test-results/
+playwright-report/
+.lighthouseci/
 frontend/test-error*.txt
 frontend/test-output*.txt
-frontend/.lighthouseci/
-frontend/build/
-.lighthouseci/
