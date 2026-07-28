@@ -97,6 +97,18 @@ describe('HistoryList', () => {
     expect(screen.getByTestId('history-item-2')).toBeInTheDocument();
   });
 
+  it('renders empty state when no records exist', () => {
+    const props = {
+      ...defaultProps,
+      filteredRecords: [],
+      hasAnyRecords: false,
+    };
+
+    renderWithRouter(<HistoryList {...props} />);
+
+    expect(screen.getByText('history.noHistoryYet')).toBeInTheDocument();
+  });
+
   it('renders select all checkbox', () => {
     renderWithRouter(<HistoryList {...defaultProps} />);
 
