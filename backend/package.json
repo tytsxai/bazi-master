@@ -1,7 +1,7 @@
 {
   "name": "bazi-master-backend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Express + Prisma API for BaZi Master, including BaZi, Tarot, I Ching, Zodiac, Zi Wei Dou Shu, Synastry, auth, OpenAPI, health checks and AI providers.",
   "keywords": [

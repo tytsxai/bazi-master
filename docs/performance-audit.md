@@ -1,6 +1,6 @@
 # 前端性能审计报告
 
-> 版本: v0.1.3-dev | 更新: 2025-12-30
+> 版本: v0.2.0 | 更新: 2026-07-28
 >
 > 最新数据基于 `npm -C frontend run analyze`（2025-12-29）。如需更新，请重新运行 analyze 或 Lighthouse CI。
 

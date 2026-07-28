@@ -1,6 +1,6 @@
 # BaZi Master - 开发指南
 
-> 版本: v0.1.3-dev | 更新: 2025-12-30
+> 版本: v0.2.0 | 更新: 2026-07-28
 
 BaZi Master 是一个 React + Express + Prisma + PostgreSQL 全栈示例项目，覆盖八字排盘、塔罗、周易、星座、紫微、合盘和 AI 解读。本文面向本地开发、二次开发和自部署前的验证。
 

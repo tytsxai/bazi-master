@@ -1,6 +1,6 @@
 # Production Runbook
 
-> 版本: v0.1.3-dev | 更新: 2025-12-30
+> 版本: v0.2.0 | 更新: 2026-07-28
 
 This document provides operational procedures for maintaining the **BaZi Master** backend in production.
 

@@ -1,6 +1,6 @@
 # 生产部署指南
 
-> 版本: v0.1.3-dev | 更新: 2025-12-30
+> 版本: v0.2.0 | 更新: 2026-07-28
 
 本指南以 Docker Compose 为例，目标环境：PostgreSQL + Redis + Nginx 反向代理。
 

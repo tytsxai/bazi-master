@@ -1,7 +1,7 @@
 {
   "name": "bazi-master-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "React + Vite frontend for BaZi Master, a self-hostable BaZi, Tarot, I Ching, Zodiac, Zi Wei Dou Shu and AI divination web app starter.",
   "keywords": [

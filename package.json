@@ -1,6 +1,6 @@
 {
   "name": "bazi-master",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Self-hostable open-source BaZi charting, Tarot, I Ching, Zodiac, Zi Wei Dou Shu, Synastry and AI divination web app starter built with React, Express, Prisma and PostgreSQL.",
   "license": "MIT",
