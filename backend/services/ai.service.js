@@ -1,6 +1,6 @@
 import { getServerConfig as getServerConfigFromEnv } from '../config/app.js';
 import { logger } from '../config/logger.js';
-import { fetchWithTimeout } from '../utils/http.js';
+import { fetchWithTimeout, fetchStreamWithTimeout } from '../utils/http.js';
 
 const getAiConfig = () => {
   const config = getServerConfigFromEnv();
@@ -107,7 +107,7 @@ const callOpenAIStreamWithConfig = async (config, { system, user, messages, onCh
     ];
   }
 
-  const response = await fetchWithTimeout(
+  const { response, touch, release } = await fetchStreamWithTimeout(
     'https://api.openai.com/v1/chat/completions',
     {
       method: 'POST',
@@ -123,10 +123,11 @@ const callOpenAIStreamWithConfig = async (config, { system, user, messages, onCh
         stream: true,
       }),
     },
-    config.aiTimeoutMs
+    { connectTimeoutMs: config.aiTimeoutMs, idleTimeoutMs: config.aiTimeoutMs }
   );
 
   if (!response.ok) {
+    release();
     const error = await response.text();
     throw new Error(`OpenAI API error: ${response.status} ${error}`);
   }
@@ -138,6 +139,9 @@ const callOpenAIStreamWithConfig = async (config, { system, user, messages, onCh
   try {
     for (;;) {
       const { done, value } = await reader.read();
+      // Each chunk restarts the idle countdown; a stall longer than the deadline aborts
+      // the pending read instead of waiting forever.
+      touch();
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
@@ -162,6 +166,7 @@ const callOpenAIStreamWithConfig = async (config, { system, user, messages, onCh
       }
     }
   } finally {
+    release();
     reader.releaseLock();
   }
 };
@@ -225,7 +230,7 @@ const callAnthropicStreamWithConfig = async (config, { system, user, messages, o
     apiMessages = [{ role: 'user', content: user }];
   }
 
-  const response = await fetchWithTimeout(
+  const { response, touch, release } = await fetchStreamWithTimeout(
     'https://api.anthropic.com/v1/messages',
     {
       method: 'POST',
@@ -242,10 +247,11 @@ const callAnthropicStreamWithConfig = async (config, { system, user, messages, o
         stream: true,
       }),
     },
-    config.aiTimeoutMs
+    { connectTimeoutMs: config.aiTimeoutMs, idleTimeoutMs: config.aiTimeoutMs }
   );
 
   if (!response.ok) {
+    release();
     const error = await response.text();
     throw new Error(`Anthropic API error: ${response.status} ${error}`);
   }
@@ -257,6 +263,7 @@ const callAnthropicStreamWithConfig = async (config, { system, user, messages, o
   try {
     for (;;) {
       const { done, value } = await reader.read();
+      touch();
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
@@ -280,6 +287,7 @@ const callAnthropicStreamWithConfig = async (config, { system, user, messages, o
       }
     }
   } finally {
+    release();
     reader.releaseLock();
   }
 };
