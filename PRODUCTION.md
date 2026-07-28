@@ -169,10 +169,20 @@ zcat backups/<file>.sql.gz | docker compose -f docker-compose.prod.yml exec -T p
 - **会话安全**：使用强随机 `SESSION_TOKEN_SECRET`（32+字符）；生产环境必须配置 Redis 避免会话丢失
 - **API 密钥保护**：定期轮换 AI provider API keys；使用环境变量而非硬编码
 - **速率限制**：生产环境启用 `RATE_LIMIT_WINDOW_MS` 和 `RATE_LIMIT_MAX` 防止滥用
-- **WebSocket 连接上限**：`/ws/ai` 的 upgrade 握手由 `server.on('upgrade')` 处理，
-  走在 Express 之前，**不经过 HTTP 速率限制**。`WS_MAX_CONNECTIONS`（默认 500）是唯一
-  兜住 socket 内存的东西；超过上限的握手返回 503。这里没有做按 IP 限制，因为后端在 nginx
-  后面时所有连接的来源地址都是代理，按 IP 限会把整站限死 —— 按 IP 的限制要做在边缘。
+- **WebSocket 连接上限（两层）**：`/ws/ai` 的 upgrade 握手由 `server.on('upgrade')`
+  处理，走在 Express 之前，**不经过 HTTP 速率限制**；而且**握手本身不做认证** —— 只校验
+  path 和 Origin，且不带 Origin 的非浏览器客户端直接放行。也就是说匿名占用连接槽位
+  没有任何前置条件，两层限制都是必需的：
+  - 后端 `WS_MAX_CONNECTIONS`（默认 500）是全局上限，保证进程不被撑爆，超限返回 503。
+    实测每条空闲连接约 9KB RSS，500 条约 4.4MB —— 真正的约束不是内存而是文件描述符，
+    所以 `docker-compose.prod.yml` 里显式钉了 `ulimits.nofile: 65536`（前端容器代理一条
+    WS 要占两个 fd，同样钉了）。
+  - `frontend/nginx.conf` 的 `limit_conn ws_per_ip 10` 是按来源 IP 的上限，防止单个
+    客户端占光那 500 个槽位（打满需要 50+ 个不同地址）。实测第 11 条连接返回 503，
+    关闭一条后槽位立即归还。
+  - **前提**：按 IP 限流依赖 `$binary_remote_addr` 是真实客户端地址。如果前端容器前面
+    还套了外层 nginx 或 CDN，必须先配 `set_real_ip_from` / `real_ip_header`（配置里已
+    留好注释位），否则全站共用一个计数桶 —— 和下面 `TRUST_PROXY` 数错跳数是同一个坑。
 - **`TRUST_PROXY` 要数对跳数**：写 `1` 表示"只信任一跳"。如果流量路径是
   外层 nginx → 前端容器 nginx → 后端（即 `/api` 经前端容器转发），那是**两跳**，
   写 1 会让 `req.ip` 变成前端容器的地址，于是所有用户共用一个速率限制桶，

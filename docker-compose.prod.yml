@@ -140,6 +140,17 @@ services:
       resources:
         limits:
           memory: ${BACKEND_MEMORY_LIMIT:-1g}
+    # 每条 WebSocket 连接吃一个文件描述符，而 WS_MAX_CONNECTIONS 默认 500 —— 加上
+    # HTTP keep-alive、Prisma 连接池和日志句柄，撞上 fd 上限是比撞内存早得多的事：
+    # 实测每条空闲 WS 连接只占约 9KB RSS，500 条也才 ~4.4MB（内存限额的 0.4%），
+    # 所以真正的约束从来不是内存。撞上 fd 的表现是 EMFILE，届时 accept 全线失败，
+    # 比 OOM 更难查。这里显式写死，不去赌 dockerd 继承下来的默认值是多少。
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    # 必须大于 SHUTDOWN_DRAIN_MS + GRACEFUL_SHUTDOWN_TIMEOUT_MS（默认 5s + 10s），
+    # 否则排水还没走完容器就被 SIGKILL 了。调大排水窗口时这里要跟着调。
     stop_grace_period: 30s
     labels:
       # Opts this container into the autoheal watcher below. `restart: always` only
@@ -184,6 +195,14 @@ services:
       - backend
     ports:
       - '${FRONTEND_BIND_ADDR:-127.0.0.1}:3000:80'
+    # nginx 代理一条 WebSocket 要占两个 fd（对客户端一个、对 backend 一个），所以这一层
+    # 的 fd 需求是后端的两倍左右。nginx 的 worker_connections 同样受 fd 上限约束：
+    # 到顶时日志里是 "worker_connections are not enough"，而不是任何和 WebSocket
+    # 有关的字样，很容易查错方向。
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     labels:
       autoheal: 'true'
     healthcheck:

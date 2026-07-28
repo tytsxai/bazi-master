@@ -11,6 +11,22 @@ that would have surfaced during a deploy or under real traffic.
 
 ### Added
 
+- Per-source-IP ceiling on WebSocket connections (`limit_conn ws_per_ip 10` in
+  `frontend/nginx.conf`). The backend's `WS_MAX_CONNECTIONS` bounds the process as a
+  whole but does nothing to stop one client from holding every slot — and since the
+  `/ws/ai` handshake is unauthenticated (path and Origin only, and a client that sends
+  no Origin is let through), doing so requires nothing at all. Verified end to end
+  against a real nginx: the 11th connection gets a 503 and closing one hands the slot
+  straight back. Where the container sits behind another proxy this needs
+  `set_real_ip_from` first, or every user shares one counter; the commented lines are
+  in place for that.
+- Explicit `ulimits.nofile` (65536) on both application containers, rather than
+  inheriting whatever the daemon happens to default to. Each WebSocket connection costs
+  one descriptor in the backend and two in the nginx container, and measurement puts an
+  idle connection at ~9KB RSS — 500 of them is ~4.4MB against a 1g limit, so the
+  descriptor table is what runs out first. It fails as `EMFILE` with every `accept()`
+  failing at once, which is considerably harder to read than an OOM.
+
 - Indexes on `userId` for `BaziRecord`, `TarotRecord`, `IchingRecord` and `ZiweiRecord`,
   and on `Favorite.recordId`. PostgreSQL does not index foreign keys automatically, so
   every history listing was a sequential scan plus a sort over the whole table.
