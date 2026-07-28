@@ -9,6 +9,21 @@ import { initAppConfig } from '../config/app.js';
 
 const PING_INTERVAL_MS = 30000;
 const MAX_MESSAGE_BYTES = 1_000_000;
+
+// The upgrade handshake is served by `server.on('upgrade')`, which runs before Express
+// and therefore never passes through the HTTP rate limiter. Without a ceiling, anyone
+// can open sockets until the container hits its memory limit and every service on it —
+// including plain HTTP — goes down with it. Capping turns that into a bounded,
+// self-limiting degradation: new socket attempts are refused, the API keeps serving.
+//
+// Deliberately a global cap and not a per-IP one: behind nginx every connection arrives
+// from the proxy's address, so a per-IP limit here would cap the entire site at one
+// client's allowance. Per-IP limiting belongs at the edge, where the real address is.
+const readPositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+const getMaxConnections = () => readPositiveInt(process.env.WS_MAX_CONNECTIONS, 500);
 const wsAiGuard = createAiGuard();
 const AI_CONCURRENCY_ERROR = 'AI request already in progress. Please wait.';
 
@@ -70,6 +85,19 @@ export const initWebsocketServer = (server) => {
     // could open an authenticated socket using the victim's cookie.
     if (!isAllowedWebsocketOrigin(request.headers.origin)) {
       logger.warn({ origin: request.headers.origin }, '[ws] Rejected upgrade from origin');
+      socket.destroy();
+      return;
+    }
+
+    const maxConnections = getMaxConnections();
+    if (wss.clients.size >= maxConnections) {
+      logger.warn(
+        { current: wss.clients.size, maxConnections },
+        '[ws] Connection limit reached, rejecting upgrade'
+      );
+      // Answer the handshake properly instead of dropping the socket, so a legitimate
+      // client sees a retryable failure rather than an unexplained reset.
+      socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
       socket.destroy();
       return;
     }
@@ -499,6 +527,9 @@ export const getWebsocketMetrics = () => {
   return {
     status: 'ok',
     totalConnections: wssInstance.clients.size,
+    // Exported so an alert can fire on approaching the ceiling rather than on the
+    // refusals that start once it is hit.
+    maxConnections: getMaxConnections(),
     activeAiRequests: wsAiGuard.size(),
     timestamp: new Date().toISOString(),
   };

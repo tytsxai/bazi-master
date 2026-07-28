@@ -169,6 +169,10 @@ zcat backups/<file>.sql.gz | docker compose -f docker-compose.prod.yml exec -T p
 - **会话安全**：使用强随机 `SESSION_TOKEN_SECRET`（32+字符）；生产环境必须配置 Redis 避免会话丢失
 - **API 密钥保护**：定期轮换 AI provider API keys；使用环境变量而非硬编码
 - **速率限制**：生产环境启用 `RATE_LIMIT_WINDOW_MS` 和 `RATE_LIMIT_MAX` 防止滥用
+- **WebSocket 连接上限**：`/ws/ai` 的 upgrade 握手由 `server.on('upgrade')` 处理，
+  走在 Express 之前，**不经过 HTTP 速率限制**。`WS_MAX_CONNECTIONS`（默认 500）是唯一
+  兜住 socket 内存的东西；超过上限的握手返回 503。这里没有做按 IP 限制，因为后端在 nginx
+  后面时所有连接的来源地址都是代理，按 IP 限会把整站限死 —— 按 IP 的限制要做在边缘。
 - **端口安全**：关闭不必要的端口；仅暴露 HTTPS (443) 和可能的 SSH (22)
 
 ## 10. 升级步骤（简版）
