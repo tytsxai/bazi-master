@@ -27,11 +27,14 @@
 - [ ] 在真实部署机上验证备份 cron：装完跑一次 `./scripts/cron-backup.sh`，
       确认 cron 环境下能找到 docker、能写日志（本机没装 Docker，只验到失败路径）
 - [ ] 后端覆盖率门槛：`test:coverage` 存在但无阈值，CI 也没跑
-- [ ] 上线后确认 `SHUTDOWN_DRAIN_MS`（默认 5000）确实大于所用 LB 的
-      探测间隔 × 失败阈值；小了滚动发布还是会漏 502
-- [ ] `WS_MAX_CONNECTIONS` 默认 500 是拍的，不是压出来的。上线后按实际
-      内存占用和并发调，并对 `totalConnections / maxConnections` 配告警
-- [ ] 按 IP 的 WebSocket 限流要做在边缘 nginx 上（后端拿不到真实地址）
+- [ ] 部署时按所用 LB 查表设 `SHUTDOWN_DRAIN_MS`：机制已实测（+2ms 摘流、
+      误差 10ms 量级，见 PRODUCTION.md 的对照表），但默认 5000 只够 nginx 被动检查；
+      换 k8s 要 35000、ALB 要 65000，且都要同步抬高 `stop_grace_period`
+- [ ] 给 `totalConnections / maxConnections` 配告警（比值告警，不是等它开始拒绝）。
+      指标已由 `/api/admin/health` 暴露，缺的是监控侧的告警规则
+- [ ] 前端容器前面若再套外层 nginx / CDN，要为 `limit_conn ws_per_ip` 配
+      `set_real_ip_from` / `real_ip_header`（配置里已留注释位），否则按 IP 限流
+      会退化成全站共用一个桶
 
 ## 已完成
 
@@ -66,6 +69,11 @@
 - [x] `/ws/ai` 连接总数上限（upgrade 握手不经过 HTTP 限流）
 - [x] 前端 `index.html` / `sw.js` 禁缓存、`/assets/` 长缓存，修掉发布后白屏
 - [x] 后端容器直接 `node scripts/start.mjs`，不再经 npm/sh 转发 SIGTERM
+- [x] 按 IP 的 WebSocket 并发限制（`frontend/nginx.conf` 的 `limit_conn ws_per_ip 10`，
+      实测第 11 条返回 503、关闭一条后立即归还）
+- [x] 容器 `ulimits.nofile` 显式钉死：每条 WS 连接占一个 fd（前端代理占两个），
+      实测每条只吃 ~9KB 内存，所以先撞上的一定是 fd 而不是内存限额
+- [x] 排水时序端到端实测并写进 PRODUCTION.md（+2ms 摘流 / 误差 10ms 量级）
 - [x] 备份定时调度 (`scripts/install-cron.sh` + `cron-backup.sh`，带锁和失败告警)
 
 ## 已放弃

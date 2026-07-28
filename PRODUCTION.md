@@ -69,14 +69,39 @@ node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma
 收到 SIGTERM 后的顺序是：`/health` 和 `/api/ready` 立即转 503 → 等待 `SHUTDOWN_DRAIN_MS`
 → 关闭监听端口 → 等存量请求跑完 → 断开 Prisma → 退出。
 
+本机实测（`SHUTDOWN_DRAIN_MS=3000`，直接对进程发 SIGTERM）：
+
+| 时刻        | `/live` | `/api/ready` | 端口是否还接受 TCP |
+| ----------- | ------- | ------------ | ------------------ |
+| SIGTERM     | 200     | 200          | 是                 |
+| **+2ms**    | 200     | **503**      | 是（排水中）       |
+| **+3007ms** | 拒绝    | 拒绝         | 否（监听已关）     |
+| **+3018ms** | —       | —            | 进程 exit 0        |
+
+即摘流信号在 2ms 内生效，端口关闭时刻和配置值的误差在 10ms 量级。排水期间 `/live`
+始终 200 —— 这是故意的，否则容器会被 autoheal 在停机过程中再踹一脚。
+
 `SHUTDOWN_DRAIN_MS` 生产默认 5000，其他环境默认 0。取值要求：
 
 - **大于** LB 的探测间隔 × 失败阈值，否则 LB 还没来得及摘流端口就关了，滚动发布期间会出 502。
 - **小于** 编排的停机宽限期（`docker-compose.prod.yml` 里 `stop_grace_period: 30s`），
   否则排水没走完就被 SIGKILL。
 
+**默认的 5000 只够用于反应快的 LB。**按实际探测参数查表，别照抄默认值：
+
+| 摘流方  | 探测间隔 × 失败阈值（默认）    | `SHUTDOWN_DRAIN_MS` 建议 | 还要改什么                               |
+| ------- | ------------------------------ | ------------------------ | ---------------------------------------- |
+| nginx   | 被动检查，约 1× `fail_timeout` | 5000（默认够用）         | —                                        |
+| k8s     | `10s × 3` = 30s                | 35000                    | `terminationGracePeriodSeconds` ≥ 60     |
+| AWS ALB | `30s × 2` = 60s                | 65000                    | 注销延迟 ≥ 90s，`stop_grace_period` 同调 |
+
+本项目默认用 docker-compose + 前置 nginx，属于第一行，5000 够用。**换成 k8s 或 ALB
+而没同步调这个值，滚动发布必然继续掉请求** —— 这是配置问题，不是代码问题，代码这边
+已经验证过按配置值精确执行。
+
 `GRACEFUL_SHUTDOWN_TIMEOUT_MS`（默认 10000）是排水结束之后留给存量请求的时间，
-强制退出的总时限是两者之和。
+强制退出的总时限是两者之和（默认 15s，仍在 `stop_grace_period: 30s` 之内）。
+调大排水窗口时务必同步抬高 `stop_grace_period`，否则排水会被 SIGKILL 截断。
 
 示例：
 
