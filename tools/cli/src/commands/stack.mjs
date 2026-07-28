@@ -408,35 +408,6 @@ const startApi = async ({ env, out, dryRun }) => {
 
 // ------------------------------------------------------------------ web
 
-const ensureWasm = async ({ env, out, dryRun }) => {
-  const wasm = path.join(paths.frontend, 'public', 'wasm', 'optimized.wasm');
-  if (fileExists(wasm)) return false;
-  if (dryRun) {
-    out.step('[dry-run] 会先构建 AssemblyScript wasm');
-    return false;
-  }
-  out.step('public/wasm/optimized.wasm 缺失，先构建 wasm');
-  const build = await run('npm', ['run', 'asbuild'], {
-    cwd: paths.frontend,
-    env,
-    stdio: out.childStdio,
-  });
-  if (build.code !== 0) {
-    throw new CliError('wasm 构建失败', {
-      exit: EXIT.ENV,
-      code: 'wasm_build_failed',
-      hint: (build.stderr || '').trim().slice(-600),
-      next: 'npm --prefix frontend install',
-    });
-  }
-  await run(process.execPath, ['scripts/sync-wasm.mjs'], {
-    cwd: paths.frontend,
-    env,
-    stdio: out.childStdio,
-  });
-  return true;
-};
-
 const startWeb = async ({ env, out, dryRun }) => {
   const port = webPort(env);
   const record = readRecord('web');
@@ -466,8 +437,6 @@ const startWeb = async ({ env, out, dryRun }) => {
   }
 
   if (dryRun) return { component: 'web', status: 'dry-run', port };
-
-  await ensureWasm({ env, out, dryRun });
 
   out.step(`启动前端（端口 ${port}，代理到后端 ${apiPort(env)}）`);
   const pid = spawnDetached({

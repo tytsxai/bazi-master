@@ -5,8 +5,13 @@ import { CliError, EXIT, usageError } from '../core/errors.mjs';
 import { run } from '../core/proc.mjs';
 import { fileExists, paths, readJsonFile } from '../core/context.mjs';
 
-/** script 是 package.json 里的脚本名，用来在跑之前判断这个目标到底存不存在 */
-const TARGETS = {
+/**
+ * script 是 package.json 里的脚本名，用来在跑之前判断这个目标到底存不存在。
+ *
+ * 导出是给契约测试用的：CLI 声称能跑的每个目标，对应的 npm script 必须真实存在。
+ * 不校验的话，删掉一个 script 只会在有人真去跑的时候才炸。
+ */
+export const TARGETS = {
   cli: {
     label: 'bazi CLI 自测（退出码契约 / JSON 契约 / 安全闸）',
     cwd: () => paths.root,
