@@ -47,7 +47,8 @@ export const dbCommand = defineCommand({
   summary: '数据库操作（迁移、重置、备份、恢复、连库）',
   description:
     '破坏性子命令统一走同一道安全闸：NODE_ENV=production 直接拒绝；非本地库必须 --allow-remote；\n' +
-    '任何情况下都必须 --yes。这道闸在代码里，不在文档里。',
+    '真正执行必须 --yes。这道闸在代码里，不在文档里。\n' +
+    '--dry-run 只打印会做什么、不执行，因此不需要 --yes（但前两道照拦）。',
   commands: [
     defineCommand({
       name: 'status',
@@ -123,25 +124,34 @@ export const dbCommand = defineCommand({
       name: 'reset',
       summary: '清空数据库并重放全部迁移',
       destructive: true,
-      description: '会删掉所有数据。默认拒绝执行，必须 --yes；非本地库还要额外 --allow-remote。',
+      description:
+        '会删掉所有数据。默认拒绝执行，必须 --yes；非本地库还要额外 --allow-remote。\n' +
+        '--dry-run 只说明会清空哪个库，不需要 --yes。',
       flags: [{ name: 'allow-remote', type: 'boolean', summary: '允许对非本地数据库执行（危险）' }],
-      examples: [{ note: '本地重置', command: 'bazi db reset --yes' }],
+      examples: [
+        { note: '先看会动哪个库（安全）', command: 'bazi db reset --dry-run --json' },
+        { note: '本地重置', command: 'bazi db reset --yes' },
+      ],
       run: async ({ flags, out }) => {
         const env = buildEnv();
-        // 先过安全闸，再谈别的。dry-run 也要过，免得给人"加了 --dry-run 就能绕"的错觉。
+        // 先过安全闸，再谈别的。dry-run 能越过"确认"那一道（它什么都不做），
+        // 但 production / 非本地库两道照拦 —— 见 assertDestructiveAllowed。
         const info = assertDestructiveAllowed({
           action: 'db reset',
           env,
           yes: flags.yes,
           allowRemote: flags['allow-remote'],
+          dryRun: flags['dry-run'],
         });
-        await requireReachable(env);
+        // dry-run 只是"说明会发生什么"，不该要求库是活的 ——
+        // 栈没起的时候 Agent 更需要先看清楚将要动哪个库。
         if (flags['dry-run']) {
           return out.ok(
             { dryRun: true, database: info.redacted },
             (d) => `[dry-run] 会清空并重建 ${d.database}`
           );
         }
+        await requireReachable(env);
         out.warn(`正在重置 ${info.redacted}`);
         const result = await prisma(['migrate', 'reset', '--force', '--skip-seed'], {
           env,
@@ -227,15 +237,17 @@ export const dbCommand = defineCommand({
           env,
           yes: flags.yes,
           allowRemote: flags['allow-remote'],
+          dryRun: flags['dry-run'],
         });
-        await requireReachable(env);
-        requirePgTool('pg_restore');
+        // 同 db reset：预览不依赖库是否可连、也不依赖 pg_restore 是否装了。
         if (flags['dry-run']) {
           return out.ok(
             { dryRun: true, file: resolved, database: info.redacted },
             (d) => `[dry-run] 会把 ${d.file} 恢复进 ${d.database}`
           );
         }
+        await requireReachable(env);
+        requirePgTool('pg_restore');
         out.warn(`正在把 ${resolved} 恢复进 ${info.redacted}`);
         const result = await run(
           'pg_restore',

@@ -151,6 +151,7 @@ export const assertDestructiveAllowed = ({
   env = buildEnv(),
   yes = false,
   allowRemote = false,
+  dryRun = false,
 }) => {
   const url = resolveDatabaseUrl(env);
   const info = describeDatabaseUrl(url);
@@ -171,11 +172,17 @@ export const assertDestructiveAllowed = ({
     });
   }
 
-  if (!yes) {
+  // --dry-run 不执行任何东西，所以它可以越过"确认"这道闸 —— 但只越过这一道。
+  // 上面两道（production / 非本地库）是"你指错库了"的信号，dry-run 一样拦。
+  //
+  // 这么排是给 Agent 留一条安全的自助路径：先 --dry-run 看清楚会发生什么，
+  // 把结论摆给人，拿到明确的"是"之后再加 --yes。
+  // 如果 dry-run 也退 7，Agent 唯一能做的就是去碰 --yes —— 那才是真正削弱了这道闸。
+  if (!yes && !dryRun) {
     throw blockedError(`${action} 是破坏性操作，需要显式确认`, {
       hint: `目标库：${info.redacted || '(未配置)'}`,
-      next: `确认无误后加 --yes 重跑；只想看会做什么就加 --dry-run。`,
-      details: { action, database: info.redacted },
+      next: `先 \`--dry-run\` 看会做什么；确认无误后由人拍板，再加 --yes 重跑。`,
+      details: { action, database: info.redacted, dryRunAvailable: true },
     });
   }
 

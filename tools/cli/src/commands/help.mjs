@@ -8,6 +8,22 @@ import { usageError } from '../core/errors.mjs';
  * SKILL.md 刻意不抄命令列表 —— 抄了就会腐化。Agent 想知道"能做什么"，
  * 永远是跑 `bazi help --json`，而不是读文档里的表格。
  */
+/**
+ * `--json` 帮助的统一信封。
+ *
+ * `bazi help --json`、`bazi --json`、`bazi db --json`、`bazi db reset --help --json`
+ * 必须长得一模一样 —— Agent 不该因为"从哪条路要到的帮助"而拿到不同形状的东西。
+ */
+export const helpPayload = (node, commandPath) => ({
+  ok: true,
+  command: 'bazi help',
+  data: {
+    cli: 'bazi',
+    exitCodes: EXIT_MEANING,
+    tree: toJsonTree(node, commandPath),
+  },
+});
+
 export const helpCommand = defineCommand({
   name: 'help',
   summary: '输出命令树；--json 是机器可读的完整能力清单',
@@ -27,21 +43,7 @@ export const helpCommand = defineCommand({
     }
 
     if (flags.json) {
-      process.stdout.write(
-        `${JSON.stringify(
-          {
-            ok: true,
-            command: 'bazi help',
-            data: {
-              cli: 'bazi',
-              exitCodes: EXIT_MEANING,
-              tree: toJsonTree(node, commandPath),
-            },
-          },
-          null,
-          2
-        )}\n`
-      );
+      process.stdout.write(`${JSON.stringify(helpPayload(node, commandPath), null, 2)}\n`);
       return 0;
     }
 

@@ -1,12 +1,6 @@
 import { createOutput } from './core/output.mjs';
 import { CliError, EXIT } from './core/errors.mjs';
-import {
-  defineCommand,
-  parseArgs,
-  renderHelp,
-  resolveCommand,
-  toJsonTree,
-} from './core/registry.mjs';
+import { defineCommand, parseArgs, renderHelp, resolveCommand } from './core/registry.mjs';
 
 import { setupCommand } from './commands/setup.mjs';
 import { doctorCommand } from './commands/doctor.mjs';
@@ -15,7 +9,7 @@ import { stackCommand } from './commands/stack.mjs';
 import { dbCommand } from './commands/db.mjs';
 import { testCommand } from './commands/test.mjs';
 import { verifyCommand } from './commands/verify.mjs';
-import { helpCommand } from './commands/help.mjs';
+import { helpCommand, helpPayload } from './commands/help.mjs';
 
 export const rootCommand = defineCommand({
   name: 'bazi',
@@ -70,15 +64,29 @@ export const main = async (argv) => {
       });
     }
 
-    const wantsHelp = flags.help || !node.run;
-    if (wantsHelp) {
-      if (flags.json) {
-        process.stdout.write(`${JSON.stringify(toJsonTree(node, commandPath), null, 2)}\n`);
+    if (flags.help || !node.run) {
+      // 显式要 help，或者裸跑 `bazi`：都算正常收尾。
+      if (flags.help || node === rootCommand) {
+        if (flags.json) {
+          // 和 `bazi help --json` 共用同一个信封，否则 Agent 解析 .ok 会拿到 undefined
+          process.stdout.write(`${JSON.stringify(helpPayload(node, commandPath), null, 2)}\n`);
+          return EXIT.OK;
+        }
+        process.stdout.write(`${renderHelp(node, commandPath)}\n`);
         return EXIT.OK;
       }
-      process.stdout.write(`${renderHelp(node, commandPath)}\n`);
-      // 显式要 help，或者裸跑 `bazi`：都算正常。分组下写了个不存在的子命令：用法错。
-      return flags.help || node === rootCommand ? EXIT.OK : EXIT.USAGE;
+
+      // 分组节点（db / stack / env…）没带子命令：用法错。
+      // 人还是要看到子命令列表，所以文本模式先打帮助再失败；json 模式只出错误信封，
+      // 否则 stdout 会同时出现帮助文本和 JSON，解析契约就破了。
+      out.render({}, () => renderHelp(node, commandPath));
+      throw new CliError(`\`bazi ${commandPath.join(' ')}\` 是命令分组，需要一个子命令`, {
+        exit: EXIT.USAGE,
+        code: 'missing_subcommand',
+        hint: `可用子命令：${node.commands.map((c) => c.name).join(' / ')}`,
+        next: `bazi help ${commandPath.join(' ')} --json`,
+        details: { available: node.commands.map((c) => c.name) },
+      });
     }
 
     const code = await node.run({

@@ -224,8 +224,14 @@ export const renderHelp = (node, commandPath) => {
   return lines.join('\n');
 };
 
-/** 机器可读的完整命令树 —— SKILL.md 不抄命令列表，就是靠这个。 */
-export const toJsonTree = (node, commandPath = []) => ({
+/**
+ * 机器可读的完整命令树 —— SKILL.md 不抄命令列表，就是靠这个。
+ *
+ * globalFlags 只在树根出现一次（每个节点都挂一遍纯属噪音），但**必须出现**：
+ * 这里是能力清单的唯一真源，漏了它 Agent 就发现不了 --yes / --dry-run ——
+ * 而这两个恰好是遇到 exit 7 时唯一的出路。
+ */
+export const toJsonTree = (node, commandPath = [], { root = true } = {}) => ({
   name: node.name,
   path: commandPath.join(' '),
   summary: node.summary,
@@ -234,8 +240,9 @@ export const toJsonTree = (node, commandPath = []) => ({
   destructive: node.destructive || undefined,
   args: node.args.length ? node.args : undefined,
   flags: node.flags.length ? node.flags : undefined,
+  globalFlags: root ? GLOBAL_FLAGS : undefined,
   examples: node.examples.length ? node.examples : undefined,
   commands: node.commands.length
-    ? node.commands.map((child) => toJsonTree(child, [...commandPath, child.name]))
+    ? node.commands.map((child) => toJsonTree(child, [...commandPath, child.name], { root: false }))
     : undefined,
 });

@@ -3,41 +3,78 @@ import path from 'node:path';
 import { defineCommand } from '../core/registry.mjs';
 import { CliError, EXIT, usageError } from '../core/errors.mjs';
 import { run } from '../core/proc.mjs';
-import { fileExists, paths } from '../core/context.mjs';
+import { fileExists, paths, readJsonFile } from '../core/context.mjs';
 
+/** script 是 package.json 里的脚本名，用来在跑之前判断这个目标到底存不存在 */
 const TARGETS = {
+  cli: {
+    label: 'bazi CLI 自测（退出码契约 / JSON 契约 / 安全闸）',
+    cwd: () => paths.root,
+    script: 'test:cli',
+    args: ['run', 'test:cli'],
+  },
   lint: {
     label: 'ESLint',
     cwd: () => paths.root,
+    script: 'lint',
     args: ['run', 'lint'],
   },
   typecheck: {
     label: '前端 TypeScript 类型检查',
     cwd: () => paths.frontend,
+    script: 'typecheck',
     args: ['run', 'typecheck'],
   },
   unit: {
     label: '前端单测（vitest）',
     cwd: () => paths.frontend,
+    script: 'test:unit:run',
     args: ['run', 'test:unit:run'],
   },
   backend: {
     label: '后端测试（脚本自带临时 PostgreSQL）',
     cwd: () => paths.backend,
+    script: 'test',
     args: ['test'],
     isolatedDb: true,
   },
   e2e: {
     label: 'Playwright 端到端（自带 dev-server，较慢）',
     cwd: () => paths.frontend,
+    script: 'test',
     args: ['test'],
     slow: true,
     isolatedDb: true,
   },
 };
 
-const FAST_SET = ['lint', 'typecheck', 'unit', 'backend'];
+// cli 排在最前面：它最快，而且它挂了意味着"你正在用的这个工具本身坏了"，
+// 后面几个目标的结论都不再可信，先看到它比先看到 lint 有用。
+const FAST_SET = ['cli', 'lint', 'typecheck', 'unit', 'backend'];
 const ALL_SET = [...FAST_SET, 'e2e'];
+
+/**
+ * 目标不可跑的原因 —— 返回 null 表示可跑。
+ *
+ * 只认 node_modules 是不够的：npm script 被删掉/改名时 `npm run x` 退 1，
+ * 会被记成 failed（"代码有问题"），而真实原因是这个目标压根不存在（环境/配置问题）。
+ * 两者对 Agent 的下一步动作完全不同，不能混。
+ */
+const blockedReason = (target, cwd) => {
+  if (!fileExists(path.join(cwd, 'node_modules'))) {
+    return { reason: `${cwd} 依赖未安装`, next: 'bazi setup --with-frontend' };
+  }
+  if (!target.script) return null;
+  const pkg = readJsonFile(path.join(cwd, 'package.json'));
+  if (!pkg) return { reason: `${cwd}/package.json 读不到`, next: 'bazi doctor --json' };
+  if (!pkg.scripts?.[target.script]) {
+    return {
+      reason: `${path.relative(paths.root, cwd) || '.'}/package.json 里没有 "${target.script}" 脚本`,
+      next: 'bazi help test --json',
+    };
+  }
+  return null;
+};
 
 /**
  * 测试进程的环境刻意不注入 .env。
@@ -104,9 +141,15 @@ export const testCommand = defineCommand({
     for (const name of targets) {
       const target = TARGETS[name];
       const cwd = target.cwd();
-      if (!fileExists(path.join(cwd, 'node_modules'))) {
-        results.push({ target: name, status: 'skipped', reason: `${cwd} 依赖未安装` });
-        out.warn(`${name}: 依赖未安装，跳过（bazi setup --with-frontend）`);
+      const blocked = blockedReason(target, cwd);
+      if (blocked) {
+        results.push({
+          target: name,
+          status: 'skipped',
+          reason: blocked.reason,
+          next: blocked.next,
+        });
+        out.warn(`${name}: ${blocked.reason}，跳过（${blocked.next}）`);
         continue;
       }
       if (flags['dry-run']) {
@@ -179,11 +222,11 @@ export const testCommand = defineCommand({
     // 退出码用 ENV 而不是 FAILED：跳过的原因是环境未就绪，该去装依赖而不是查代码。
     if (skipped.length && flags['fail-on-skip']) {
       out.render(data, render);
-      throw new CliError(`${skipped.length} 个测试目标因依赖缺失被跳过`, {
+      throw new CliError(`${skipped.length} 个测试目标未就绪被跳过`, {
         exit: EXIT.ENV,
         code: 'targets_skipped',
-        hint: skipped.map((s) => s.target).join(', '),
-        next: 'bazi setup --with-frontend',
+        hint: skipped.map((s) => `${s.target}: ${s.reason}`).join('; '),
+        next: skipped[0].next || 'bazi setup --with-frontend',
         details: data,
       });
     }

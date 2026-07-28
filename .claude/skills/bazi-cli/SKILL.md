@@ -28,13 +28,28 @@ description: bazi-master 仓库的操作入口。当需要在这个项目里准�
 
 ## 关于 exit 7：不要自动绕过
 
-破坏性命令（`db reset` / `db restore`）在没有 `--yes` 时会返回 7，并且 `next` 字段会写着
-"加 --yes 重跑"。**那句话是给人看的，不是给你看的。**
+破坏性命令（`db reset` / `db restore`）在没有 `--yes` 时会返回 7。**不要自己补一个 `--yes` 重跑**——
+那等于这道闸从来没存在过。
 
-拿到 exit 7 的正确反应是：把目标库和将要发生的事情告诉用户，等一个明确的"是"，然后才加 `--yes`。
-自己补个 `--yes` 重跑一遍等于这道闸从来没存在过。
+拿到 exit 7 的正确流程是：
 
-真正不可逆的场景（`NODE_ENV=production`）CLI 会直接硬拒绝，加什么参数都没用——那是代码里的边界，不是约定。
+```
+./bazi db reset --dry-run --json    # 安全：只说明会动哪个库，不执行，不需要 --yes
+```
+
+把 dry-run 的结论告诉用户，等一个明确的"是"，然后才加 `--yes`。
+
+`--dry-run` 只能越过"确认"这一道闸。另外两道它一样拦：`NODE_ENV=production` 直接硬拒绝，
+非本地 `DATABASE_URL` 必须显式 `--allow-remote`。加什么参数都绕不过——那是代码里的边界，不是约定。
+
+## --dry-run：动手之前先问它
+
+几乎所有会改东西的命令都支持 `--dry-run`：`setup` / `db reset` / `db restore` / `db backup` /
+`db migrate` / `env init` / `env set` / `stack up` / `stack down` / `stack restart` / `test` /
+`verify` / `doctor --fix`。它打印"会做什么"然后返回 0，不执行。
+
+它是全局标志，`bazi help --json` 的 `tree.globalFlags` 里能查到（`--json` / `--quiet` /
+`--dry-run` / `--yes` / `--help` 都在那里，不在每条命令自己的 `flags` 里）。
 
 ## 起手式
 
@@ -78,8 +93,9 @@ Agent 在动手改代码前，用 `./bazi stack status --require-ready --json` �
 
 ## 测试：skipped 不等于 passed
 
-`bazi test` 的目标依赖没装时会记 `skipped` 并**照样返回 0**。这是给本地开发用的——不该因为
-没装前端依赖就没法跑后端测试。但它意味着 `bazi test --all` 可能一个目标都没跑还报成功：
+`bazi test` 的目标未就绪时会记 `skipped` 并**照样返回 0**。未就绪有两种：依赖没装，或者
+对应的 npm script 不存在。这是给本地开发用的——不该因为没装前端依赖就没法跑后端测试。
+但它意味着 `bazi test --all` 可能一个目标都没跑还报成功：
 
 ```
 summary: {"passed": 2, "failed": 0, "skipped": 3}   # exit 0，但 typecheck/unit/e2e 根本没跑
@@ -92,6 +108,9 @@ summary: {"passed": 2, "failed": 0, "skipped": 3}   # exit 0，但 typecheck/uni
 ./bazi test --all --fail-on-skip --json
 ```
 
+第一个目标 `cli` 是 CLI 自己的契约测试（退出码语义、`--json` 单文档、安全闸不可绕）。它两秒跑完，
+排在最前面是因为：它挂了说明你正在用的这个工具本身坏了，后面几个目标的结论都不再可信。
+
 e2e 还额外依赖 Playwright 浏览器二进制，`npm install` 不会带上它。缺了的表现是每个用例
 清一色 `browserType.launch: Executable doesn't exist`，看起来像"前端全崩了"，其实只是没装浏览器。
 `bazi setup --with-frontend` 已经会补齐，`bazi doctor` 的 `e2e:browsers` 也会报——
@@ -99,7 +118,19 @@ e2e 还额外依赖 Playwright 浏览器二进制，`npm install` 不会带上�
 
 ## foreign：CLI 不碰不是自己起的进程
 
-`stack status` 里 `managedBy` 有三种值：`bazi`（我们起的）、`foreign`（端口被别人占了）、`external`（数据库是别人起的）。
+`stack status` 里每个组件都有 `managedBy`，**api/web 和 db 的取值不是一套**：
+
+| 组件      | 取值                                   | 含义                         |
+| --------- | -------------------------------------- | ---------------------------- |
+| api / web | `bazi`                                 | CLI 起的，能停               |
+|           | `foreign`                              | 端口被别的进程占了，CLI 不碰 |
+|           | `null`                                 | 没在跑                       |
+| db        | `pg_ctl` / `docker-compose` / `remote` | CLI 起的（值就是启动方式）   |
+|           | `external`                             | 库是活的，但不是 CLI 起的    |
+|           | `null`                                 | 连不上                       |
+
+所以**不要用 `managedBy === 'bazi'` 判断归属**——db 永远不会是 `bazi`。要判断"这个组件是不是我们管的"，
+看它是不是 `foreign` / `external` / `null` 更可靠。
 
 看到 `foreign` 时 CLI 会拒绝接管，也拒绝 kill。这是故意的：按端口去杀进程会误伤用户自己开的终端、
 另一个 worktree、或者同事的服务。
@@ -144,3 +175,22 @@ CLI 已经加了前置断言（退 3，`next: bazi stack up`），所以走 `./b
 
 api `4000`（`.env` 的 `PORT`）、web `3000`、db `5433`（本地 pg_ctl）或 `5432`（docker compose）。
 装了 Docker 时 `env init` 默认给 5432 走 compose，没装就给 5433 走 pg_ctl。
+
+## 要改 CLI 本身的时候
+
+源码在 `tools/cli/`，契约测试在 `tools/cli/test/`，`./bazi test cli` 两秒跑完。
+
+下面这些不是风格建议，是测试会当场拦下来的硬约束：
+
+- **失败一律抛 `CliError`**，带 `exit` / `hint` / `next`。`next` 必须是一条真能跑的 `bazi` 命令——
+  测试会拿 `help --json` 的命令树去验证它解析得出来。
+- **`--json` 模式下 stdout 只能有一个 JSON 文档。** 想给人打东西用 `out.render`（json 模式自动跳过），
+  想说进度用 `out.step` / `out.warn`（走 stderr，同时进 `payload.notes`）。子进程一律用 `out.childStdio`。
+- **命令自己的 flag 不能和全局 flag 重名**，否则会被 `flagSpecFor` 的查找顺序静默吃掉。
+- **`examples` 里的命令和选项必须真实存在**，测试会逐条解析。
+- **破坏性命令要 `destructive: true`**，并且过 `assertDestructiveAllowed`。Agent 靠这个标记
+  在动手前识别"这条得先问人"。
+- json 和文本两种模式的**退出码必须一致**。
+
+新增一条命令：在 `src/commands/` 下写好，挂进 `src/main.mjs` 的 `rootCommand.commands`。
+`help --json` 会自动带上它，SKILL.md 和 README 都不需要改——这是刻意的，抄命令清单一定会腐化。
