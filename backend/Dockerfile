@@ -33,5 +33,9 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:4000/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-# Start command
-CMD ["npm", "run", "start"]
+# Exec the start script directly rather than via `npm run start`. npm would sit between
+# PID 1 and the script (npm -> sh -> node), and neither npm nor the shell reliably
+# forwards SIGTERM, so scripts/start.mjs — which exists to forward that signal so the
+# server can shut down gracefully — would never receive it. Docker would then SIGKILL
+# the whole tree at the end of stop_grace_period, cutting in-flight requests.
+CMD ["node", "scripts/start.mjs"]

@@ -97,6 +97,8 @@ services:
       IMPORT_BATCH_SIZE: ${IMPORT_BATCH_SIZE:-}
       SHUTDOWN_TIMEOUT_MS: ${SHUTDOWN_TIMEOUT_MS:-}
       GRACEFUL_SHUTDOWN_TIMEOUT_MS: ${GRACEFUL_SHUTDOWN_TIMEOUT_MS:-}
+      SHUTDOWN_DRAIN_MS: ${SHUTDOWN_DRAIN_MS:-}
+      WS_MAX_CONNECTIONS: ${WS_MAX_CONNECTIONS:-}
       SERVER_KEEP_ALIVE_TIMEOUT_MS: ${SERVER_KEEP_ALIVE_TIMEOUT_MS:-}
       SERVER_HEADERS_TIMEOUT_MS: ${SERVER_HEADERS_TIMEOUT_MS:-}
       SERVER_REQUEST_TIMEOUT_MS: ${SERVER_REQUEST_TIMEOUT_MS:-}
@@ -146,12 +148,22 @@ services:
       # by compose on its own.
       autoheal: 'true'
     healthcheck:
+      # Liveness, not readiness. This healthcheck drives autoheal (above), so whatever it
+      # measures is what gets the container restarted. /api/ready is a *deep* check — it
+      # fails whenever postgres or redis is briefly unreachable, and restarting the
+      # backend for that is actively harmful: the new process exits at startup when it
+      # cannot reach the database, so `restart: always` turns a ten-second database blip
+      # into a crash loop, where doing nothing would have let Prisma reconnect on its own.
+      # /live still catches what autoheal is for — a wedged event loop cannot answer it.
+      #
+      # /api/ready remains the signal for the load balancer, which should drain rather
+      # than restart. It also reports 503 while the process is draining on SIGTERM.
       test:
         [
           'CMD',
           'node',
           '-e',
-          "fetch('http://localhost:4000/api/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://localhost:4000/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 3s

@@ -12,6 +12,7 @@ import * as Sentry from '@sentry/node';
 // Import configurations
 // Health Check imports
 import { checkDatabase, checkRedis } from './services/health.service.js';
+import { beginShutdown, isShuttingDown, resolveDrainMs } from './services/lifecycle.service.js';
 
 // Import configurations
 import { logger } from './config/logger.js';
@@ -181,6 +182,15 @@ app.get('/live', (req, res) => {
 
 // Deep Health Check Endpoint
 app.get('/health', async (req, res) => {
+  if (isShuttingDown()) {
+    return res.status(503).json({
+      service: SERVICE_NAME,
+      status: 'shutting_down',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    });
+  }
+
   const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
   const ok = db.ok && (redis.ok || redis.status === 'disabled');
 
@@ -371,7 +381,9 @@ const setupGracefulShutdown = (
     closeWebsocketServerFn = closeWebsocketServer,
   } = {}
 ) => {
-  let isShuttingDown = false;
+  // Local re-entrancy guard. Distinct from the shared lifecycle flag, which is what the
+  // readiness probes read and which stays set for the rest of the process's life.
+  let shutdownStarted = false;
 
   const resolveShutdownTimeout = () => {
     const raw =
@@ -381,8 +393,11 @@ const setupGracefulShutdown = (
   };
 
   const closeServer = (signal, err) => {
-    if (isShuttingDown) return;
-    isShuttingDown = true;
+    if (shutdownStarted) return;
+    shutdownStarted = true;
+    // Flip readiness to 503 before anything else, so the load balancer stops routing
+    // here while the socket is still open and in-flight requests can still complete.
+    beginShutdown();
 
     if (err) {
       loggerInstance.error({ err, signal }, 'Unhandled error, initiating graceful shutdown...');
@@ -394,10 +409,14 @@ const setupGracefulShutdown = (
     }
 
     const timeoutMs = resolveShutdownTimeout();
+    const drainMs = resolveDrainMs(processRef.env);
+    // The budget covers the drain too, so GRACEFUL_SHUTDOWN_TIMEOUT_MS keeps meaning
+    // "time allowed to finish in-flight work" rather than silently shrinking by the
+    // drain period.
     const timeout = setTimeout(() => {
       loggerInstance.error('Graceful shutdown timeout, forcing exit...');
       processRef.exit(1);
-    }, timeoutMs);
+    }, timeoutMs + drainMs);
 
     timeout.unref();
 
@@ -414,26 +433,36 @@ const setupGracefulShutdown = (
       }
     };
 
-    try {
-      if (typeof closeWebsocketServerFn === 'function') {
-        closeWebsocketServerFn({ loggerInstance });
+    const stopAccepting = () => {
+      try {
+        if (typeof closeWebsocketServerFn === 'function') {
+          closeWebsocketServerFn({ loggerInstance });
+        }
+      } catch (error) {
+        loggerInstance.error({ err: error }, '[ws] Failed to shutdown WebSocket server');
       }
-    } catch (error) {
-      loggerInstance.error({ err: error }, '[ws] Failed to shutdown WebSocket server');
-    }
 
-    try {
-      if (typeof server?.close === 'function') {
-        server.close(() => {
+      try {
+        if (typeof server?.close === 'function') {
+          server.close(() => {
+            void finalize();
+          });
+        } else {
           void finalize();
-        });
-      } else {
+        }
+      } catch (error) {
+        loggerInstance.error({ err: error }, 'Error during server close');
         void finalize();
       }
-    } catch (error) {
-      loggerInstance.error({ err: error }, 'Error during server close');
-      void finalize();
+    };
+
+    if (drainMs > 0) {
+      loggerInstance.info({ drainMs }, 'Readiness now failing; draining before close...');
+      setTimeout(stopAccepting, drainMs);
+      return;
     }
+
+    stopAccepting();
   };
 
   processRef.once('SIGTERM', () => void closeServer('SIGTERM'));

@@ -55,6 +55,29 @@ node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma
 - 就绪检查: `GET /api/ready` - 深度检查（返回 `ready/not_ready`）。
 - 兼容探测: `GET /api/health` - 同样执行深度检查。
 
+> **两类探针不要接错，接错会自己制造事故。**
+>
+> - **容器/进程重启探针用 `/live`**。它不碰数据库和 Redis。`docker-compose.prod.yml` 的
+>   backend healthcheck 驱动 autoheal，如果改成深度检查，数据库抖动十秒就会把后端重启掉；
+>   而后端在启动阶段连不上库会直接 `exit 1`，于是 `restart: always` 把一次可自愈的抖动
+>   变成崩溃循环。
+> - **负载均衡摘流探针用 `/api/ready`**。它是深度检查，并且在收到 SIGTERM 后立刻返回 503
+>   （`status: "shutting_down"`），此时进程仍在正常服务存量请求。LB 应该据此摘流，而不是重启。
+
+### 优雅停机与摘流
+
+收到 SIGTERM 后的顺序是：`/health` 和 `/api/ready` 立即转 503 → 等待 `SHUTDOWN_DRAIN_MS`
+→ 关闭监听端口 → 等存量请求跑完 → 断开 Prisma → 退出。
+
+`SHUTDOWN_DRAIN_MS` 生产默认 5000，其他环境默认 0。取值要求：
+
+- **大于** LB 的探测间隔 × 失败阈值，否则 LB 还没来得及摘流端口就关了，滚动发布期间会出 502。
+- **小于** 编排的停机宽限期（`docker-compose.prod.yml` 里 `stop_grace_period: 30s`），
+  否则排水没走完就被 SIGKILL。
+
+`GRACEFUL_SHUTDOWN_TIMEOUT_MS`（默认 10000）是排水结束之后留给存量请求的时间，
+强制退出的总时限是两者之和。
+
 示例：
 
 ```bash
