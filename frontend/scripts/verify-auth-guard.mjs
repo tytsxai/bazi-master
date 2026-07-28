@@ -1,12 +1,8 @@
 import { chromium, expect } from '@playwright/test';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import { createEvidence } from './lib/evidence.mjs';
 
 const baseUrl = 'http://localhost:3000/history';
-const outDir = path.resolve(process.cwd(), 'verification');
-const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-
-await fs.mkdir(outDir, { recursive: true });
+const evidence = await createEvidence();
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
@@ -26,10 +22,7 @@ try {
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.getByRole('heading', { name: 'Welcome Back' })).toBeVisible();
-  await page.screenshot({
-    path: path.join(outDir, `${stamp}-auth-guard-login.png`),
-    fullPage: true,
-  });
+  await evidence.shot(page, 'auth-guard-login');
 
   if (consoleErrors.length) {
     throw new Error(`Console errors detected: ${consoleErrors.join(' | ')}`);

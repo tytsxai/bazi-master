@@ -1,12 +1,8 @@
 import { chromium, expect } from '@playwright/test';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import { createEvidence } from './lib/evidence.mjs';
 
 const baseUrl = 'http://localhost:3000/';
-const outDir = path.resolve(process.cwd(), 'verification');
-const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-
-await fs.mkdir(outDir, { recursive: true });
+const evidence = await createEvidence();
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
@@ -16,12 +12,12 @@ try {
 
   // Home Page
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
-  await page.screenshot({ path: path.join(outDir, `${stamp}-tablet-home.png`), fullPage: true });
+  await evidence.shot(page, 'tablet-home');
   console.log('Captured tablet home page.');
 
   // Bazi Page
   await page.goto(`${baseUrl}bazi`, { waitUntil: 'networkidle' });
-  await page.screenshot({ path: path.join(outDir, `${stamp}-tablet-bazi.png`), fullPage: true });
+  await evidence.shot(page, 'tablet-bazi');
   console.log('Captured tablet bazi page.');
 
   // Check if mobile menu button is visible
@@ -32,10 +28,7 @@ try {
   // Open menu
   await menuBtn.click();
   await page.waitForTimeout(500);
-  await page.screenshot({
-    path: path.join(outDir, `${stamp}-tablet-menu-open.png`),
-    fullPage: false,
-  });
+  await evidence.shot(page, 'tablet-menu-open', { fullPage: false });
   console.log('Captured tablet menu open.');
 } finally {
   await browser.close();

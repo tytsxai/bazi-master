@@ -1,12 +1,8 @@
 import { chromium, expect } from '@playwright/test';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import { createEvidence } from './lib/evidence.mjs';
 
 const baseUrl = 'http://localhost:3000/';
-const outDir = path.resolve(process.cwd(), 'verification');
-const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-
-await fs.mkdir(outDir, { recursive: true });
+const evidence = await createEvidence();
 
 const testId = `GUEST_${Date.now()}`;
 const birthData = {
@@ -28,9 +24,7 @@ page.on('console', (msg) => {
   }
 });
 
-const shot = async (name) => {
-  await page.screenshot({ path: path.join(outDir, `${stamp}-${name}.png`), fullPage: true });
-};
+const shot = (name) => evidence.shot(page, name);
 
 try {
   await page.addInitScript(() => {

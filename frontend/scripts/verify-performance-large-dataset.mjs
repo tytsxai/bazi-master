@@ -1,13 +1,9 @@
 import { chromium, expect } from '@playwright/test';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import { createEvidence } from './lib/evidence.mjs';
 
 const baseUrl = 'http://localhost:3000/';
 const apiBase = 'http://localhost:4000';
-const outDir = path.resolve(process.cwd(), 'verification');
-const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-
-await fs.mkdir(outDir, { recursive: true });
+const evidence = await createEvidence();
 
 const testId = `PERF_${Date.now()}`;
 const email = `${testId.toLowerCase()}@example.com`;
@@ -52,9 +48,7 @@ const buildDataset = (count, prefix) => {
   }));
 };
 
-const shot = async (page, name) => {
-  await page.screenshot({ path: path.join(outDir, `${stamp}-${name}.png`), fullPage: true });
-};
+const { shot } = evidence;
 
 const registerUser = async () => {
   const res = await fetch(`${apiBase}/api/register`, {

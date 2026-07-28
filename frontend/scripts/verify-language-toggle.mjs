@@ -1,11 +1,8 @@
 import { chromium, expect } from '@playwright/test';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import { createEvidence } from './lib/evidence.mjs';
 
 const baseUrl = 'http://localhost:3000/';
-const outDir = path.resolve(process.cwd(), 'verification');
-
-await fs.mkdir(outDir, { recursive: true });
+const evidence = await createEvidence();
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
@@ -16,14 +13,11 @@ page.on('console', (msg) => {
   }
 });
 
-const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-const shot = (name) => path.join(outDir, `${stamp}-${name}.png`);
-
 try {
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.waitForTimeout(500);
-  await page.screenshot({ path: shot('home-initial') });
+  await evidence.shot(page, 'home-initial', { fullPage: false });
 
   const homeLink = page.getByRole('link', { name: /Home|首页/ });
   await expect(homeLink).toBeVisible();
@@ -41,7 +35,7 @@ try {
   }
 
   await page.waitForTimeout(300);
-  await page.screenshot({ path: shot('home-after-toggle') });
+  await evidence.shot(page, 'home-after-toggle', { fullPage: false });
 
   const storedLocale = await page.evaluate(() => localStorage.getItem('locale'));
   if (!storedLocale) {
@@ -50,7 +44,7 @@ try {
 
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
-  await page.screenshot({ path: shot('home-after-reload') });
+  await evidence.shot(page, 'home-after-reload', { fullPage: false });
 
   if (storedLocale === 'zh-CN') {
     await expect(page.getByRole('link', { name: '首页' })).toBeVisible();
