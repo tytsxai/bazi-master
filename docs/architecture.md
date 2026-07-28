@@ -47,21 +47,22 @@ bazi-master/
 │   │   ├── user.js            # 用户设置
 │   │   ├── ziwei.js           # 紫微: 排盘/历史
 │   │   └── zodiac.js          # 星座: 信息/运势/配对/上升
-│   ├── services/              # 业务逻辑 (20 个服务)
+│   ├── services/              # 业务逻辑 (21 个服务)
 │   │   ├── ai.service.js          # AI 调用与 provider 管理
 │   │   ├── apiSchema.service.js   # OpenAPI 规范生成
 │   │   ├── auth.service.js        # 认证逻辑
 │   │   ├── cache.service.js       # 缓存管理 (内存+Redis镜像)
 │   │   ├── calculations.service.js # 八字计算核心
+│   │   ├── credentialRevocation.service.js # 凭据变更后吊销旧会话
 │   │   ├── email.service.js       # 邮件发送 (SMTP)
 │   │   ├── health.service.js      # 健康检查
 │   │   ├── iching.service.js      # 周易起卦
+│   │   ├── lifecycle.service.js   # 进程生命周期/优雅停机就绪标志
 │   │   ├── oauth.service.js       # OAuth (Google/WeChat)
 │   │   ├── prompts.service.js     # AI 提示词管理
 │   │   ├── resetTokens.service.js # 密码重置 token
 │   │   ├── schema.service.js      # 数据校验
 │   │   ├── session.service.js     # 会话管理
-│   │   ├── softDelete.service.js  # 软删除
 │   │   ├── solarTime.service.js   # 真太阳时计算
 │   │   ├── synastry.service.js    # 合盘分析
 │   │   ├── tarot.service.js       # 塔罗抽牌
