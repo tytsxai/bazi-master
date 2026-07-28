@@ -173,6 +173,10 @@ zcat backups/<file>.sql.gz | docker compose -f docker-compose.prod.yml exec -T p
   走在 Express 之前，**不经过 HTTP 速率限制**。`WS_MAX_CONNECTIONS`（默认 500）是唯一
   兜住 socket 内存的东西；超过上限的握手返回 503。这里没有做按 IP 限制，因为后端在 nginx
   后面时所有连接的来源地址都是代理，按 IP 限会把整站限死 —— 按 IP 的限制要做在边缘。
+- **`TRUST_PROXY` 要数对跳数**：写 `1` 表示"只信任一跳"。如果流量路径是
+  外层 nginx → 前端容器 nginx → 后端（即 `/api` 经前端容器转发），那是**两跳**，
+  写 1 会让 `req.ip` 变成前端容器的地址，于是所有用户共用一个速率限制桶，
+  一个人打满全站 429。`PRODUCTION.md` 第 4 节的 nginx 示例把 `/api` 直连后端，是一跳。
 - **端口安全**：关闭不必要的端口；仅暴露 HTTPS (443) 和可能的 SSH (22)
 
 ## 10. 升级步骤（简版）
@@ -181,3 +185,9 @@ zcat backups/<file>.sql.gz | docker compose -f docker-compose.prod.yml exec -T p
 2. 运行数据库迁移
 3. 滚动重启 backend/front
 4. 验证 `/api/ready` 与核心业务
+
+> 前端是带内容哈希的静态构建，`frontend/nginx.conf` 对 `/assets/` 下的文件发
+> `immutable` 长缓存，对 `index.html` / `sw.js` / `registerSW.js` / `manifest.webmanifest`
+> 发 `no-cache`。这四个文件名不带哈希，一旦被缓存住，用户拿到的旧 `index.html` 会去请求
+> 已经被这次发布删掉的 chunk，表现是发布后白屏。**如果前面还套了 CDN，必须在 CDN 上遵守
+> 同一套缓存策略，或者每次发布刷新这四个路径**，否则 nginx 这层的设置会被 CDN 覆盖掉。
