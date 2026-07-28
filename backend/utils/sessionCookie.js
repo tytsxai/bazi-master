@@ -1,5 +1,14 @@
 const SESSION_COOKIE_NAME = 'bazi_session';
-const SESSION_COOKIE_MAX_AGE_MS = 30 * 60 * 1000;
+const SESSION_COOKIE_DEFAULT_MAX_AGE_MS = 30 * 60 * 1000;
+
+// The server expires idle sessions after SESSION_IDLE_MS; the cookie has to agree.
+// Pinned at 30 minutes, raising SESSION_IDLE_MS had no effect — the browser dropped the
+// cookie on the old schedule and users were logged out early with a still-valid session
+// on the server. Read at call time so tests and reloads see the current value.
+const resolveSessionMaxAgeMs = () => {
+  const parsed = Number.parseInt(process.env.SESSION_IDLE_MS, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : SESSION_COOKIE_DEFAULT_MAX_AGE_MS;
+};
 
 const parseBoolean = (value) => {
   if (typeof value !== 'string') return null;
@@ -39,7 +48,7 @@ const buildSessionCookieOptions = () => {
     httpOnly: true,
     secure,
     sameSite,
-    maxAge: SESSION_COOKIE_MAX_AGE_MS,
+    maxAge: resolveSessionMaxAgeMs(),
     path: '/',
     ...(domain ? { domain } : {}),
   };
