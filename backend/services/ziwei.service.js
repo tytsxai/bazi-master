@@ -250,8 +250,10 @@ export const calculateZiweiChart = (data) => {
   // 火铃：年支三合组定起点，自起点顺行至生时。
   const huoStart = findGroupBranch(HUOLING_START_BY_YEAR_GROUP, yearBranch, 'huo');
   const lingStart = findGroupBranch(HUOLING_START_BY_YEAR_GROUP, yearBranch, 'ling');
-  if (huoStart) addStar(normalizeIndex(branchIndexOf(huoStart) + timeBranchIndex), 'huoxing', 'malefic');
-  if (lingStart) addStar(normalizeIndex(branchIndexOf(lingStart) + timeBranchIndex), 'lingxing', 'malefic');
+  if (huoStart)
+    addStar(normalizeIndex(branchIndexOf(huoStart) + timeBranchIndex), 'huoxing', 'malefic');
+  if (lingStart)
+    addStar(normalizeIndex(branchIndexOf(lingStart) + timeBranchIndex), 'lingxing', 'malefic');
 
   // 空劫：亥宫起子时，地劫顺行、地空逆行。
   addStar(normalizeIndex(11 + timeBranchIndex), 'dijie', 'malefic');
@@ -276,7 +278,12 @@ export const calculateZiweiChart = (data) => {
   });
   majorPeriods.forEach((period) => {
     const target = palaces[period.palaceIndex];
-    if (target) target.majorPeriod = { order: period.order, startAge: period.startAge, endAge: period.endAge };
+    if (target)
+      target.majorPeriod = {
+        order: period.order,
+        startAge: period.startAge,
+        endAge: period.endAge,
+      };
   });
 
   return {
@@ -342,8 +349,7 @@ export const calculateFlowYear = (chart, targetYear) => {
   const flowBranch = flowYearGanzhi[1];
   const flowIndex = branchIndexOf(flowBranch);
 
-  const majorPeriod =
-    chart.majorPeriods.find((p) => age >= p.startAge && age <= p.endAge) || null;
+  const majorPeriod = chart.majorPeriods.find((p) => age >= p.startAge && age <= p.endAge) || null;
   const minorIndex = calculateMinorPeriodIndex(chart.lunar.yearBranch, chart.gender, age);
 
   return {

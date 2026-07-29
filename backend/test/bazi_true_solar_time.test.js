@@ -37,19 +37,23 @@ describe('真太阳时参与排盘', () => {
   it('校正确实改变了时柱，而不只是挂了个字段', () => {
     const clock = performCalculation(BASE);
     const solar = performCalculation({ ...BASE, ...FAR_WEST });
-    assert.notDeepEqual(
-      solar.pillars.hour,
-      clock.pillars.hour,
-      '跨两个时辰的校正后时柱必须不同'
-    );
+    assert.notDeepEqual(solar.pillars.hour, clock.pillars.hour, '跨两个时辰的校正后时柱必须不同');
     // 年月日柱不受影响（同一天内回拨未跨日）
     assert.deepEqual(solar.pillars.year, clock.pillars.year);
     assert.deepEqual(solar.pillars.day, clock.pillars.day);
   });
 
   it('经度越偏西回拨越多', () => {
-    const west = resolveChartTime({ ...BASE, birthLocation: '43.8,87.6', timezoneOffsetMinutes: 480 });
-    const east = resolveChartTime({ ...BASE, birthLocation: '31.2,121.5', timezoneOffsetMinutes: 480 });
+    const west = resolveChartTime({
+      ...BASE,
+      birthLocation: '43.8,87.6',
+      timezoneOffsetMinutes: 480,
+    });
+    const east = resolveChartTime({
+      ...BASE,
+      birthLocation: '31.2,121.5',
+      timezoneOffsetMinutes: 480,
+    });
     assert.ok(
       west.trueSolarTime.longitudeCorrection < east.trueSolarTime.longitudeCorrection,
       '偏西地点的经度校正应更负'
@@ -59,7 +63,11 @@ describe('真太阳时参与排盘', () => {
   });
 
   it('已知城市名与坐标串两种写法都能解析', () => {
-    const byName = resolveChartTime({ ...BASE, birthLocation: 'Beijing', timezoneOffsetMinutes: 480 });
+    const byName = resolveChartTime({
+      ...BASE,
+      birthLocation: 'Beijing',
+      timezoneOffsetMinutes: 480,
+    });
     assert.ok(byName.trueSolarTime?.applied);
     assert.equal(byName.trueSolarTime.location.name, 'Beijing');
   });
@@ -95,7 +103,11 @@ describe('缓存键区分排盘因子', () => {
 
   it('不同出生地不得共用一条缓存', () => {
     const a = buildBaziCacheKey({ ...BASE, birthLocation: 'Beijing', timezoneOffsetMinutes: 480 });
-    const b = buildBaziCacheKey({ ...BASE, birthLocation: '43.8,87.6', timezoneOffsetMinutes: 480 });
+    const b = buildBaziCacheKey({
+      ...BASE,
+      birthLocation: '43.8,87.6',
+      timezoneOffsetMinutes: 480,
+    });
     assert.notEqual(a, b, '不同出生地的真太阳时不同，缓存键必须区分');
   });
 

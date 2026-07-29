@@ -4,7 +4,6 @@ import './bootstrap/asyncRoutes.js';
 import express from 'express';
 import http from 'http';
 import compression from 'compression';
-import cookieParser from 'cookie-parser';
 import { pathToFileURL } from 'url';
 import swaggerUi from 'swagger-ui-express';
 import * as Sentry from '@sentry/node';
@@ -17,15 +16,14 @@ import { beginShutdown, isShuttingDown, resolveDrainMs } from './services/lifecy
 
 // Import configurations
 import { logger } from './config/logger.js';
-import { ensureDatabaseUrl } from './config/database.js';
-import { getBaziCacheConfig, getServerConfig, initAppConfig } from './config/app.js';
-import { prisma } from './config/prisma.js';
+import { getBaziCacheConfig, initAppConfig } from './config/app.js';
 import { createRedisMirror, initRedis } from './config/redis.js';
 
 // Import middleware
 import {
   createCorsMiddleware,
   createRateLimitMiddleware,
+  docsBasicAuth,
   helmetMiddleware,
   requestIdMiddleware,
   urlLengthMiddleware,
@@ -33,7 +31,6 @@ import {
   globalErrorHandler,
   notFoundHandler,
 } from './middleware/index.js';
-import { sessionStore, docsBasicAuth } from './middleware/auth.js';
 
 // Import utilities
 import { patchExpressAsync } from './utils/express.js';
@@ -41,18 +38,11 @@ import { redactSensitive } from './utils/redact.js';
 // Import services
 import { buildOpenApiSpec } from './services/apiSchema.service.js';
 import { setBaziCacheMirror } from './services/cache.service.js';
-import { setResetTokenMirrors } from './services/resetTokens.service.js';
-import { OAUTH_STATE_TTL_MS, setOauthStateMirror } from './services/oauth.service.js';
-import {
-  CREDENTIAL_REVOCATION_TTL_MS,
-  setCredentialRevocationMirror,
-} from './services/credentialRevocation.service.js';
 
 // Import routes
 import apiRouter from './routes/api.js';
 
 // Initialize configurations
-ensureDatabaseUrl();
 const appConfig = initAppConfig();
 const { ttlMs: BAZI_CACHE_TTL_MS } = getBaziCacheConfig();
 const SERVICE_NAME = 'bazi-master-backend';
@@ -63,7 +53,6 @@ const {
   RATE_LIMIT_ENABLED,
   RATE_LIMIT_MAX,
   RATE_LIMIT_WINDOW_MS,
-  SESSION_IDLE_MS,
   allowedOrigins,
   trustProxy,
   IS_PRODUCTION,
@@ -115,7 +104,6 @@ if (trustProxy) {
 app.use(helmetMiddleware);
 app.use(createCorsMiddleware(allowedOrigins));
 app.use(compression());
-app.use(cookieParser());
 // Request ID middleware (ensure every response has a request id)
 app.use(requestIdMiddleware);
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
@@ -127,13 +115,7 @@ import pinoHttp from 'pino-http';
 // produces thousands of lines a day that say nothing, and drowns real traffic.
 // /metrics belongs here too: a scraper polls it as often as the probes, and its lines say
 // nothing that the metrics themselves do not already report.
-const HEALTH_PROBE_PATHS = new Set([
-  '/live',
-  '/health',
-  '/metrics',
-  '/api/health',
-  '/api/ready',
-]);
+const HEALTH_PROBE_PATHS = new Set(['/live', '/health', '/metrics', '/api/health', '/api/ready']);
 
 app.use(
   pinoHttp({
@@ -141,10 +123,6 @@ app.use(
     autoLogging: {
       ignore: (req) => HEALTH_PROBE_PATHS.has((req.url || '').split('?')[0]),
     },
-    // Attaches the authenticated user to the completed-request line. Evaluated at
-    // response time, so it sees req.user even though requireAuth runs after this
-    // middleware. Without it, "it broke for me at 3pm" can only be traced by IP.
-    customProps: (req) => ({ userId: req.user?.id ?? null }),
     // Define a custom success message
     customSuccessMessage: function (req, res) {
       if (res.statusCode === 404) {
@@ -200,16 +178,16 @@ app.get('/health', async (req, res) => {
     });
   }
 
-  const { db, redis, ok } = await getHealthSnapshot();
+  const { checks, ok } = await getHealthSnapshot();
 
   if (!ok) {
-    logger.warn({ checks: { db, redis } }, 'Health check failed');
+    logger.warn({ checks }, 'Health check failed');
   }
 
   res.status(ok ? 200 : 503).json({
     service: SERVICE_NAME,
     status: ok ? 'ok' : 'degraded',
-    checks: { db, redis },
+    checks,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
@@ -248,9 +226,7 @@ app.use(
     '/api/bazi/ai-interpret',
     '/api/bazi/full-analysis',
     '/api/tarot/ai-interpret',
-    // Image generation is the most expensive call the service makes and was only
-    // covered by the global limiter.
-    '/api/media/soul-portrait',
+    '/api/iching/ai-interpret',
   ],
   strictRateLimitMiddleware
 );
@@ -323,78 +299,31 @@ const applyServerTimeouts = (
 
 applyServerTimeouts(server);
 
-// Initialize WebSocket Server
-import { initWebsocketServer, closeWebsocketServer } from './services/websocket.service.js';
-if (NODE_ENV !== 'test') {
-  initWebsocketServer(server);
-}
-
+// Redis holds exactly one thing now: the shared BaZi calculation cache. It used to also
+// back sessions, OAuth state, reset tokens and credential revocation, all of which were
+// correctness-critical across instances. A calculation cache is not — a miss just costs
+// CPU — which is why Redis is optional even in production.
 const initRedisMirrors = async ({
-  require = IS_PRODUCTION,
+  require = false,
   initRedisFn = initRedis,
   createRedisMirrorFn = createRedisMirror,
-  sessionStoreRef = sessionStore,
   setBaziCacheMirrorFn = setBaziCacheMirror,
-  setResetTokenMirrorsFn = setResetTokenMirrors,
-  setOauthStateMirrorFn = setOauthStateMirror,
-  setCredentialRevocationMirrorFn = setCredentialRevocationMirror,
   loggerInstance = logger,
-  sessionIdleMs = SESSION_IDLE_MS,
   baziCacheTtlMs = BAZI_CACHE_TTL_MS,
-  resetTokenTtlMs = getServerConfig().resetTokenTtlMs,
-  oauthStateTtlMs = OAUTH_STATE_TTL_MS,
 } = {}) => {
   const client = await initRedisFn({ require });
   if (!client) return;
-  sessionStoreRef.setMirror(
-    createRedisMirrorFn(client, {
-      prefix: 'session:',
-      ttlMs: sessionIdleMs,
-    })
-  );
   setBaziCacheMirrorFn(
     createRedisMirrorFn(client, {
       prefix: 'bazi-cache:',
       ttlMs: baziCacheTtlMs,
     })
   );
-  setResetTokenMirrorsFn({
-    tokenMirror: createRedisMirrorFn(client, {
-      prefix: 'reset-token:',
-      ttlMs: resetTokenTtlMs,
-    }),
-    userMirror: createRedisMirrorFn(client, {
-      prefix: 'reset-token-user:',
-      ttlMs: resetTokenTtlMs,
-    }),
-  });
-  setOauthStateMirrorFn(
-    createRedisMirrorFn(client, {
-      prefix: 'oauth-state:',
-      ttlMs: oauthStateTtlMs,
-    })
-  );
-  setCredentialRevocationMirrorFn(
-    createRedisMirrorFn(client, {
-      prefix: 'credential-revoked:',
-      ttlMs: CREDENTIAL_REVOCATION_TTL_MS,
-    })
-  );
-  loggerInstance.info(
-    '[redis] session, bazi cache, oauth state, reset token and credential revocation mirrors enabled'
-  );
+  loggerInstance.info('[redis] bazi calculation cache mirror enabled');
 };
 
 // Graceful shutdown handling
-const setupGracefulShutdown = (
-  server,
-  {
-    loggerInstance = logger,
-    prismaClient = prisma,
-    processRef = process,
-    closeWebsocketServerFn = closeWebsocketServer,
-  } = {}
-) => {
+const setupGracefulShutdown = (server, { loggerInstance = logger, processRef = process } = {}) => {
   // Local re-entrancy guard. Distinct from the shared lifecycle flag, which is what the
   // readiness probes read and which stays set for the rest of the process's life.
   let shutdownStarted = false;
@@ -434,39 +363,24 @@ const setupGracefulShutdown = (
 
     timeout.unref();
 
-    const finalize = async () => {
-      try {
-        await prismaClient.$disconnect();
-        loggerInstance.info('Prisma disconnected.');
-      } catch (error) {
-        loggerInstance.error({ err: error }, 'Error during Prisma disconnect');
-      } finally {
-        clearTimeout(timeout);
-        loggerInstance.info('Graceful shutdown complete.');
-        processRef.exit(processRef.exitCode || 0);
-      }
+    const finalize = () => {
+      clearTimeout(timeout);
+      loggerInstance.info('Graceful shutdown complete.');
+      processRef.exit(processRef.exitCode || 0);
     };
 
     const stopAccepting = () => {
       try {
-        if (typeof closeWebsocketServerFn === 'function') {
-          closeWebsocketServerFn({ loggerInstance });
-        }
-      } catch (error) {
-        loggerInstance.error({ err: error }, '[ws] Failed to shutdown WebSocket server');
-      }
-
-      try {
         if (typeof server?.close === 'function') {
           server.close(() => {
-            void finalize();
+            finalize();
           });
         } else {
-          void finalize();
+          finalize();
         }
       } catch (error) {
         loggerInstance.error({ err: error }, 'Error during server close');
-        void finalize();
+        finalize();
       }
     };
 
@@ -503,29 +417,22 @@ const parseEnabledFlag = (value, fallback = true) => {
   return fallback;
 };
 
+// The engine stores nothing and authenticates nobody, so almost everything that used to
+// be a hard error here is gone with the subsystem that needed it. What remains an error is
+// only what makes the deployment unsafe or unusable; the rest is a warning, because a
+// service that refuses to boot over a missing nice-to-have is its own outage.
 const validateProductionConfig = ({ env = process.env } = {}) => {
   const errors = [];
   const warnings = [];
-  const allowDevOauthEnabled = parseEnabledFlag(env.ALLOW_DEV_OAUTH, false);
   const allowLocalhostEnabled = parseEnabledFlag(env.ALLOW_LOCALHOST_PROD, false);
-  const passwordResetEnabled = parseEnabledFlag(env.PASSWORD_RESET_ENABLED, true);
 
-  if (!env.SESSION_TOKEN_SECRET || env.SESSION_TOKEN_SECRET.length < 32) {
-    errors.push('SESSION_TOKEN_SECRET must be at least 32 characters in production');
-  }
-  if (
-    !env.DATABASE_URL ||
-    (!env.DATABASE_URL.startsWith('postgresql://') && !env.DATABASE_URL.startsWith('postgres://'))
-  ) {
-    errors.push('DATABASE_URL must be PostgreSQL in production');
-  }
-  if (!env.REDIS_URL) {
-    errors.push(
-      'REDIS_URL must be configured in production to ensure consistent sessions/caching across instances.'
+  // No origins at all means every cross-origin browser call is rejected. A server-to-server
+  // or agent caller sends no Origin header and is unaffected, so this is a warning rather
+  // than a hard stop — a headless deployment legitimately needs no origin list.
+  if (!env.CORS_ALLOWED_ORIGINS) {
+    warnings.push(
+      'CORS_ALLOWED_ORIGINS is empty. Browser clients will be blocked; server-side and agent callers are unaffected.'
     );
-  }
-  if (!env.FRONTEND_URL || (!allowLocalhostEnabled && env.FRONTEND_URL.includes('localhost'))) {
-    warnings.push('FRONTEND_URL should not be localhost in production');
   }
   if (
     !env.BACKEND_BASE_URL ||
@@ -533,20 +440,21 @@ const validateProductionConfig = ({ env = process.env } = {}) => {
   ) {
     warnings.push('BACKEND_BASE_URL should not be localhost in production');
   }
-  if (!env.ADMIN_EMAILS) {
-    warnings.push('ADMIN_EMAILS is empty. Admin endpoints will be inaccessible.');
-  }
+  // Hard error: without it /api-docs answers 500 in production anyway, and finding that out
+  // from a user report is worse than finding it out at boot.
   if (!env.DOCS_PASSWORD) {
-    warnings.push('DOCS_PASSWORD is not configured. /api-docs will return 500 in production.');
+    errors.push('DOCS_PASSWORD must be configured in production; /api-docs is unusable without it');
+  }
+  if (!env.REDIS_URL) {
+    warnings.push(
+      'REDIS_URL is not configured. Each instance keeps its own in-memory calculation cache; results stay correct, hit rate drops.'
+    );
+  }
+  if (!env.METRICS_TOKEN) {
+    warnings.push('METRICS_TOKEN is not configured. /metrics returns 404 in production.');
   }
   if (!env.SENTRY_DSN) {
     warnings.push('SENTRY_DSN is not configured. Monitoring and error tracking will be disabled.');
-  }
-  if (allowDevOauthEnabled) {
-    errors.push('ALLOW_DEV_OAUTH must be false in production');
-  }
-  if (passwordResetEnabled && (!env.SMTP_HOST || !env.SMTP_FROM)) {
-    errors.push('SMTP_HOST and SMTP_FROM must be configured when password reset is enabled');
   }
   if (!env.TRUST_PROXY) {
     warnings.push(
@@ -559,13 +467,12 @@ const validateProductionConfig = ({ env = process.env } = {}) => {
 
 const startServer = async ({
   serverInstance = server,
-  prismaClient = prisma,
   initRedisMirrorsFn = initRedisMirrors,
   loggerInstance = logger,
   appConfigValue = appConfig,
   processRef = process,
 } = {}) => {
-  setupGracefulShutdown(serverInstance, { loggerInstance, prismaClient, processRef });
+  setupGracefulShutdown(serverInstance, { loggerInstance, processRef });
 
   const errors = [];
   const warnings = [];
@@ -588,21 +495,15 @@ const startServer = async ({
     return;
   }
 
+  // Redis is a cache, so a connection failure degrades the service rather than breaking
+  // it — booting anyway is the right call. Logged at error so the degradation is visible.
   try {
-    await prismaClient.$connect();
-    loggerInstance.info('[db] Database connection established');
+    await initRedisMirrorsFn({ require: false });
   } catch (error) {
-    loggerInstance.fatal({ err: error }, '[db] Failed to connect to database');
-    processRef.exit(1);
-    return;
-  }
-
-  try {
-    await initRedisMirrorsFn({ require: appConfigValue.IS_PRODUCTION });
-  } catch (error) {
-    loggerInstance.fatal({ err: error }, '[redis] Failed to connect to Redis');
-    processRef.exit(1);
-    return;
+    loggerInstance.error(
+      { err: error },
+      '[redis] Cache mirror unavailable; continuing with the per-process cache'
+    );
   }
 
   const bindHost =
@@ -626,7 +527,6 @@ if (NODE_ENV !== 'test' && isMain) {
 export {
   app,
   server,
-  prisma,
   startServer,
   setupGracefulShutdown,
   initRedisMirrors,

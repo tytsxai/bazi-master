@@ -13,19 +13,7 @@ const getAiConfig = () => {
     aiMaxTokens: config.aiMaxTokens,
     aiTimeoutMs: config.aiTimeoutMs,
     availableProviders: config.availableProviders,
-    resetRequestMinDurationMs: config.resetRequestMinDurationMs,
   };
-};
-
-// Shared with the OAuth callbacks, which need the same deadline behaviour.
-
-const ensureMinDuration = async (startedAtMs, minDurationMs) => {
-  if (!Number.isFinite(minDurationMs) || minDurationMs <= 0) return;
-  const elapsed = Date.now() - startedAtMs;
-  const remaining = minDurationMs - elapsed;
-  if (remaining > 0) {
-    await new Promise((resolve) => setTimeout(resolve, remaining));
-  }
 };
 
 const normalizeProviderName = (value) =>
@@ -367,8 +355,6 @@ const generateAIContent = async ({ system, user, messages, fallback, provider, o
       '[ai] Provider request failed'
     );
     throw error;
-  } finally {
-    await ensureMinDuration(startedAt, config.resetRequestMinDurationMs);
   }
 };
 

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
-  "description": "Express + Prisma API for BaZi Master, including BaZi, Tarot, I Ching, Zodiac, Zi Wei Dou Shu, Synastry, auth, OpenAPI, health checks and AI providers.",
+  "description": "Stateless HTTP surface over the BaZi / Zi Wei Dou Shu / Tarot / I Ching / Zodiac / Synastry calculation engine, with OpenAPI, health checks and optional AI providers.",
   "license": "MIT",
   "homepage": "https://github.com/tytsxai/bazi-master#readme",
   "repository": {
@@ -25,40 +25,29 @@
     "ziwei-doushu",
     "astrology",
     "express",
-    "prisma",
-    "postgresql",
     "openapi",
     "ai-provider"
   ],
   "scripts": {
     "dev": "node server.js",
     "start": "node scripts/start.mjs",
-    "test": "node scripts/run-tests-with-db.mjs --test --test-concurrency=1",
-    "test:coverage": "node scripts/run-tests-with-db.mjs --experimental-test-coverage --test --test-concurrency=1",
-    "postinstall": "node scripts/prisma.mjs generate --schema=../prisma/schema.prisma",
-    "prisma:generate": "node scripts/prisma.mjs generate --schema=../prisma/schema.prisma",
-    "prisma:push": "node scripts/prisma.mjs db push --schema=../prisma/schema.prisma",
-    "prisma:migrate:deploy": "node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma"
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:coverage": "node --experimental-test-coverage --test --test-concurrency=1 \"test/**/*.test.js\""
   },
   "dependencies": {
-    "@prisma/client": "^5.10.2",
     "@sentry/node": "^10.32.1",
     "@sentry/profiling-node": "^10.32.1",
     "compression": "^1.8.1",
-    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^4.21.1",
     "helmet": "^7.1.0",
     "lunar-javascript": "^1.7.7",
-    "nodemailer": "^9.0.3",
     "pino": "^10.1.0",
     "pino-http": "^11.0.0",
     "redis": "^4.6.14",
-    "swagger-ui-express": "^5.0.0",
-    "ws": "^8.18.3"
+    "swagger-ui-express": "^5.0.0"
   },
   "devDependencies": {
-    "prisma": "^5.10.2",
     "supertest": "^7.1.4"
   }
 }

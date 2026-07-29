@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { withTimeout, checkDatabase, checkRedis } from '../services/health.service.js';
+import { withTimeout, checkRedis } from '../services/health.service.js';
 
 describe('health.service more coverage', () => {
   it('withTimeout returns original promise when disabled', async () => {
@@ -20,42 +20,6 @@ describe('health.service more coverage', () => {
     } finally {
       clearTimeout(keepAlive);
     }
-  });
-
-  it('checkDatabase returns ok true/false', async () => {
-    assert.deepEqual(
-      await checkDatabase({
-        prismaClient: { user: { findFirst: async () => ({ id: 1 }) } },
-        timeoutMs: 1,
-      }),
-      { ok: true }
-    );
-    assert.deepEqual(
-      await checkDatabase({
-        prismaClient: {
-          user: {
-            findFirst: async () => {
-              throw new Error('db');
-            },
-          },
-        },
-        timeoutMs: 1,
-      }),
-      { ok: false, error: 'db' }
-    );
-    assert.deepEqual(
-      await checkDatabase({
-        prismaClient: {
-          user: {
-            findFirst: async () => {
-              throw null;
-            },
-          },
-        },
-        timeoutMs: 1,
-      }),
-      { ok: false, error: 'db_check_failed' }
-    );
   });
 
   it('checkRedis covers disabled/unavailable/ok/error', async () => {

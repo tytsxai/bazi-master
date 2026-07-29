@@ -23,28 +23,10 @@ const withEnv = async (patch, run) => {
 };
 
 describe('app config more coverage', () => {
-  it('normalizeOrigin returns empty string on invalid URLs', async () => {
-    await withEnv(
-      {
-        NODE_ENV: 'test',
-        FRONTEND_URL: 'not a url',
-        WECHAT_FRONTEND_URL: 'also bad',
-        CORS_ALLOWED_ORIGINS: '',
-      },
-      async () => {
-        const config = initAppConfig();
-        assert.ok(config.allowedOrigins instanceof Set);
-        assert.equal(config.allowedOrigins.has(''), true);
-      }
-    );
-  });
-
   it('parseOriginList expands loopback variants and tolerates invalid origins', async () => {
     await withEnv(
       {
         NODE_ENV: 'test',
-        FRONTEND_URL: 'http://example.com',
-        WECHAT_FRONTEND_URL: 'http://example.com',
         CORS_ALLOWED_ORIGINS: ' http://localhost:3000 , http://127.0.0.1:3000, not a url, ,',
       },
       async () => {
@@ -56,23 +38,30 @@ describe('app config more coverage', () => {
     );
   });
 
-  it('uses a development admin fallback and allows missing production admins', async () => {
-    await withEnv({ NODE_ENV: 'development', ADMIN_EMAILS: undefined }, async () => {
-      const config = getServerConfig();
-      assert.equal(config.adminEmails.has('admin@example.com'), true);
-    });
-
-    await withEnv({ NODE_ENV: 'production', ADMIN_EMAILS: undefined }, async () => {
-      const config = getServerConfig();
-      assert.equal(config.adminEmails.size, 0);
-    });
+  it('CORS_ALLOWED_ORIGINS is the only origin source in production', async () => {
+    // FRONTEND_URL used to be folded in here. It no longer is, and a deployment that still
+    // sets it must not silently keep working — that would hide the migration until the
+    // first cross-origin request from a client nobody remembered to re-list.
+    await withEnv(
+      {
+        NODE_ENV: 'production',
+        FRONTEND_URL: 'https://leftover.example.com',
+        CORS_ALLOWED_ORIGINS: 'https://client.example.com',
+      },
+      async () => {
+        const config = initAppConfig();
+        assert.equal(config.allowedOrigins.has('https://client.example.com'), true);
+        assert.equal(config.allowedOrigins.has('https://leftover.example.com'), false);
+        // Localhost defaults are development-only.
+        assert.equal(config.allowedOrigins.has('http://localhost:3000'), false);
+      }
+    );
   });
 
   it('falls back when numeric environment values are invalid', async () => {
     await withEnv(
       {
         NODE_ENV: 'production',
-        ADMIN_EMAILS: 'admin@example.com',
         PORT: 'bad-port',
         RATE_LIMIT_WINDOW_MS: 'not-a-number',
         RATE_LIMIT_MAX: 'also-bad',

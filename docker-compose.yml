@@ -1,23 +1,10 @@
+# 本地开发用的外部依赖。引擎本身无状态，唯一的可选依赖是 Redis（跨实例共享排盘缓存）。
+# 单实例开发通常连这个都不需要：不配 REDIS_URL，进程内缓存就够了。
 services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: bazi_master
-    ports:
-      - '5432:5432'
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres -d bazi_master']
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
   redis:
     image: redis:7
+    ports:
+      - '6379:6379'
     volumes:
       - redis_data:/data
     healthcheck:
@@ -27,5 +14,4 @@ services:
       retries: 5
 
 volumes:
-  postgres_data:
   redis_data:

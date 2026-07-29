@@ -103,7 +103,10 @@ export const buildPillarDetails = (pillars, dayMasterStem) => {
       stem,
       branch,
       ganzhi: `${stem}${branch}`,
-      stemTenGod: position === 'day' ? { key: 'rizhu', cn: '日主', name: 'Day Master' } : getTenGod(dayMasterStem, stem),
+      stemTenGod:
+        position === 'day'
+          ? { key: 'rizhu', cn: '日主', name: 'Day Master' }
+          : getTenGod(dayMasterStem, stem),
       hiddenStems: getHiddenStems(branch).map((hidden) => ({
         ...hidden,
         element: STEMS_MAP[hidden.stem]?.element || null,

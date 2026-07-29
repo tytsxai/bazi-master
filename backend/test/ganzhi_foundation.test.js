@@ -2,13 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { LunarUtil } from 'lunar-javascript';
 
-import {
-  STEMS,
-  BRANCHES,
-  NAYIN,
-  HIDDEN_STEMS,
-  SEXAGENARY_CYCLE,
-} from '../constants/ganzhi.js';
+import { STEMS, BRANCHES, NAYIN, HIDDEN_STEMS, SEXAGENARY_CYCLE } from '../constants/ganzhi.js';
 import {
   getNayin,
   getHiddenStems,
@@ -86,12 +80,30 @@ describe('地支藏干', () => {
 
   it('藏干本气的五行与地支五行一致', () => {
     const stemElement = {
-      甲: 'Wood', 乙: 'Wood', 丙: 'Fire', 丁: 'Fire', 戊: 'Earth',
-      己: 'Earth', 庚: 'Metal', 辛: 'Metal', 壬: 'Water', 癸: 'Water',
+      甲: 'Wood',
+      乙: 'Wood',
+      丙: 'Fire',
+      丁: 'Fire',
+      戊: 'Earth',
+      己: 'Earth',
+      庚: 'Metal',
+      辛: 'Metal',
+      壬: 'Water',
+      癸: 'Water',
     };
     const branchElement = {
-      子: 'Water', 丑: 'Earth', 寅: 'Wood', 卯: 'Wood', 辰: 'Earth', 巳: 'Fire',
-      午: 'Fire', 未: 'Earth', 申: 'Metal', 酉: 'Metal', 戌: 'Earth', 亥: 'Water',
+      子: 'Water',
+      丑: 'Earth',
+      寅: 'Wood',
+      卯: 'Wood',
+      辰: 'Earth',
+      巳: 'Fire',
+      午: 'Fire',
+      未: 'Earth',
+      申: 'Metal',
+      酉: 'Metal',
+      戌: 'Earth',
+      亥: 'Water',
     };
     BRANCHES.forEach((branch) => {
       assert.equal(
@@ -209,7 +221,11 @@ describe('旬空与五行局', () => {
   it('五行局由命宫干支纳音取得', () => {
     // 甲子纳音海中金 → 金四局
     assert.deepEqual(getFiveElementBureau('甲', '子'), {
-      value: 4, cn: '金四局', key: 'metal4', nayin: '海中金', element: 'Metal',
+      value: 4,
+      cn: '金四局',
+      key: 'metal4',
+      nayin: '海中金',
+      element: 'Metal',
     });
     // 丙寅纳音炉中火 → 火六局
     assert.equal(getFiveElementBureau('丙', '寅').value, 6);

@@ -1,58 +1,11 @@
+import { parseOriginList } from '../middleware/cors.middleware.js';
+
 const readNumber = (value, fallback) => {
   if (value === undefined || value === null || value === '') {
     return Number(fallback);
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : Number(fallback);
-};
-
-const parseAdminEmails = (raw, nodeEnv = '') => {
-  if (typeof raw !== 'string' || raw.trim() === '') {
-    return nodeEnv === 'production' ? new Set() : new Set(['admin@example.com']);
-  }
-  return new Set(
-    raw
-      .split(',')
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean)
-  );
-};
-
-const normalizeOrigin = (value) => {
-  if (!value || typeof value !== 'string') return '';
-  try {
-    const url = new URL(value);
-    return url.origin;
-  } catch {
-    return '';
-  }
-};
-
-const expandLoopbackOrigins = (origin) => {
-  if (!origin || typeof origin !== 'string') return [];
-  const origins = new Set([origin]);
-
-  try {
-    const url = new URL(origin);
-    if (url.hostname === 'localhost') {
-      origins.add(origin.replace('localhost', '127.0.0.1'));
-    } else if (url.hostname === '127.0.0.1') {
-      origins.add(origin.replace('127.0.0.1', 'localhost'));
-    }
-  } catch {
-    // Ignore invalid URLs
-  }
-
-  return Array.from(origins);
-};
-
-const parseOriginList = (value) => {
-  if (!value || typeof value !== 'string') return [];
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .flatMap(expandLoopbackOrigins);
 };
 
 // TRUST_PROXY=1 must mean "trust exactly one hop", not Express's boolean `true`
@@ -70,10 +23,9 @@ const parseTrustProxy = (raw) => {
 
 export const getServerConfig = () => {
   const port = readNumber(process.env.PORT, 4000);
-  // Was 50mb, applied to every route including unauthenticated ones. express.json()
-  // buffers and parses the whole body, so a handful of concurrent max-size requests
-  // amplify into gigabytes of heap and OOM the container. Nothing here needs more than
-  // a megabyte; bulk import is chunked via IMPORT_BATCH_SIZE.
+  // express.json() buffers and parses the whole body, so a handful of concurrent
+  // max-size requests amplify into gigabytes of heap and OOM the container. No endpoint
+  // here takes more than a few kilobytes of birth data.
   const jsonBodyLimit = process.env.JSON_BODY_LIMIT || '1mb';
   const maxUrlLength = readNumber(process.env.MAX_URL_LENGTH, 16384);
   const nodeEnv = process.env.NODE_ENV || '';
@@ -95,34 +47,7 @@ export const getServerConfig = () => {
   const aiMaxTokens = readNumber(process.env.AI_MAX_TOKENS, 700);
   const aiTimeoutMs = readNumber(process.env.AI_TIMEOUT_MS, 15000);
 
-  const resetTokenTtlMs = readNumber(process.env.RESET_TOKEN_TTL_MS, 30 * 60 * 1000);
-  const resetRequestMinDurationMs = readNumber(process.env.RESET_REQUEST_MIN_DURATION_MS, 350);
-  const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
-  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
-  const googleRedirectUri =
-    process.env.GOOGLE_REDIRECT_URI || `http://localhost:${port}/api/auth/google/callback`;
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS, nodeEnv);
-  const sessionTokenSecret =
-    process.env.SESSION_TOKEN_SECRET ||
-    (nodeEnv === 'test' ? 'test-session-secret-for-auth-me-test' : '');
-  const allowDevOauthRaw = process.env.ALLOW_DEV_OAUTH;
-  const allowDevOauth =
-    allowDevOauthRaw === undefined || allowDevOauthRaw === ''
-      ? !isProduction
-      : allowDevOauthRaw === '1' || allowDevOauthRaw === 'true';
-
-  const wechatAppId = process.env.WECHAT_APP_ID || '';
-  const wechatAppSecret = process.env.WECHAT_APP_SECRET || '';
-  const wechatScope = process.env.WECHAT_SCOPE || 'snsapi_login';
-  const wechatFrontendUrl =
-    process.env.WECHAT_FRONTEND_URL || frontendUrl || 'http://localhost:3000';
-  const backendBaseUrl = process.env.BACKEND_BASE_URL || 'http://localhost:4000';
-  const wechatRedirectUri =
-    process.env.WECHAT_REDIRECT_URI || `${backendBaseUrl}/api/auth/wechat/callback`;
   const openApiBaseUrl = process.env.BACKEND_BASE_URL || `http://localhost:${port}`;
-
-  const importBatchSize = readNumber(process.env.IMPORT_BATCH_SIZE, 500);
   const shutdownTimeoutMs = readNumber(process.env.SHUTDOWN_TIMEOUT_MS, 10000);
   const corsAllowedOrigins = process.env.CORS_ALLOWED_ORIGINS || '';
   const availableProviders = [
@@ -145,31 +70,12 @@ export const getServerConfig = () => {
     aiMaxTokens,
     aiTimeoutMs,
     availableProviders,
-    resetTokenTtlMs,
-    resetRequestMinDurationMs,
-    googleClientId,
-    googleClientSecret,
-    googleRedirectUri,
-    frontendUrl,
-    adminEmails,
-    sessionTokenSecret,
-    allowDevOauth,
-    wechatAppId,
-    wechatAppSecret,
-    wechatScope,
-    wechatFrontendUrl,
-    wechatRedirectUri,
     openApiBaseUrl,
-    importBatchSize,
     shutdownTimeoutMs,
     corsAllowedOrigins,
     nodeEnv,
   };
 };
-
-export const getSessionConfig = () => ({
-  sessionIdleMs: readNumber(process.env.SESSION_IDLE_MS, 30 * 60 * 1000),
-});
 
 export const getBaziCacheConfig = () => ({
   ttlMs: readNumber(process.env.BAZI_CACHE_TTL_MS, 6 * 60 * 60 * 1000),
@@ -177,7 +83,6 @@ export const getBaziCacheConfig = () => ({
 });
 
 export const initAppConfig = () => {
-  const sessionConfig = getSessionConfig();
   const serverConfig = getServerConfig();
 
   const {
@@ -188,30 +93,18 @@ export const initAppConfig = () => {
     rateLimitMax: RATE_LIMIT_MAX,
     aiProvider: AI_PROVIDER,
     availableProviders: AVAILABLE_PROVIDERS,
-    googleClientId: GOOGLE_CLIENT_ID,
-    googleClientSecret: GOOGLE_CLIENT_SECRET,
-    googleRedirectUri: GOOGLE_REDIRECT_URI,
-    frontendUrl: FRONTEND_URL,
-    adminEmails: ADMIN_EMAILS,
-    allowDevOauth: DEV_OAUTH_ENABLED,
-    wechatAppId: WECHAT_APP_ID,
-    wechatAppSecret: WECHAT_APP_SECRET,
-    wechatScope: WECHAT_SCOPE,
-    wechatFrontendUrl: WECHAT_FRONTEND_URL,
-    wechatRedirectUri: WECHAT_REDIRECT_URI,
     nodeEnv: NODE_ENV,
   } = serverConfig;
 
   const RATE_LIMIT_ENABLED = NODE_ENV === 'production' || RATE_LIMIT_MAX > 0;
   const IS_PRODUCTION = NODE_ENV === 'production';
-  const DATABASE_URL = process.env.DATABASE_URL || '';
 
-  const baseFrontendOrigin = normalizeOrigin(FRONTEND_URL);
-  const wechatFrontendOrigin = normalizeOrigin(WECHAT_FRONTEND_URL);
+  // CORS_ALLOWED_ORIGINS is the only origin source. There used to be a FRONTEND_URL too,
+  // but its other jobs (OAuth redirects, password-reset email links) are gone, and two
+  // variables that both had to be right was a standing source of "CORS blocked" reports.
+  // The engine ships no UI of its own; whatever client calls it goes in this list.
   const allowedOrigins = new Set([
     ...parseOriginList(process.env.CORS_ALLOWED_ORIGINS),
-    baseFrontendOrigin,
-    wechatFrontendOrigin,
     ...(IS_PRODUCTION ? [] : ['http://localhost:3000', 'http://127.0.0.1:3000']),
   ]);
 
@@ -224,23 +117,10 @@ export const initAppConfig = () => {
     RATE_LIMIT_WINDOW_MS,
     RATE_LIMIT_MAX,
     RATE_LIMIT_ENABLED,
-    SESSION_IDLE_MS: sessionConfig.sessionIdleMs,
     AI_PROVIDER,
     AVAILABLE_PROVIDERS,
-    GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET,
-    GOOGLE_REDIRECT_URI,
-    FRONTEND_URL,
-    ADMIN_EMAILS,
-    DEV_OAUTH_ENABLED,
-    WECHAT_APP_ID,
-    WECHAT_APP_SECRET,
-    WECHAT_SCOPE,
-    WECHAT_FRONTEND_URL,
-    WECHAT_REDIRECT_URI,
     NODE_ENV,
     IS_PRODUCTION,
-    DATABASE_URL,
     allowedOrigins,
     trustProxy,
   };

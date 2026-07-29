@@ -1,33 +1,36 @@
 # 生产部署指南
 
-> 版本: v0.2.0 | 更新: 2026-07-28
+> 版本: v0.2.0 | 更新: 2026-07-29
 
-本指南以 Docker Compose 为例，目标环境：PostgreSQL + Redis + Nginx 反向代理。
+本指南以 Docker Compose 为例，目标环境：引擎 + 可选 Redis + Nginx 反向代理。
+
+**先说清楚这套部署有多轻。** 引擎是无状态纯计算：不存数据、不写文件、没有数据库。
+所以这份文档里**没有**数据库迁移、备份、恢复、灾难演练、连接池调优这些章节 ——
+它们连同存储层一起从项目里删除了。整个栈可以随时销毁重建，唯一会丢的是 Redis 里的排盘缓存，
+而那个重算一遍就有。
 
 ## 0. 准备配置
 
 1. 复制 `env.production.template` 为 `.env.production`，至少改掉这几项：
-   - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`
-   - `SESSION_TOKEN_SECRET=<32+ 随机字符>`
-   - `FRONTEND_URL=https://your-domain.com`
+   - `DOCS_PASSWORD=<强随机串>` —— **唯一的硬性必填项**，缺了它进程启动即退出
    - `BACKEND_BASE_URL=https://api.your-domain.com`
-   - `ADMIN_EMAILS`、`DOCS_PASSWORD`
+   - `CORS_ALLOWED_ORIGINS=https://app.your-domain.com`（浏览器客户端的来源，逗号分隔）
+   - `TRUST_PROXY=1`（按实际跳数，见[安全要点](#7-安全要点)）
    - AI 密钥可选：`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`
+   - `METRICS_TOKEN` 可选，但不配 `/metrics` 就是 404
 2. 将 `.env.production` 与 `docker-compose.prod.yml` 放在同一目录。
 
-> **`DATABASE_URL` 和 `REDIS_URL` 在这套编排里不要自己写。**
-> compose 会用 `POSTGRES_*` 三个值拼出 `DATABASE_URL`，`REDIS_URL` 固定指向内置的 redis
-> 服务；在 `.env.production` 里单独设这两个值不会生效。只有当后端跑在 compose 之外、
-> 或者要接托管数据库时才直接设置它们，同时也要改 compose 的 `environment` 段。
->
-> `POSTGRES_PASSWORD` 没有默认值：留空会让整个栈直接启动失败，而不是悄悄用弱口令跑起来。
+> `REDIS_URL` 在这套编排里不要自己写：compose 把它固定指向内置的 redis 服务。
+> 只有当引擎跑在 compose 之外、或者要接托管 Redis 时才直接设置它，同时改 compose 的
+> `environment` 段。
 
-> 后端和前端端口默认只绑定在 `127.0.0.1`，由前面的 nginx 终止 TLS。
+> 引擎端口默认只绑定在 `127.0.0.1`，由你自己那层 nginx 终止 TLS。
 > Docker 的端口发布会绕过 ufw/firewalld 直接写 iptables，所以不要随手改成 `0.0.0.0`；
-> 确有需要时通过 `BACKEND_BIND_ADDR` / `FRONTEND_BIND_ADDR` 显式放开。
+> 确有需要时通过 `BACKEND_BIND_ADDR` 显式放开。
 
 > `docker compose --env-file` 只用于变量替换，不会自动把所有变量注入容器。
-> `docker-compose.prod.yml` 已显式透传生产必需的后端变量（SMTP、Docs、Cookie、Sentry、超时、会话等）；新增生产变量时必须同步加入 compose `environment` 或使用受控的 `env_file`。
+> `docker-compose.prod.yml` 已显式透传引擎读取的每一个变量；新增变量时必须同步加进
+> compose 的 `environment` 段。`scripts/check-env-template.sh` 在 CI 里守着模板那一侧。
 
 ## 1. 构建与启动
 
@@ -35,39 +38,39 @@
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 ```
 
-> 如果未使用 prod 编排文件，可在现有 `docker-compose.yml` 上添加/覆盖相同环境变量。
+没有迁移步骤 —— 启动完就可以直接验证。
 
-## 2. 数据库迁移
+## 2. 健康检查
 
-```bash
-# 进入后端容器
-docker compose -f docker-compose.prod.yml exec backend sh
-# 应用迁移
-node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma
-```
-
-> 多实例部署建议：仅在部署流水线中执行一次迁移，并将 `RUN_MIGRATIONS_ON_START=false`，避免并发迁移竞争。
-
-## 3. 健康检查
-
-- 存活检查: `GET /live` - 仅进程存活（不依赖数据库/Redis）。
-- 健康检查: `GET /health` - 深度健康检查（数据库/Redis）。
-- 就绪检查: `GET /api/ready` - 深度检查（返回 `ready/not_ready`）。
-- 兼容探测: `GET /api/health` - 同样执行深度检查。
+- 存活检查 `GET /live` —— 只看进程，不碰任何依赖
+- 健康检查 `GET /health` —— 深度检查（含 Redis）
+- 就绪检查 `GET /api/ready` —— 深度检查，返回 `ready` / `not_ready`
+- 兼容探测 `GET /api/health` —— 同样是深度检查
 
 > **两类探针不要接错，接错会自己制造事故。**
 >
-> - **容器/进程重启探针用 `/live`**。它不碰数据库和 Redis。`docker-compose.prod.yml` 的
->   backend healthcheck 驱动 autoheal，如果改成深度检查，数据库抖动十秒就会把后端重启掉；
->   而后端在启动阶段连不上库会直接 `exit 1`，于是 `restart: always` 把一次可自愈的抖动
->   变成崩溃循环。
-> - **负载均衡摘流探针用 `/api/ready`**。它是深度检查，并且在收到 SIGTERM 后立刻返回 503
+> - **容器/进程重启探针用 `/live`**。它不碰 Redis。`docker-compose.prod.yml` 的 backend
+>   healthcheck 驱动 autoheal，如果改成深度检查，Redis 抖动十秒就会把引擎重启掉 ——
+>   而 Redis 只是缓存，摘掉它服务照常工作，重启只会把一次无害的抖动放大成一轮冷启动。
+> - **负载均衡摘流探针用 `/api/ready`**。它在收到 SIGTERM 后立刻返回 503
 >   （`status: "shutting_down"`），此时进程仍在正常服务存量请求。LB 应该据此摘流，而不是重启。
+
+```bash
+curl -f https://api.your-domain.com/live
+curl -f https://api.your-domain.com/health
+curl -f https://api.your-domain.com/api/ready
+```
+
+也可以直接跑仓库自带的部署验证脚本：
+
+```bash
+API_BASE_URL=https://api.your-domain.com ./scripts/verify-deployment.sh
+```
 
 ### 优雅停机与摘流
 
 收到 SIGTERM 后的顺序是：`/health` 和 `/api/ready` 立即转 503 → 等待 `SHUTDOWN_DRAIN_MS`
-→ 关闭监听端口 → 等存量请求跑完 → 断开 Prisma → 退出。
+→ 关闭监听端口 → 等存量请求跑完 → 退出。
 
 本机实测（`SHUTDOWN_DRAIN_MS=3000`，直接对进程发 SIGTERM）：
 
@@ -87,7 +90,7 @@ node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma
 - **小于** 编排的停机宽限期（`docker-compose.prod.yml` 里 `stop_grace_period: 30s`），
   否则排水没走完就被 SIGKILL。
 
-**默认的 5000 只够用于反应快的 LB。**按实际探测参数查表，别照抄默认值：
+**默认的 5000 只够用于反应快的 LB。** 按实际探测参数查表，别照抄默认值：
 
 | 摘流方  | 探测间隔 × 失败阈值（默认）    | `SHUTDOWN_DRAIN_MS` 建议 | 还要改什么                               |
 | ------- | ------------------------------ | ------------------------ | ---------------------------------------- |
@@ -103,15 +106,7 @@ node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma
 强制退出的总时限是两者之和（默认 15s，仍在 `stop_grace_period: 30s` 之内）。
 调大排水窗口时务必同步抬高 `stop_grace_period`，否则排水会被 SIGKILL 截断。
 
-示例：
-
-```bash
-curl -f https://api.your-domain.com/live
-curl -f https://api.your-domain.com/health
-curl -f https://api.your-domain.com/api/ready
-```
-
-## 4. Nginx 反向代理示例
+## 3. Nginx 反向代理示例
 
 ```nginx
 server {
@@ -127,102 +122,138 @@ server {
   ssl_certificate /path/to/fullchain.pem;
   ssl_certificate_key /path/to/privkey.pem;
 
-  location / {
-    proxy_pass http://frontend:3000;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-  }
-
+  # 本仓库只提供 API。静态资源/界面由你自己的客户端部署决定，这里不做假设。
   location /api {
     proxy_pass http://backend:4000;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   }
 }
 ```
 
-## 5. 运行时注意事项
+注意这份示例**没有**转发 `/metrics` —— 那是刻意的，见[监控与日志](#5-监控与日志)。
+`/api-docs` 同理：它不在 `/api` 前缀下，默认不会被转发出去。
 
-- **Redis 必选**：生产环境必须配置 `REDIS_URL`，用于会话、八字缓存、OAuth state、密码重置等多实例一致性；未配置将阻止启动。
+## 4. 运行时注意事项
+
+- **Redis 可选**。不配 `REDIS_URL` 时每个实例各用自己的进程内排盘缓存，结果完全一致，
+  只是跨实例命中率低。它不承载任何与正确性相关的状态，所以 Redis 挂了不影响服务。
+- **多实例不需要任何协调**。引擎无状态，不需要粘性会话，扩容就是多起几个进程。
 - `AI_PROVIDER` 会根据密钥自动选择；无密钥时回退 `mock`。
-- 生产启用速率限制：设置 `RATE_LIMIT_WINDOW_MS` 与 `RATE_LIMIT_MAX`。
-- `TRUST_PROXY` 在反向代理后应设为 `1` 或具体 hop 数。
-- **密码重置邮件必配**：`SMTP_HOST` + `SMTP_FROM`（以及认证信息）必须配置，否则生产启动会失败。
-- **跨站部署**：前后端跨站点时需 `SESSION_COOKIE_SAMESITE=none` 且 `SESSION_COOKIE_SECURE=true`。
-- **可选超时**：可设置 `SERVER_KEEP_ALIVE_TIMEOUT_MS` / `SERVER_HEADERS_TIMEOUT_MS` / `SERVER_REQUEST_TIMEOUT_MS` 控制慢连接；`headersTimeout` 应大于 `keepAliveTimeout`。
-- **迁移开关**：默认启动时执行 `migrate deploy`，可通过 `RUN_MIGRATIONS_ON_START=false` 关闭（推荐多实例时关闭）。
-- **多实例会话一致性**：登录、续期、登出、OAuth state 与密码重置依赖 Redis mirror；生产 Redis 不可用应让实例退出或从就绪池摘除。
+- 生产默认开启速率限制，可用 `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` 调整。
+- **可选超时**：`SERVER_KEEP_ALIVE_TIMEOUT_MS` / `SERVER_HEADERS_TIMEOUT_MS` /
+  `SERVER_REQUEST_TIMEOUT_MS` 控制慢连接；`headersTimeout` 应大于 `keepAliveTimeout`。
+- **启动校验**：生产模式下只有 `DOCS_PASSWORD` 缺失会阻止启动；`CORS_ALLOWED_ORIGINS`、
+  `BACKEND_BASE_URL`、`REDIS_URL`、`METRICS_TOKEN`、`SENTRY_DSN`、`TRUST_PROXY` 缺失只打
+  warning，因为无头部署里它们各自都有合理的「就是不配」的情况。
 
-## 6. 监控与日志
+## 5. 监控与日志
 
-- 日志：Pino JSON 输出到 stdout，可接入 ELK/CloudWatch。
-- 建议监控：
-  - API p95/错误率
-  - DB 连接池使用率、慢查询
-  - Redis 命中率与内存占用
-  - `/api/ready` 返回状态
+日志是 Pino JSON 输出到 stdout，可接入 ELK/CloudWatch。
+探针路径（`/live`、`/health`、`/metrics`、`/api/health`、`/api/ready`）不写访问日志 ——
+它们每几秒一次，记下来只会把真实流量淹掉。
 
-## 7. 备份与恢复（PostgreSQL 示例）
+### 指标抓取（`/metrics`）
+
+Prometheus 文本格式，**需要 Bearer token**：
 
 ```bash
-# 推荐使用项目脚本（custom pg_dump + gzip + sha256，并验证 pg_restore 可读）
-BACKUP_DIR=./backups ./scripts/backup-db.sh
-
-# 恢复（覆盖现有库；脚本会先校验 gzip/checksum，并支持 dry-run）
-./scripts/restore-db.sh ./backups/<file>.sql.gz --dry-run
-./scripts/restore-db.sh ./backups/<file>.sql.gz
-
-# 手动 SQL 备份/恢复（仅适用于 plain SQL 备份）
-docker compose -f docker-compose.prod.yml exec postgres pg_dump -U postgres bazi_master | gzip > backups/bazi_master_sql_$(date +%Y%m%d_%H%M%S).sql.gz
-zcat backups/<file>.sql.gz | docker compose -f docker-compose.prod.yml exec -T postgres psql -U postgres bazi_master
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://127.0.0.1:4000/metrics
 ```
 
-## 8. 故障排查速查
+- `METRICS_TOKEN` 用 `openssl rand -hex 32` 生成。**生产环境不配就返回 404** ——
+  这个端点会报出连接数和内存占用，不是可以裸奔的东西。
+- 直接抓引擎 `127.0.0.1:4000`。它不在 `/api` 前缀下，反向代理默认不会转发它，
+  也**不要**把它暴露到公网。
+- 它复用健康检查的缓存快照（见下），所以抓取间隔再短也不会额外压依赖。
 
-- 容器状态：`docker compose -f docker-compose.prod.yml ps`
-- 后端日志：`docker compose -f docker-compose.prod.yml logs -f backend`
-- 数据库连通：`docker compose -f docker-compose.prod.yml exec postgres pg_isready`
-- Redis 连通：`docker compose -f docker-compose.prod.yml exec redis redis-cli ping`
+暴露的指标：
 
-## 9. 安全要点
+| 指标                                                      | 用途                                                                              |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `bazi_up` / `bazi_uptime_seconds`                         | 存活与重启检测                                                                    |
+| `bazi_shutting_down`                                      | 1 表示正在排水，滚动发布期间预期为 1                                              |
+| `bazi_dependency_up{dependency="..."}`                    | 每个依赖一条时间序列，由健康快照直接驱动。未配置的可选依赖算 `disabled`，上报为 1 |
+| `bazi_rate_limit_degraded`                                | 1 表示限流已退化成单实例内存计数                                                  |
+| `bazi_process_resident_memory_bytes` / `_heap_used_bytes` | 内存趋势                                                                          |
 
-- **HTTPS 强制启用**：所有生产流量必须通过 HTTPS；配置 Nginx 或负载均衡器处理 SSL 证书
-- **CORS 配置**：通过 `FRONTEND_URL` 和 `CORS_ALLOWED_ORIGINS` 限制允许的源域名；生产环境不应包含 localhost
-- **管理邮箱配置**：生产环境通过 `ADMIN_EMAILS` 显式配置管理员邮箱；默认值仅适用于开发环境
-- **API 文档保护**：生产环境建议设置 `DOCS_PASSWORD`（可选 `DOCS_USER`）保护 `/api-docs`
-- **反向代理设置**：配置 `TRUST_PROXY` 为 `1` 或具体跳数，确保正确解析客户端 IP
-- **会话安全**：使用强随机 `SESSION_TOKEN_SECRET`（32+字符）；生产环境必须配置 Redis 避免会话丢失
-- **API 密钥保护**：定期轮换 AI provider API keys；使用环境变量而非硬编码
-- **速率限制**：生产环境启用 `RATE_LIMIT_WINDOW_MS` 和 `RATE_LIMIT_MAX` 防止滥用
-- **WebSocket 连接上限（两层）**：`/ws/ai` 的 upgrade 握手由 `server.on('upgrade')`
-  处理，走在 Express 之前，**不经过 HTTP 速率限制**；而且**握手本身不做认证** —— 只校验
-  path 和 Origin，且不带 Origin 的非浏览器客户端直接放行。也就是说匿名占用连接槽位
-  没有任何前置条件，两层限制都是必需的：
-  - 后端 `WS_MAX_CONNECTIONS`（默认 500）是全局上限，保证进程不被撑爆，超限返回 503。
-    实测每条空闲连接约 9KB RSS，500 条约 4.4MB —— 真正的约束不是内存而是文件描述符，
-    所以 `docker-compose.prod.yml` 里显式钉了 `ulimits.nofile: 65536`（前端容器代理一条
-    WS 要占两个 fd，同样钉了）。
-  - `frontend/nginx.conf` 的 `limit_conn ws_per_ip 10` 是按来源 IP 的上限，防止单个
-    客户端占光那 500 个槽位（打满需要 50+ 个不同地址）。实测第 11 条连接返回 503，
-    关闭一条后槽位立即归还。
-  - **前提**：按 IP 限流依赖 `$binary_remote_addr` 是真实客户端地址。如果前端容器前面
-    还套了外层 nginx 或 CDN，必须先配 `set_real_ip_from` / `real_ip_header`（配置里已
-    留好注释位），否则全站共用一个计数桶 —— 和下面 `TRUST_PROXY` 数错跳数是同一个坑。
-- **`TRUST_PROXY` 要数对跳数**：写 `1` 表示"只信任一跳"。如果流量路径是
-  外层 nginx → 前端容器 nginx → 后端（即 `/api` 经前端容器转发），那是**两跳**，
-  写 1 会让 `req.ip` 变成前端容器的地址，于是所有用户共用一个速率限制桶，
-  一个人打满全站 429。`PRODUCTION.md` 第 4 节的 nginx 示例把 `/api` 直连后端，是一跳。
-- **端口安全**：关闭不必要的端口；仅暴露 HTTPS (443) 和可能的 SSH (22)
+建议的告警线：
 
-## 10. 升级步骤（简版）
+```yaml
+# 限流退化：Redis 没了，配额变成"每实例"而不是"整个部署"
+- alert: BaziRateLimitDegraded
+  expr: bazi_rate_limit_degraded == 1
+  for: 2m
+
+# 依赖不可用（排水期间 bazi_shutting_down=1，用它排除掉发布窗口）
+- alert: BaziDependencyDown
+  expr: bazi_dependency_up == 0 and bazi_shutting_down == 0
+  for: 2m
+```
+
+`bazi_rate_limit_degraded` 是时间窗口信号，Redis 恢复后约 60s 自动归零，不需要重启进程。
+同一件事在日志里是每 60s 一条 `[rate-limit] Redis unavailable` 的 error。
+
+### 健康检查缓存
+
+`/health` 注册在限流**之前**（探针不能被限流），代价是它天然对未认证的请求循环敞开。
+因此深度检查结果按 `HEALTH_CACHE_TTL_MS`（生产默认 1000ms）缓存，并且并发请求共享同一次探测：
+探针每 5–10s 一次，拿到的始终是新鲜结果；而一次洪水只会被折叠成每窗口一次真实探测。
+设为 `0` 可关闭缓存（每个请求都真的去探依赖，仅用于排查）。
+
+### 其余建议监控
+
+- API p95 / 错误率
+- Redis 内存占用逼近 `REDIS_MAXMEMORY` 的比例（到顶后按 `volatile-lru` 淘汰）
+- `/api/ready` 返回状态
+
+## 6. 故障排查速查
+
+```bash
+docker compose -f docker-compose.prod.yml ps                    # 容器状态
+docker compose -f docker-compose.prod.yml logs -f backend       # 引擎日志
+docker compose -f docker-compose.prod.yml exec redis redis-cli ping
+curl -f http://127.0.0.1:4000/api/system/cache-status           # 缓存与 Redis 连通性
+```
+
+| 症状             | 先看这里                                                            |
+| ---------------- | ------------------------------------------------------------------- |
+| 容器起来就退     | 日志里找 `[config]` —— 生产模式缺 `DOCS_PASSWORD` 是最常见的一条    |
+| `/health` 503    | 看 `checks` 字段哪个依赖挂了；只有 Redis 的话服务其实还能用         |
+| 所有用户一起 429 | `TRUST_PROXY` 跳数数错，`req.ip` 变成了代理地址，全站共用一个限流桶 |
+| 浏览器报 CORS    | `CORS_ALLOWED_ORIGINS` 没登记该来源。服务端到服务端调用不受影响     |
+| `/metrics` 404   | 没配 `METRICS_TOKEN`。这是安全默认值，不是故障                      |
+| 滚动发布期间 502 | `SHUTDOWN_DRAIN_MS` 小于 LB 的探测间隔 × 失败阈值，查上面那张表     |
+
+## 7. 安全要点
+
+- **HTTPS 强制启用**：所有生产流量必须通过 HTTPS；由 Nginx 或负载均衡器处理证书。
+- **CORS 白名单**：通过 `CORS_ALLOWED_ORIGINS` 限制浏览器来源，生产环境不应包含 localhost。
+  服务端到服务端和 Agent 调用不带 Origin 头，不受这里影响。
+- **API 文档保护**：`DOCS_PASSWORD` 是生产模式的硬性必填项（可选 `DOCS_USER`）。
+- **指标端点**：`METRICS_TOKEN` 不配就是 404；配了也只从内网抓，不要经公网反代暴露。
+- **`TRUST_PROXY` 要数对跳数**：写 `1` 表示"只信任一跳"。数错会让 `req.ip` 变成上游代理
+  的地址，于是所有用户共用一个速率限制桶，一个人打满全站 429。上面的 nginx 示例是
+  代理直连引擎，一跳；如果你在它前面还叠了 CDN 或外层 LB，那就是两跳。
+  **绝对不要填 `true`** —— 那等于信任任意 `X-Forwarded-For`，限流可以被一个请求头绕过。
+- **API 密钥保护**：定期轮换 AI provider 密钥；用环境变量而非硬编码。
+- **速率限制**：生产默认开启，按需调整 `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX`。
+- **端口安全**：关闭不必要的端口；仅暴露 HTTPS (443) 和可能的 SSH (22)。
+- **autoheal 的代价**：它需要 Docker socket，等价于宿主 root 权限。挂成 `:ro` 并不能限制
+  能通过这个 socket 发起什么请求。不能接受就删掉这个服务，改用编排层自己的重启策略。
+
+引擎不存任何用户数据，所以这套部署里没有数据保护、加密存储、数据删除响应这类义务 ——
+那些责任在调用方那一侧。
+
+## 8. 升级步骤
 
 1. 拉取新镜像或代码
-2. 运行数据库迁移
-3. 滚动重启 backend/front
-4. 验证 `/api/ready` 与核心业务
+2. 滚动重启 backend（没有迁移步骤）
+3. 验证 `/api/ready` 与核心接口，或直接跑 `./scripts/verify-deployment.sh`
 
-> 前端是带内容哈希的静态构建，`frontend/nginx.conf` 对 `/assets/` 下的文件发
-> `immutable` 长缓存，对 `index.html` / `sw.js` / `registerSW.js` / `manifest.webmanifest`
-> 发 `no-cache`。这四个文件名不带哈希，一旦被缓存住，用户拿到的旧 `index.html` 会去请求
-> 已经被这次发布删掉的 chunk，表现是发布后白屏。**如果前面还套了 CDN，必须在 CDN 上遵守
-> 同一套缓存策略，或者每次发布刷新这四个路径**，否则 nginx 这层的设置会被 CDN 覆盖掉。
+> 本仓库只发布 API，没有静态资源要考虑缓存失效。要注意的是接口的向后兼容：
+> 滚动重启期间新旧引擎会同时在跑，客户端可能打到任意一个。
+>
+> 回滚就是把镜像切回上一版重启 —— 无状态意味着没有「数据已经被新版本改过」这种情况，
+> 回滚是干净的。

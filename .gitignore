@@ -7,11 +7,26 @@ node_modules/
 dist/
 build/
 .tmp/
+coverage/
+*.tgz
 
-# 本地环境与系统噪音
+# 本地环境与系统噪音。.env* 通配会连 .env.example / env.production.template 一起吃掉，
+# 所以这里只点名真正带密钥的那几个，模板文件必须留在版本里。
 .env
+.env.local
+.env.*.local
 *.log
 .DS_Store
+.eslintcache
+.npm/
+.idea/
+.vscode/
+
+# 数据库备份产物。scripts/backup-db.sh 默认写到 backups/，单个 dump 轻松上百 MB，
+# 而且里面是明文业务数据——比体积更要紧的是它不该进版本库。
+backups/
+*.dump
+*.sql.gz
 
 # 数据库状态：开发用 SQLite + e2e 用的 PostgreSQL 数据目录
 *.db

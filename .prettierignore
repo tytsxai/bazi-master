@@ -1,0 +1,10 @@
+# 生成物，不参与代码风格检查。
+#
+# docs/openapi.json 由 backend/scripts/generate-openapi.js 用 JSON.stringify 写出，
+# 而 prettier 会把短数组折成一行——两边永远对不齐。让 prettier 管它的结果是：
+# 每次重新生成都会把工作区弄脏，然后有人为了让 format:check 过而手改生成物。
+# 它的正确性由 CI 的「重新生成 + git diff --exit-code」保证，不由风格检查保证。
+docs/openapi.json
+
+node_modules
+.tmp

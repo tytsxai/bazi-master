@@ -6,25 +6,14 @@ on:
   pull_request:
     branches: ['master', 'main']
 
+# The engine is stateless: no database, no migrations, no fixtures. This job used to
+# provision a PostgreSQL service and run `prisma migrate reset` before the tests; both went
+# away with the storage layer. Nothing here needs a service container any more, which is
+# also why the whole run is now a couple of minutes shorter.
 jobs:
   test:
     name: Build & Test
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: bazi_master_e2e
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d bazi_master_e2e"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
 
     strategy:
       matrix:
@@ -49,21 +38,10 @@ jobs:
           cache-dependency-path: |
             backend/package-lock.json
 
-      # Backend Setup & Test
       - name: Install Backend Dependencies
         run: |
           cd backend
           npm ci
-
-      - name: Prepare Backend Test Database
-        run: |
-          cd backend
-          export DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/bazi_master_e2e?schema=public'
-          # Use `migrate reset` so the prisma migration history table is set up.
-          # `db push` writes the schema directly without history, which then
-          # causes the test runner's subsequent `migrate deploy` to hit P3005
-          # ("schema is not empty").
-          node scripts/prisma.mjs migrate reset --force --skip-seed --schema=../prisma/schema.prisma
 
       # ESLint and Prettier are configured at the repository root, not in backend/.
       # This step used to run `npm run lint --if-present` inside backend/, where no
@@ -77,6 +55,15 @@ jobs:
       - name: Check env template covers every variable the code reads
         run: ./scripts/check-env-template.sh
 
+      # docs/openapi.json is generated from services/apiSchema.service.js. Regenerating it
+      # here and failing on a diff is what keeps the committed artifact from going stale —
+      # the file is what external consumers read, and nobody notices a stale one by looking.
+      - name: Check the committed OpenAPI snapshot is up to date
+        run: |
+          cd backend
+          node scripts/generate-openapi.js
+          git diff --exit-code -- ../docs/openapi.json
+
       # Runtime dependencies only: a vulnerability in a build-time devDependency does not
       # ship, and letting those fail the build is how audit gates get switched off. `high`
       # is the threshold because moderate advisories in this tree are routinely
@@ -89,10 +76,7 @@ jobs:
       - name: Run Backend Tests
         run: |
           cd backend
-          # Ensure we use a test env
-          export NODE_ENV=test
-          export DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/bazi_master_e2e?schema=public'
-          npm test
+          NODE_ENV=test npm test
 
       # The CLI is how every workflow in this repo is driven, so a break in it blocks
       # all of them. Its own contract tests are fast and need no services.

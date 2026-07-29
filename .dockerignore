@@ -1,6 +1,10 @@
 **/node_modules
 .git
 .github
+# CLI 的本地运行态：pidfile、日志、以及本地 PostgreSQL 的整个 data 目录。
+# 实测能到 100MB+，全部是构建用不上的东西，漏掉它等于每次 build 都白传一遍上下文。
+.tmp
+.eslintcache
 .env*
 *.log
 .DS_Store

@@ -1,14 +1,6 @@
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 
-const normalizeBoolean = (value, fallback = true) => {
-  if (value === undefined || value === null || value === '') return fallback;
-  const normalized = String(value).trim().toLowerCase();
-  if (['false', '0', 'no', 'off'].includes(normalized)) return false;
-  if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
-  return fallback;
-};
-
 const FORWARDED_SIGNALS = ['SIGTERM', 'SIGINT'];
 
 // This script is PID 1 in the container. Node's default signal handling would kill it
@@ -50,16 +42,8 @@ const main = async () => {
     process.env.NODE_ENV = 'production';
   }
 
-  const runMigrations = normalizeBoolean(process.env.RUN_MIGRATIONS_ON_START, true);
-  if (runMigrations) {
-    await run('node', [
-      'scripts/prisma.mjs',
-      'migrate',
-      'deploy',
-      '--schema=../prisma/schema.prisma',
-    ]);
-  }
-
+  // Nothing to migrate and nothing to seed — the engine holds no state. This wrapper
+  // exists purely for signal forwarding (see above), which is still needed: it is PID 1.
   await run('node', ['server.js']);
 };
 

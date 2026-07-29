@@ -2,7 +2,7 @@
   "name": "bazi-master",
   "version": "0.2.0",
   "private": true,
-  "description": "Self-hostable BaZi / Zi Wei Dou Shu / Tarot / I Ching / Zodiac / Synastry calculation engine, exposed as a documented HTTP API for applications and AI agents.",
+  "description": "Self-hostable BaZi / Zi Wei Dou Shu / Tarot / I Ching / Zodiac / Synastry calculation engine, exposed as a documented HTTP API and a programmatic CLI for applications and AI agents.",
   "license": "MIT",
   "author": "tytsxai",
   "homepage": "https://github.com/tytsxai/bazi-master#readme",
@@ -39,8 +39,6 @@
     "agent-tools",
     "express",
     "nodejs",
-    "prisma",
-    "postgresql",
     "redis",
     "self-hosted",
     "swagger",
@@ -57,11 +55,7 @@
   },
   "devDependencies": {
     "eslint": "^8.57.0",
-    "prettier": "^3.2.5",
-    "prisma": "^5.22.0"
-  },
-  "dependencies": {
-    "@prisma/client": "^5.22.0"
+    "prettier": "^3.2.5"
   },
   "bin": {
     "bazi": "tools/cli/bin/bazi.mjs"

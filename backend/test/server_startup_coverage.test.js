@@ -8,76 +8,67 @@ import {
   validateProductionConfig,
 } from '../server.js';
 
+const CLEAN_PROD_ENV = {
+  CORS_ALLOWED_ORIGINS: 'https://client.example.com',
+  BACKEND_BASE_URL: 'https://api.example.com',
+  DOCS_PASSWORD: 'docs-pass',
+  REDIS_URL: 'redis://localhost:6379',
+  METRICS_TOKEN: 'scrape-token',
+  SENTRY_DSN: 'https://public@example.ingest.sentry.io/1',
+  TRUST_PROXY: '1',
+};
+
 describe('server startup coverage', () => {
-  it('validateProductionConfig returns expected errors/warnings', () => {
-    {
-      const { errors, warnings } = validateProductionConfig({ env: {} });
-      assert.ok(errors.length >= 3);
-      assert.ok(warnings.length >= 2);
-    }
+  it('validateProductionConfig accepts a fully configured environment', () => {
+    const { errors, warnings } = validateProductionConfig({ env: { ...CLEAN_PROD_ENV } });
+    assert.deepEqual(errors, []);
+    assert.deepEqual(warnings, []);
+  });
 
-    {
-      const { errors, warnings } = validateProductionConfig({
-        env: {
-          SESSION_TOKEN_SECRET: 'x'.repeat(32),
-          DATABASE_URL: 'postgresql://example/db',
-          REDIS_URL: 'redis://localhost:6379',
-          FRONTEND_URL: 'https://example.com',
-          BACKEND_BASE_URL: 'https://api.example.com',
-          ADMIN_EMAILS: 'admin@example.com',
-          DOCS_PASSWORD: 'docs-pass',
-          SENTRY_DSN: 'https://public@example.ingest.sentry.io/1',
-          SMTP_HOST: 'smtp.example.com',
-          SMTP_FROM: 'noreply@example.com',
-          TRUST_PROXY: '1',
-        },
-      });
-      assert.deepEqual(errors, []);
-      assert.deepEqual(warnings, []);
-    }
+  it('treats only DOCS_PASSWORD as fatal on an empty environment', () => {
+    const { errors, warnings } = validateProductionConfig({ env: {} });
 
-    {
-      const { errors } = validateProductionConfig({
-        env: {
-          SESSION_TOKEN_SECRET: 'x'.repeat(32),
-          DATABASE_URL: 'postgresql://example/db',
-          REDIS_URL: 'redis://localhost:6379',
-          FRONTEND_URL: 'https://example.com',
-          BACKEND_BASE_URL: 'https://api.example.com',
-          PASSWORD_RESET_ENABLED: '0',
-        },
-      });
-      assert.ok(
-        !errors.includes(
-          'SMTP_HOST and SMTP_FROM must be configured when password reset is enabled'
-        )
-      );
-    }
+    // Everything else degrades rather than breaks, so refusing to boot over it would be a
+    // self-inflicted outage. Assert the exact set: a new hard error must be a deliberate
+    // decision, not something that slipped in.
+    assert.deepEqual(errors, [
+      'DOCS_PASSWORD must be configured in production; /api-docs is unusable without it',
+    ]);
+    assert.ok(warnings.some((w) => w.includes('CORS_ALLOWED_ORIGINS')));
+    assert.ok(warnings.some((w) => w.includes('REDIS_URL')));
+    assert.ok(warnings.some((w) => w.includes('METRICS_TOKEN')));
+    assert.ok(warnings.some((w) => w.includes('TRUST_PROXY')));
+  });
+
+  it('a missing Redis is a warning, not an error', () => {
+    const env = { ...CLEAN_PROD_ENV };
+    delete env.REDIS_URL;
+
+    const { errors, warnings } = validateProductionConfig({ env });
+    assert.deepEqual(errors, []);
+    assert.equal(warnings.length, 1);
+    assert.ok(warnings[0].includes('results stay correct'));
+  });
+
+  it('allows a localhost BACKEND_BASE_URL only behind ALLOW_LOCALHOST_PROD', () => {
+    const base = { ...CLEAN_PROD_ENV, BACKEND_BASE_URL: 'http://localhost:4000' };
+
+    assert.equal(validateProductionConfig({ env: base }).warnings.length, 1);
+    assert.deepEqual(
+      validateProductionConfig({ env: { ...base, ALLOW_LOCALHOST_PROD: 'true' } }).warnings,
+      []
+    );
   });
 
   it('initRedisMirrors no-ops when initRedis returns null', async () => {
-    let setMirrorCalls = 0;
     let setBaziMirrorCalls = 0;
-    let setResetTokenMirrorCalls = 0;
-    let setOauthStateMirrorCalls = 0;
 
     await initRedisMirrors({
       require: false,
       initRedisFn: async () => null,
       createRedisMirrorFn: () => ({ mirror: true }),
-      sessionStoreRef: {
-        setMirror() {
-          setMirrorCalls++;
-        },
-      },
       setBaziCacheMirrorFn() {
         setBaziMirrorCalls++;
-      },
-      setResetTokenMirrorsFn() {
-        setResetTokenMirrorCalls++;
-      },
-      setOauthStateMirrorFn() {
-        setOauthStateMirrorCalls++;
       },
       loggerInstance: {
         info() {
@@ -86,18 +77,15 @@ describe('server startup coverage', () => {
       },
     });
 
-    assert.equal(setMirrorCalls, 0);
     assert.equal(setBaziMirrorCalls, 0);
-    assert.equal(setResetTokenMirrorCalls, 0);
-    assert.equal(setOauthStateMirrorCalls, 0);
   });
 
-  it('initRedisMirrors wires mirrors when client exists', async () => {
+  it('initRedisMirrors wires the calculation cache mirror when a client exists', async () => {
     const calls = [];
     const fakeClient = { ok: true };
 
     await initRedisMirrors({
-      require: true,
+      require: false,
       initRedisFn: async ({ require }) => {
         calls.push(['initRedis', require]);
         return fakeClient;
@@ -106,44 +94,27 @@ describe('server startup coverage', () => {
         calls.push(['createMirror', client, opts.prefix, opts.ttlMs]);
         return { prefix: opts.prefix };
       },
-      sessionStoreRef: {
-        setMirror(mirror) {
-          calls.push(['setSessionMirror', mirror.prefix]);
-        },
-      },
       setBaziCacheMirrorFn(mirror) {
         calls.push(['setBaziMirror', mirror.prefix]);
-      },
-      setResetTokenMirrorsFn({ tokenMirror, userMirror }) {
-        calls.push(['setResetTokenMirrors', tokenMirror.prefix, userMirror.prefix]);
-      },
-      setOauthStateMirrorFn(mirror) {
-        calls.push(['setOauthStateMirror', mirror.prefix]);
       },
       loggerInstance: {
         info(msg) {
           calls.push(['info', msg]);
         },
       },
-      sessionIdleMs: 123,
       baziCacheTtlMs: 456,
     });
 
-    assert.deepEqual(calls[0], ['initRedis', true]);
-    assert.ok(calls.some((c) => c[0] === 'createMirror' && c[2] === 'session:' && c[3] === 123));
-    assert.ok(calls.some((c) => c[0] === 'createMirror' && c[2] === 'bazi-cache:' && c[3] === 456));
-    assert.ok(calls.some((c) => c[0] === 'createMirror' && c[2] === 'reset-token:'));
-    assert.ok(calls.some((c) => c[0] === 'createMirror' && c[2] === 'reset-token-user:'));
-    assert.ok(calls.some((c) => c[0] === 'createMirror' && c[2] === 'oauth-state:'));
-    assert.ok(calls.some((c) => c[0] === 'setSessionMirror' && c[1] === 'session:'));
-    assert.ok(calls.some((c) => c[0] === 'setBaziMirror' && c[1] === 'bazi-cache:'));
-    assert.ok(
-      calls.some(
-        (c) =>
-          c[0] === 'setResetTokenMirrors' && c[1] === 'reset-token:' && c[2] === 'reset-token-user:'
-      )
+    assert.deepEqual(calls[0], ['initRedis', false]);
+    // The calculation cache is the only mirror left; session, OAuth state, reset-token and
+    // credential-revocation mirrors went with the subsystems that needed them.
+    const mirrors = calls.filter((c) => c[0] === 'createMirror');
+    assert.deepEqual(
+      mirrors.map((c) => c[2]),
+      ['bazi-cache:']
     );
-    assert.ok(calls.some((c) => c[0] === 'setOauthStateMirror' && c[1] === 'oauth-state:'));
+    assert.equal(mirrors[0][3], 456);
+    assert.ok(calls.some((c) => c[0] === 'setBaziMirror' && c[1] === 'bazi-cache:'));
     assert.ok(calls.some((c) => c[0] === 'info'));
   });
 
@@ -174,12 +145,6 @@ describe('server startup coverage', () => {
       },
     };
 
-    const prismaClient = {
-      async $disconnect() {
-        logs.push(['disconnect']);
-      },
-    };
-
     const loggerInstance = {
       info(metaOrMsg, maybeMsg) {
         logs.push(['info', metaOrMsg, maybeMsg]);
@@ -189,16 +154,21 @@ describe('server startup coverage', () => {
       },
     };
 
-    setupGracefulShutdown(serverRef, { loggerInstance, prismaClient, processRef });
+    setupGracefulShutdown(serverRef, { loggerInstance, processRef });
     assert.equal(typeof registered.get('SIGTERM'), 'function');
     assert.equal(typeof registered.get('SIGINT'), 'function');
 
     await registered.get('SIGTERM')();
     assert.deepEqual(exits, [0]);
-    assert.ok(logs.some((entry) => entry[0] === 'disconnect'));
+    assert.ok(
+      logs.some(
+        (entry) =>
+          entry[2] === 'Graceful shutdown complete.' || entry[1] === 'Graceful shutdown complete.'
+      )
+    );
   });
 
-  it('startServer exits on production config errors without connecting', async () => {
+  it('startServer exits on production config errors without listening', async () => {
     const exits = [];
 
     await startServer({
@@ -208,11 +178,6 @@ describe('server startup coverage', () => {
           throw new Error('should not listen');
         },
       },
-      prismaClient: {
-        async $connect() {
-          throw new Error('should not connect');
-        },
-      },
       initRedisMirrorsFn: async () => {
         throw new Error('should not init redis');
       },
@@ -231,51 +196,32 @@ describe('server startup coverage', () => {
     assert.deepEqual(exits, [1]);
   });
 
-  it('startServer exits on prisma connection error', async () => {
+  // Redis backs a cache, not correctness. Refusing to boot without it would turn a slower
+  // service into no service at all — so a failure here is logged and the server listens.
+  it('startServer still listens when the redis mirror fails to initialise', async () => {
     const exits = [];
-    await startServer({
-      appConfigValue: { IS_PRODUCTION: false, PORT: 123 },
-      serverInstance: {
-        listen() {
-          throw new Error('should not listen');
-        },
-      },
-      prismaClient: {
-        async $connect() {
-          throw new Error('db down');
-        },
-      },
-      initRedisMirrorsFn: async () => {
-        throw new Error('should not init redis');
-      },
-      loggerInstance: { warn() {}, error() {}, fatal() {}, info() {} },
-      processRef: {
-        env: {},
-        exit(code) {
-          exits.push(code);
-        },
-        once() {},
-        on() {},
-        exitCode: 0,
-      },
-    });
-    assert.deepEqual(exits, [1]);
-  });
+    const listens = [];
+    const errors = [];
 
-  it('startServer exits on redis init error', async () => {
-    const exits = [];
     await startServer({
       appConfigValue: { IS_PRODUCTION: false, PORT: 123 },
       serverInstance: {
-        listen() {
-          throw new Error('should not listen');
+        listen(port, host, cb) {
+          listens.push([port, host]);
+          cb();
         },
       },
-      prismaClient: { async $connect() {} },
       initRedisMirrorsFn: async () => {
         throw new Error('redis down');
       },
-      loggerInstance: { warn() {}, error() {}, fatal() {}, info() {} },
+      loggerInstance: {
+        warn() {},
+        error(meta, msg) {
+          errors.push(msg);
+        },
+        fatal() {},
+        info() {},
+      },
       processRef: {
         env: {},
         exit(code) {
@@ -286,7 +232,10 @@ describe('server startup coverage', () => {
         exitCode: 0,
       },
     });
-    assert.deepEqual(exits, [1]);
+
+    assert.deepEqual(exits, []);
+    assert.deepEqual(listens, [[123, '127.0.0.1']]);
+    assert.ok(errors.some((msg) => String(msg).includes('per-process cache')));
   });
 
   it('startServer listens with resolved bindHost on success', async () => {
@@ -302,7 +251,6 @@ describe('server startup coverage', () => {
           cb();
         },
       },
-      prismaClient: { async $connect() {} },
       initRedisMirrorsFn: async () => {},
       loggerInstance: {
         warn() {},

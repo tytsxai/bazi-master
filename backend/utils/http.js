@@ -26,8 +26,8 @@ export const fetchWithTimeout = async (url, options, timeoutMs) => {
  * as fetch() resolves. For a streamed response that is the easy half: a provider that
  * sends the headers, emits a few tokens and then stalls leaves the read loop awaiting a
  * chunk that never arrives, with nothing left armed to abort it. The request then hangs
- * for the life of the process, holding its socket and (for /ws/ai) the caller's
- * single-in-flight AI slot, so that user cannot start another request until a restart.
+ * for the life of the process, holding its socket and the caller's single-in-flight AI
+ * slot, so that caller cannot start another request until a restart.
  *
  * Returns the response plus two callbacks: `touch()` restarts the idle countdown and
  * must be called for every chunk received, and `release()` disarms it once the stream
@@ -69,6 +69,3 @@ export const fetchStreamWithTimeout = async (
   touch();
   return { response, touch, release };
 };
-
-/** Deadline for OAuth token and profile calls. */
-export const OAUTH_FETCH_TIMEOUT_MS = Number(process.env.OAUTH_FETCH_TIMEOUT_MS) || 10000;

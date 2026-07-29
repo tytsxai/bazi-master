@@ -1,5 +1,11 @@
-# Docker's default json-file log driver has no size cap, so every service below pins one.
-# Without it the host disk fills up over weeks and postgres is the first thing to break.
+# 生产参考栈：引擎 + 一个可选的 Redis 缓存 + 一个 autoheal 观察者。
+#
+# 这里以前还有一个 postgres 服务和一整套备份 cron。引擎收敛成无状态纯计算之后，
+# 它不存任何数据，也就没有什么需要备份、迁移或恢复的东西 —— 那些服务连同存储层一起删掉了。
+# 现在整个栈可以随时整体销毁重建，唯一会丢的是 Redis 里的排盘缓存（重算即可）。
+#
+# Docker 默认的 json-file 日志驱动没有大小上限，所以下面每个服务都钉一个，
+# 否则宿主磁盘会在几周内被日志吃满。
 x-logging: &default-logging
   driver: json-file
   options:
@@ -7,56 +13,33 @@ x-logging: &default-logging
     max-file: '5'
 
 services:
-  postgres:
-    image: postgres:16
-    container_name: bazi_postgres
-    restart: always
-    logging: *default-logging
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      # No default on purpose: a missing password must fail the deploy, not silently
-      # start postgres with a well-known weak credential.
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${POSTGRES_DB:-bazi_master}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-bazi_master}']
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    stop_grace_period: 30s
-
+  # 纯缓存，可以整个删掉：不配 REDIS_URL 时每个实例各用自己的进程内缓存，
+  # 排盘结果完全一致，只是跨实例命中率低一些。
   redis:
     image: redis:7
     container_name: bazi_redis
     restart: always
     logging: *default-logging
     # 默认配置有两个会在生产上咬人的缺省值：
-    #   1. 没有 maxmemory —— session、rate-limit、bazi-cache、oauth-state 全在这里，
-    #      key 只受各自 TTL 约束，流量一大就一路涨到把宿主内存吃光。撞上 Docker 内存
-    #      限额时是整个容器被 OOM killer 干掉，所有人当场掉线。
-    #   2. 默认淘汰策略是 noeviction —— 内存到顶后写命令直接报错，表现为用户能读不能
-    #      登录，比丢几条缓存难查得多。
+    #   1. 没有 maxmemory —— key 只受各自 TTL 约束，流量一大就一路涨到把宿主内存吃光。
+    #      撞上 Docker 内存限额时是整个容器被 OOM killer 干掉。
+    #   2. 默认淘汰策略是 noeviction —— 内存到顶后写命令直接报错。对纯缓存来说这是
+    #      最差的一种失败方式：本该悄悄降级成 miss，结果变成显式报错。
     # 这里所有 key 都带 TTL，所以用 volatile-lru：先淘汰最久没用的、本来就会过期的 key。
-    # appendonly 打开是因为 session 存在 Redis 里：默认只有 RDB 快照（最长 1 小时一次），
-    # Redis 一重启就等于把所有登录态清空。everysec 的代价是最多丢 1 秒写入。
+    #
+    # 不开 appendonly：里面只有排盘缓存，重启丢光也只是下一次重算一遍，
+    # 为它付 AOF 的写放大和 fork 内存开销不划算。
     command:
       - redis-server
       - --maxmemory
       - ${REDIS_MAXMEMORY:-256mb}
       - --maxmemory-policy
       - volatile-lru
-      - --appendonly
-      - 'yes'
-      - --appendfsync
-      - everysec
-    volumes:
-      - redis_data:/data
+      - --save
+      - ''
     deploy:
       resources:
         limits:
-          # 必须高于 maxmemory：AOF 重写期间 Redis 会 fork，短时间内内存占用会高出一截。
           memory: ${REDIS_MEMORY_LIMIT:-512m}
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
@@ -73,26 +56,20 @@ services:
     restart: always
     logging: *default-logging
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
+    # 这份清单必须覆盖 backend 代码真实读取的每一个变量，否则运维在 .env.production 里
+    # 配了也传不进容器。scripts/check-env-template.sh 在 CI 里守着模板那一侧。
     environment:
       NODE_ENV: production
       PORT: 4000
-      # connection_limit 是显式写死的：Prisma 的默认值是 num_cpus * 2 + 1，而容器里读到
-      # 的是宿主机的核数，不是这个容器分到的份额。在一台 32 核的机器上，单实例就会去开
-      # 65 条连接，而 postgres 默认 max_connections 只有 100 —— 再叠上备份脚本和一个
-      # psql 会话就把连接打满，表现是 "too many clients already"，所有请求一起失败。
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-bazi_master}?schema=public&connection_limit=${DB_CONNECTION_LIMIT:-10}&pool_timeout=${DB_POOL_TIMEOUT:-10}
+      BIND_HOST: ${BIND_HOST:-0.0.0.0}
       REDIS_URL: redis://redis:6379
-      FRONTEND_URL: ${FRONTEND_URL}
+      REDIS_CONNECT_TIMEOUT_MS: ${REDIS_CONNECT_TIMEOUT_MS:-}
       BACKEND_BASE_URL: ${BACKEND_BASE_URL}
       ALLOW_LOCALHOST_PROD: ${ALLOW_LOCALHOST_PROD:-false}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       TRUST_PROXY: ${TRUST_PROXY:-}
-      SESSION_IDLE_MS: ${SESSION_IDLE_MS:-}
-      SESSION_TOKEN_SECRET: ${SESSION_TOKEN_SECRET}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -102,47 +79,15 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-}
       AI_MAX_TOKENS: ${AI_MAX_TOKENS:-}
       AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
-      WECHAT_APP_ID: ${WECHAT_APP_ID:-}
-      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
-      WECHAT_SCOPE: ${WECHAT_SCOPE:-}
-      WECHAT_FRONTEND_URL: ${WECHAT_FRONTEND_URL:-}
-      WECHAT_REDIRECT_URI: ${WECHAT_REDIRECT_URI:-}
-      RESET_TOKEN_TTL_MS: ${RESET_TOKEN_TTL_MS:-}
-      RESET_REQUEST_MIN_DURATION_MS: ${RESET_REQUEST_MIN_DURATION_MS:-}
-      PASSWORD_RESET_ENABLED: ${PASSWORD_RESET_ENABLED:-true}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-}
-      SMTP_SECURE: ${SMTP_SECURE:-}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
-      SMTP_TIMEOUT_MS: ${SMTP_TIMEOUT_MS:-}
-      PASSWORD_RESET_SUBJECT: ${PASSWORD_RESET_SUBJECT:-}
-      IMPORT_BATCH_SIZE: ${IMPORT_BATCH_SIZE:-}
       SHUTDOWN_TIMEOUT_MS: ${SHUTDOWN_TIMEOUT_MS:-}
       GRACEFUL_SHUTDOWN_TIMEOUT_MS: ${GRACEFUL_SHUTDOWN_TIMEOUT_MS:-}
       SHUTDOWN_DRAIN_MS: ${SHUTDOWN_DRAIN_MS:-}
-      WS_MAX_CONNECTIONS: ${WS_MAX_CONNECTIONS:-}
       SERVER_KEEP_ALIVE_TIMEOUT_MS: ${SERVER_KEEP_ALIVE_TIMEOUT_MS:-}
       SERVER_HEADERS_TIMEOUT_MS: ${SERVER_HEADERS_TIMEOUT_MS:-}
       SERVER_REQUEST_TIMEOUT_MS: ${SERVER_REQUEST_TIMEOUT_MS:-}
-      RUN_MIGRATIONS_ON_START: ${RUN_MIGRATIONS_ON_START:-}
-      SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-}
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-}
-      SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-}
       DOCS_USER: ${DOCS_USER:-}
-      DOCS_PASSWORD: ${DOCS_PASSWORD:-}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-      ALLOW_DEV_OAUTH: ${ALLOW_DEV_OAUTH:-false}
-      SEED_DEFAULT_USER: ${SEED_DEFAULT_USER:-false}
-      SEED_USER_EMAIL: ${SEED_USER_EMAIL:-}
-      SEED_USER_PASSWORD: ${SEED_USER_PASSWORD:-}
-      SEED_USER_NAME: ${SEED_USER_NAME:-}
-      ALLOW_RUNTIME_SCHEMA_SYNC: ${ALLOW_RUNTIME_SCHEMA_SYNC:-}
+      # 生产模式下唯一的硬性必填项：没有默认值，缺了它这个栈就不该起来。
+      DOCS_PASSWORD: ${DOCS_PASSWORD:?DOCS_PASSWORD is required}
       LOG_LEVEL: ${LOG_LEVEL:-}
       JSON_BODY_LIMIT: ${JSON_BODY_LIMIT:-}
       MAX_URL_LENGTH: ${MAX_URL_LENGTH:-}
@@ -152,29 +97,24 @@ services:
       MAX_INPUT_STRING_LENGTH: ${MAX_INPUT_STRING_LENGTH:-}
       BAZI_CACHE_TTL_MS: ${BAZI_CACHE_TTL_MS:-}
       BAZI_CACHE_MAX_ENTRIES: ${BAZI_CACHE_MAX_ENTRIES:-}
-      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-}
-      AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
       SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-}
       HEALTH_CACHE_TTL_MS: ${HEALTH_CACHE_TTL_MS:-}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
-      # Make sure to set these in .env or CI secrets
-      ADMIN_EMAILS: ${ADMIN_EMAILS}
     ports:
-      # Loopback by default: TLS termination and the public edge belong to nginx.
-      # Publishing to 0.0.0.0 writes iptables rules that bypass ufw/firewalld.
+      # 默认回环：TLS 终结和公网入口属于 nginx。
+      # 发布到 0.0.0.0 会写 iptables 规则，绕过 ufw/firewalld。
       - '${BACKEND_BIND_ADDR:-127.0.0.1}:4000:4000'
     deploy:
       resources:
         limits:
           memory: ${BACKEND_MEMORY_LIMIT:-1g}
-    # 每条 WebSocket 连接吃一个文件描述符，而 WS_MAX_CONNECTIONS 默认 500 —— 加上
-    # HTTP keep-alive、Prisma 连接池和日志句柄，撞上 fd 上限是比撞内存早得多的事：
-    # 实测每条空闲 WS 连接只占约 9KB RSS，500 条也才 ~4.4MB（内存限额的 0.4%），
-    # 所以真正的约束从来不是内存。撞上 fd 的表现是 EMFILE，届时 accept 全线失败，
-    # 比 OOM 更难查。这里显式写死，不去赌 dockerd 继承下来的默认值是多少。
+    # 显式钉死 fd 上限，不去赌 dockerd 继承下来的默认值是多少。撞上 fd 的表现是 EMFILE，
+    # 届时 accept 全线失败，比 OOM 更难查。长连接（WebSocket）和数据库连接池都已移除，
+    # 现在的消耗只剩 HTTP keep-alive 和日志句柄，65536 有极大余量。
     ulimits:
       nofile:
         soft: 65536
@@ -183,22 +123,16 @@ services:
     # 否则排水还没走完容器就被 SIGKILL 了。调大排水窗口时这里要跟着调。
     stop_grace_period: 30s
     labels:
-      # Opts this container into the autoheal watcher below. `restart: always` only
-      # covers a process that exits; a container that stays up while failing its
-      # healthcheck (stalled event loop, exhausted connection pool) is never restarted
-      # by compose on its own.
+      # 把这个容器纳入下面的 autoheal 观察者。`restart: always` 只覆盖进程退出的情况；
+      # 一个还活着但健康检查一直失败的容器（事件循环卡死），compose 自己永远不会重启它。
       autoheal: 'true'
     healthcheck:
-      # Liveness, not readiness. This healthcheck drives autoheal (above), so whatever it
-      # measures is what gets the container restarted. /api/ready is a *deep* check — it
-      # fails whenever postgres or redis is briefly unreachable, and restarting the
-      # backend for that is actively harmful: the new process exits at startup when it
-      # cannot reach the database, so `restart: always` turns a ten-second database blip
-      # into a crash loop, where doing nothing would have let Prisma reconnect on its own.
-      # /live still catches what autoheal is for — a wedged event loop cannot answer it.
+      # 这里查的是存活，不是就绪。它驱动 autoheal，所以它测什么，什么就会导致容器被重启。
+      # /api/ready 是*深度*检查：Redis 短暂不可达时它会失败，而为此重启后端是有害的 ——
+      # Redis 只是缓存，摘掉它服务照常工作，重启只会把一次十秒的抖动放大成一轮冷启动。
+      # /live 仍然能抓到 autoheal 真正该管的东西：事件循环卡死时它答不上来。
       #
-      # /api/ready remains the signal for the load balancer, which should drain rather
-      # than restart. It also reports 503 while the process is draining on SIGTERM.
+      # /api/ready 留给负载均衡器，它该做的是摘流而不是重启。进程排水期间它也会报 503。
       test:
         [
           'CMD',
@@ -211,20 +145,15 @@ services:
       retries: 5
       start_period: 15s
 
-  # Restarts any container labelled autoheal=true once its healthcheck reports
-  # unhealthy. Plain `docker compose` never does this itself — that behaviour belongs to
-  # Swarm/Kubernetes — so without this a wedged backend sits unhealthy indefinitely with
-  # nobody watching.
+  # 重启任何 autoheal=true 且健康检查报 unhealthy 的容器。
+  # 纯 docker compose 自己从不做这件事 —— 那是 Swarm/Kubernetes 的职责 ——
+  # 没有它的话，一个卡死的后端会一直挂在 unhealthy 状态而没人管。
   #
-  # Deliberately NOT applied to postgres or redis: they are stateful, and bouncing a
-  # database on a failing healthcheck tends to turn one problem into two. If those go
-  # unhealthy a human should look.
+  # 刻意不覆盖 redis：它一挂就重启会把缓存反复清空，而缓存本来就允许 miss，没必要。
   #
-  # Tradeoff, stated plainly: this needs the Docker socket, which is equivalent to root
-  # on the host. Mounting it :ro does not actually restrict what can be asked over the
-  # socket — it only makes the file node read-only — so treat this container as
-  # privileged and pin the image tag. If that is unacceptable, drop this service and use
-  # the host-cron fallback in scripts/install-cron.sh instead.
+  # 代价说清楚：它需要 Docker socket，等价于宿主 root 权限。挂成 :ro 并不能限制能通过
+  # 这个 socket 发起什么请求 —— 那只是让文件节点只读 —— 所以把这个容器当特权容器对待，
+  # 并且钉死镜像 tag。如果不能接受，直接删掉这个服务，改用编排层自己的重启策略。
   autoheal:
     image: willfarrell/autoheal:1.2.0
     container_name: bazi_autoheal
@@ -233,17 +162,12 @@ services:
     network_mode: none
     environment:
       AUTOHEAL_CONTAINER_LABEL: autoheal
-      # Seconds between checks.
       AUTOHEAL_INTERVAL: ${AUTOHEAL_INTERVAL:-10}
-      # Grace period after this watcher starts, so a still-booting stack is not bounced.
       AUTOHEAL_START_PERIOD: ${AUTOHEAL_START_PERIOD:-60}
-      # Seconds to wait for a graceful stop before killing. Keep at or above the
-      # backend's stop_grace_period (30s) or restarts will truncate in-flight requests —
-      # which is the very thing the graceful shutdown path exists to avoid.
+      # 等待优雅停止的秒数，超过就杀。要 >= 后端的 stop_grace_period（30s），
+      # 否则重启会截断正在处理的请求 —— 那恰好是优雅停机存在的意义。
       DOCKER_TIMEOUT: ${AUTOHEAL_DOCKER_TIMEOUT:-40}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-
-volumes:
-  postgres_data:
-  redis_data:
+# 没有具名卷：栈里已经没有任何需要跨重建保留的状态。
+# Redis 也刻意关掉了持久化（--save ''），它里面只有可以随时重算的排盘缓存。

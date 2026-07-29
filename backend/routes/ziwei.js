@@ -1,8 +1,6 @@
 import { logger } from '../config/logger.js';
 import express from 'express';
 
-import { prisma } from '../config/prisma.js';
-import { requireAuth } from '../middleware/auth.js';
 import { buildBirthTimeMeta } from '../utils/timezone.js';
 import { calculateZiweiChart } from '../services/ziwei.service.js';
 
@@ -49,31 +47,7 @@ const parseZiweiPayload = (body) => {
   };
 };
 
-const parseJsonValue = (value) => {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return null;
-  }
-};
-
-const serializeZiweiRecord = (record) => ({
-  id: record.id,
-  userId: record.userId,
-  birthYear: record.birthYear,
-  birthMonth: record.birthMonth,
-  birthDay: record.birthDay,
-  birthHour: record.birthHour,
-  gender: record.gender,
-  chart: parseJsonValue(record.chart),
-  createdAt: record.createdAt,
-});
-
-router.post('/calculate', requireAuth, (req, res) => {
+router.post('/calculate', (req, res) => {
   const parsed = parseZiweiPayload(req.body);
   if (!parsed.ok) return res.status(400).json({ error: parsed.error });
 
@@ -82,68 +56,8 @@ router.post('/calculate', requireAuth, (req, res) => {
     const timeMeta = buildBirthTimeMeta(parsed.payload);
     return res.json({ ...result, ...timeMeta });
   } catch (error) {
-    logger.error('Ziwei calculation error:', error);
+    logger.error({ err: error, requestId: req.id }, 'Ziwei calculation failed');
     return res.status(500).json({ error: 'Calculation error' });
-  }
-});
-
-router.post('/history', requireAuth, async (req, res) => {
-  const parsed = parseZiweiPayload(req.body);
-  if (!parsed.ok) return res.status(400).json({ error: parsed.error });
-
-  try {
-    const result = calculateZiweiChart(parsed.payload);
-    const timeMeta = buildBirthTimeMeta(parsed.payload);
-    const record = await prisma.ziweiRecord.create({
-      data: {
-        userId: req.user.id,
-        birthYear: parsed.payload.birthYear,
-        birthMonth: parsed.payload.birthMonth,
-        birthDay: parsed.payload.birthDay,
-        birthHour: parsed.payload.birthHour,
-        gender: String(parsed.payload.gender),
-        chart: JSON.stringify({ ...result, ...timeMeta }),
-      },
-    });
-    return res.json({ record: serializeZiweiRecord(record) });
-  } catch (error) {
-    logger.error('Failed to save Ziwei history:', error);
-    return res.status(500).json({ error: 'Unable to save history' });
-  }
-});
-
-router.get('/history', requireAuth, async (req, res) => {
-  const rawLimit = Number(req.query.limit);
-  const take = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 30;
-  try {
-    const records = await prisma.ziweiRecord.findMany({
-      where: { userId: req.user.id },
-      orderBy: { createdAt: 'desc' },
-      take,
-    });
-    return res.json({ records: records.map(serializeZiweiRecord) });
-  } catch (error) {
-    logger.error('Failed to load Ziwei history:', error);
-    return res.status(500).json({ error: 'Unable to load history' });
-  }
-});
-
-router.delete('/history/:id', requireAuth, async (req, res) => {
-  const recordId = Number(req.params.id);
-  if (!Number.isInteger(recordId) || recordId <= 0) {
-    return res.status(400).json({ error: 'Invalid record id' });
-  }
-
-  try {
-    const record = await prisma.ziweiRecord.findUnique({ where: { id: recordId } });
-    if (!record || record.userId !== req.user.id) {
-      return res.status(404).json({ error: 'Record not found' });
-    }
-    await prisma.ziweiRecord.delete({ where: { id: recordId } });
-    return res.json({ status: 'ok' });
-  } catch (error) {
-    logger.error('Failed to delete Ziwei history:', error);
-    return res.status(500).json({ error: 'Unable to delete history' });
   }
 });
 

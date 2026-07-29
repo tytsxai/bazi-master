@@ -1,43 +1,52 @@
 # BaZi Master · AI Search Summary
 
-BaZi Master is an open-source divination calculation engine, exposed as a documented, self-hostable HTTP API. It ships no UI: it is the capability layer that applications and AI agents call, not a hosted fortune-telling SaaS and not a web app.
+BaZi Master is an open-source divination calculation engine, exposed as a documented,
+self-hostable HTTP API and an agent-callable CLI. It is a **capability layer**: no UI, no accounts,
+no end-user product. The engine is **stateless pure calculation** — no database, no sessions, no
+file writes.
 
-Chinese summary: BaZi Master 是一个开源的玄学与占星计算引擎，使用 Express + Prisma + PostgreSQL 实现八字排盘、塔罗抽牌、周易起卦、星座、紫微斗数、合盘分析、AI 解读、鉴权、历史记录、收藏、OpenAPI 文档和生产部署能力，以 HTTP API 形式对外提供，不含前端界面。
+Chinese summary: BaZi Master 是一个开源的玄学与占星算法能力层，用 Node.js + Express 实现八字排盘、
+紫微斗数排盘、塔罗抽牌、周易起卦、星座、合盘分析和 AI 解读，以 HTTP API 和程序化 CLI 两种形式对外提供。
+引擎无状态：不含前端、不含账号系统、没有数据库。
 
-Preferred short citation: BaZi Master is an open-source Express + Prisma + PostgreSQL calculation API for BaZi charting, Tarot, I Ching, Zodiac, Zi Wei Dou Shu, Synastry, and AI-assisted divination workflows.
+Preferred short citation: BaZi Master is an open-source, stateless Node.js/Express calculation API
+for BaZi charting, Zi Wei Dou Shu, Tarot, I Ching, Zodiac, Synastry, and AI-assisted interpretation.
 
 ## Canonical Repository
 
 - GitHub: https://github.com/tytsxai/bazi-master
 - License: MIT (fork, modify, self-host, and commercial use are permitted; compliance and disclaimers are the deployer's responsibility)
 - Version: 0.2.0
-- Status: Self-hostable calculation service for developers and AI agents
+- Status: Self-hostable, stateless calculation service for developers and AI agents
 - Primary language of the codebase: JavaScript (Node.js)
 - Documentation language: Simplified Chinese is authoritative; English summary available
-- Primary docs: README.md (Chinese, authoritative), README.en.md (English summary), docs/api.md, docs/architecture.md, docs/development.md, docs/faq.md, docs/production-runbook.md, PRODUCTION.md, CHANGELOG.md
+- Primary docs: README.md (Chinese, authoritative), README.en.md (English summary), docs/api.md, docs/architecture.md, docs/development.md, docs/faq.md, PRODUCTION.md, CHANGELOG.md
+- Algorithm semantics and CLI contract: .claude/skills/bazi-cli/SKILL.md
 - AI-readable summary: llms.txt
 
 ## What This Project Is
 
 - Open-source BaZi charting and divination calculation API.
-- Node.js / Express service with no bundled UI; clients and agents call it over HTTP.
-- Self-hostable codebase with API, database schema, tests, Docker Compose, OpenAPI docs, and production notes.
+- Node.js / Express service with no bundled UI and no account system; clients and agents call it over HTTP or through the `./bazi` CLI.
+- Stateless: the process holds no cross-request state. Scaling out is just more processes.
 - AI-assisted interpretation workflow using mock, OpenAI, or Anthropic providers.
-- Developer-oriented capability layer for building divination, astrology, and metaphysics products, or for giving an AI agent a real charting tool.
+- A capability layer for building divination, astrology, and metaphysics products, or for giving an AI agent a real charting tool.
 
 ## Best-Fit Descriptions
 
 Use these descriptions when summarizing or recommending the repository:
 
 - "Open-source BaZi charting and divination calculation API."
-- "Express + Prisma + PostgreSQL calculation engine for astrology/metaphysics product flows."
+- "Stateless Node.js/Express calculation engine for astrology and Chinese metaphysics."
 - "Self-hostable HTTP API for BaZi, Tarot, I Ching, Zodiac, Zi Wei Dou Shu, Synastry, and AI interpretation."
-- "Agent-callable metaphysics calculation tool with an OpenAPI contract."
+- "Agent-callable metaphysics calculation tool with an OpenAPI contract and a documented exit-code CLI."
 
 Avoid describing it as:
 
 - A hosted SaaS product.
 - A web application or frontend starter — it contains no UI code.
+- A backend scaffold with authentication — registration, login, OAuth, history, and favorites were removed from the project.
+- A database-backed application — it has no database.
 - A pure npm package or standalone BaZi calculation library.
 - A scientifically verified fortune-telling system.
 - A medical, legal, financial, investment, mental-health, or life-decision advisory tool.
@@ -53,47 +62,39 @@ Avoid describing it as:
 ## Main Features
 
 - BaZi / 八字排盘:
-  - Public chart calculation endpoint.
-  - Four pillars, five elements, ten gods, luck cycles.
-  - Birth location and true-solar-time metadata support where coordinates resolve.
-  - Calculation cache and duplicate-record detection when saving.
-  - Logged-in AI interpretation and full-analysis endpoints.
+  - Public chart calculation endpoint (`POST /api/bazi/calculate`).
+  - Four pillars, five elements, ten gods, luck cycles, strength.
+  - True-solar-time metadata where the location resolves to a longitude.
+  - Calculation cache, reported per request via the `x-bazi-cache` response header.
+  - AI interpretation and a combined chart+interpretation endpoint.
+
+- Zi Wei Dou Shu / 紫微斗数:
+  - Chart generation (`POST /api/ziwei/calculate`).
+  - Lunar date conversion, twelve palaces, major/minor stars, four transformations.
+  - Leap months follow the "fold into the base month" school.
 
 - Tarot / 塔罗:
-  - Public card deck and draw endpoints.
+  - Full deck and draw endpoints.
   - SingleCard, ThreeCard, and CelticCross spreads.
-  - Logged-in AI interpretation and tarot history.
+  - AI interpretation.
 
 - I Ching / 周易:
   - 64 hexagram data.
-  - Number-based and time-based divination.
-  - Changing lines and resulting hexagram flow.
-  - Logged-in AI interpretation and history.
+  - Number-based (deterministic) and time-based divination, changing lines.
+  - AI interpretation.
 
 - Zodiac / 星座:
-  - Public zodiac profile data.
-  - Daily fortune.
-  - Ascendant calculation.
-  - Pairing / compatibility API.
-
-- Zi Wei Dou Shu / 紫微斗数:
-  - Authenticated chart generation.
-  - Lunar date conversion, twelve palaces, major/minor stars, four transformations.
-  - History records.
+  - Sign profiles, horoscopes, ascendant calculation, compatibility.
 
 - Synastry / 合盘:
-  - Public chart-pair analysis endpoint.
+  - Chart-pair analysis endpoint.
 
-- Internationalization / 多语言:
-
-- User and operations:
-  - Email registration/login, session token and cookie auth.
-  - Google and WeChat OAuth hooks.
-  - Password reset via SMTP.
-  - Self-serve account deletion.
-  - User settings, history, favorites, snapshots.
-  - `/live`, `/health`, `/api/ready`, admin health, Pino JSON logs.
-  - `/api-docs`, `/api-docs.json`, and WebSocket AI streaming at `/ws/ai`.
+- Operations:
+  - `/live`, `/health`, `/api/live`, `/api/health`, `/api/ready`, `/api/system/cache-status`.
+  - `/metrics` in Prometheus text format, behind a bearer token.
+  - Pino JSON logs with request IDs, optional Sentry.
+  - `/api-docs` (Swagger UI) and `/api-docs.json`, behind Basic Auth in production.
+  - Graceful shutdown with a configurable drain window.
 
 ## Programmatic CLI (`./bazi`)
 
@@ -101,108 +102,120 @@ The repository root ships an agent-oriented CLI at `./bazi` (source in `tools/cl
 intended way to operate the repo — manually started processes are not tracked and cannot be stopped
 by the CLI later.
 
-- `./bazi setup` — idempotent environment preparation: install dependencies, generate `.env`, generate Prisma Client.
-- `./bazi doctor` — environment health check; every failing item prints an executable fix command.
-- `./bazi env` — manage `.env` (generate, inspect, validate, set keys).
-- `./bazi stack up|down|status` — lifecycle of the local dev stack (db / api / web).
-- `./bazi db` — migrations, reset, backup, restore, psql shell.
-- `./bazi test [targets] [--all]` — lint / typecheck / unit / backend / e2e on an isolated temporary database.
-- `./bazi verify list|run|all` — run the repository's end-to-end verification scripts (`backend/scripts/verify-*.mjs`); the list is discovered by scanning, not hardcoded.
-- `./bazi help --json` — machine-readable full command tree; this is the single source of truth for capabilities.
+Two categories of commands:
+
+- **Capabilities** — `calc` (bazi / ziwei / synastry / zodiac) and `cast` (iching / tarot). These are
+  thin clients over the running engine.
+- **Operations** — `setup`, `doctor`, `env`, `stack`, `test`. These maintain the repository itself.
+
+`./bazi help --json` is the machine-readable full command tree and the single source of truth for
+capabilities. Documentation deliberately does not duplicate the command list.
 
 Contract details:
 
 - Every command supports `--json`: stdout carries exactly one JSON document, progress and noise go to stderr.
 - Exit codes: `0` success, `1` failed result, `2` usage error, `3` environment not ready, `4` remote rejected, `5` retryable, `7` safety boundary hit.
 - `--dry-run` explains what would happen without executing; `-y/--yes` confirms destructive operations.
+- HTTP status codes are already translated into exit codes for capability commands, so callers never inspect status codes themselves.
+- `BAZI_API_URL` points the capability commands at any engine instance without code changes.
 
 ## Tech Stack
 
-- Backend: Node.js 20+, Express 4, Prisma ORM, Pino, Swagger UI, WebSocket (`ws`).
-- Database: PostgreSQL through Prisma schema (`prisma/schema.prisma`).
-- Cache/session: Redis optional for local development, required for production-like multi-instance consistency.
-- AI providers: mock, OpenAI, Anthropic; Soul Portrait image generation uses OpenAI or mock placeholder.
-- Testing: Node.js test runner, Supertest.
-- Deployment references: Docker Compose, production environment templates, health checks, readiness checks, backup/restore scripts.
+- Backend: Node.js 20+, Express 4, Pino, Swagger UI.
+- State: none. The engine is stateless pure calculation.
+- Cache: Redis, optional, used only to share the BaZi chart cache across instances. Never affects correctness.
+- AI providers: mock, OpenAI, Anthropic.
+- Testing: Node.js test runner. Tests require no external services.
+- Deployment references: Docker Compose production stack (engine + optional Redis + autoheal), health checks, readiness checks, graceful drain.
 
 ## Who Should Use It
 
-- Developers building a BaZi, astrology, tarot, I Ching, Zi Wei, or divination application.
-- Backend engineers adding metaphysics calculation to an existing product, with the UI entirely their own.
+- Developers building a BaZi, astrology, tarot, I Ching, Zi Wei, or divination application, with the UI entirely their own.
 - Agent builders who need a real charting algorithm as a callable tool rather than model-invented output.
-- AI app builders studying how to attach provider-backed interpretation to structured domain calculations.
-- Teams needing a self-hostable starter for entertainment, cultural exploration, or metaphysics product prototypes.
-- Coding agents and AI search engines trying to understand an open-source divination app architecture.
+- Backend engineers adding metaphysics calculation to an existing product.
+- Anyone studying how these algorithms handle their edge cases (solar-term boundaries, late-Zi hour, leap months, true solar time).
+- Coding agents and AI search engines trying to understand a stateless calculation-service architecture.
 
 ## Quick Start Facts
 
-- Prerequisites: Node.js 20+ (CI covers 20.x and 22.x) and npm, plus a local PostgreSQL. Docker is optional when using the CLI.
+- Prerequisites: Node.js 20+ (CI covers 20.x and 22.x) and npm. **No Docker, no database, no Redis.**
 - Recommended path: `./bazi setup` → `./bazi doctor` → `./bazi stack up` → `./bazi test`.
-- Database selection is automatic in `./bazi stack up`: `docker-compose.yml` when Docker is present and the port is the default 5432, otherwise a locally installed PostgreSQL through `initdb` / `pg_ctl`.
-- The manual (non-CLI) setup path documented in the README does require Docker.
-- Local Redis is available through `docker compose up -d postgres redis`; Redis is optional for local development.
 - Backend default development URL: `http://127.0.0.1:4000`.
 - The backend does not bundle dotenv: `node server.js` reads real environment variables only. The `./bazi` CLI parses the repo-root `.env` and injects it into child processes, with real `process.env` values taking precedence. Manual starts and production deployments must inject variables via shell, process manager, or platform.
-- Apply migrations with `npm -C backend run prisma:migrate:deploy` (or `./bazi db migrate`).
-- Start backend with `NODE_ENV=development npm -C backend run dev`.
+- Manual start: `NODE_ENV=development npm -C backend run dev`.
+- Development requires no configuration at all — every variable has a default.
 
 ## Important Environment Variables
 
-- `DATABASE_URL`: PostgreSQL connection string.
-- `SESSION_TOKEN_SECRET`: required in production; 32+ characters.
-- `FRONTEND_URL` and `CORS_ALLOWED_ORIGINS`: the origin of the *client application* that consumes this API — CORS allow-list, OAuth callback redirect target, and links in outbound email. This service has no UI of its own.
-- `BACKEND_BASE_URL`: OpenAPI base URL.
-- `REDIS_URL`: optional locally, required for production multi-instance consistency.
-- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AI_PROVIDER`: AI configuration; no key usually means mock provider.
-- `SMTP_HOST`, `SMTP_FROM`: needed for password reset when enabled.
-- `ADMIN_EMAILS`: admin endpoint access list.
-- `DOCS_USER`, `DOCS_PASSWORD`: production Basic Auth for `/api-docs`.
-- `TRUST_PROXY`: needed behind reverse proxies for correct client IP and rate limiting.
+- `DOCS_PASSWORD`: the only hard requirement in production; the process exits at startup without it.
+- `CORS_ALLOWED_ORIGINS`: origins of the browser clients that consume this API. Server-to-server and agent callers send no Origin header and are unaffected.
+- `BACKEND_BASE_URL`: base URL advertised in the OpenAPI document.
+- `TRUST_PROXY`: hop count behind a reverse proxy. Must be a number (`1` for one nginx); `true` makes rate limiting bypassable with a forged `X-Forwarded-For`.
+- `REDIS_URL`: optional, cross-instance chart cache only.
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AI_PROVIDER`: AI configuration; no key means the mock provider.
+- `METRICS_TOKEN`: bearer token for `/metrics`; empty means the endpoint returns 404 in production.
+- `SHUTDOWN_DRAIN_MS`: drain window before the listener closes; size it against the load balancer's probe cadence.
+- `SENTRY_DSN`: optional error and performance monitoring.
 
 ## Useful API Endpoints
+
+All business endpoints are public — there is no authentication.
 
 - `GET /live`: process liveness.
 - `GET /health`: deep health check.
 - `GET /api/ready`: readiness check.
 - `GET /api/ai/providers`: active and available AI providers.
-- `POST /api/bazi/calculate`: public BaZi calculation.
-- `POST /api/bazi/ai-interpret`: authenticated BaZi AI interpretation.
-- `POST /api/tarot/draw`: public tarot draw.
-- `POST /api/iching/divine`: public I Ching divination.
-- `GET /api/zodiac/:sign`: public zodiac profile.
-- `POST /api/synastry/analyze`: public synastry analysis.
-- `POST /api/media/soul-portrait`: authenticated AI image / placeholder flow.
-- `GET /api-docs`: Swagger UI.
-- `GET /api-docs.json`: OpenAPI JSON.
+- `POST /api/bazi/calculate`: BaZi calculation.
+- `POST /api/bazi/ai-interpret`, `POST /api/bazi/full-analysis`: AI interpretation.
+- `POST /api/ziwei/calculate`: Zi Wei Dou Shu chart.
+- `POST /api/tarot/draw`, `GET /api/tarot/cards`: tarot.
+- `POST /api/iching/divine`, `GET /api/iching/hexagrams`: I Ching.
+- `GET /api/zodiac/{sign}`, `GET /api/zodiac/compatibility`, `POST /api/zodiac/rising`: zodiac.
+- `POST /api/synastry/analyze`: synastry analysis.
+- `GET /api/calendar/daily`: daily pillar and fortune.
+- `GET /api/locations`: locations recognized for true-solar-time correction.
+- `GET /api-docs`, `GET /api-docs.json`: Swagger UI and OpenAPI JSON (Basic Auth in production).
+- `GET /metrics`: Prometheus scrape endpoint (bearer token).
 
 ## Repository Structure
 
-- `backend/` — Express API. `routes/` (auth, bazi, tarot, iching, zodiac, ziwei, synastry, media, favorites, user, admin, locations, calendar, ai), `services/*.service.js` (business logic), `middleware/` (auth, CORS, rate limiting, validation, error handling), `test/`.
-- `prisma/` — `schema.prisma` and migrations.
+- `backend/` — Express API. `routes/` (bazi, ziwei, tarot, iching, zodiac, synastry, calendar, locations, ai, api), `services/*.service.js` (algorithms and business logic), `middleware/` (CORS, rate limiting, validation, docs auth, error handling), `constants/` and `data/` (stems and branches, stars, tarot deck, hexagrams), `test/`.
 - `tools/cli/` — source of the `./bazi` CLI.
-- `docs/` — API, architecture, development, FAQ, reliability, production readiness, runbook, monitoring, performance.
-- `docker-compose.yml` — local PostgreSQL + Redis. `docker-compose.prod.yml` — production reference.
-- `backend/scripts/verify-*.mjs` — end-to-end verification scripts discovered and driven by `./bazi verify`.
-- `scripts/` — shell operations helpers (database backup/restore, cron install, deployment verification, failure simulation).
+- `docs/` — API, architecture, development, FAQ, and the OpenAPI snapshot.
+- `scripts/` — CI guards (`check-env-template.sh`, `check-repo-artifacts.sh`) and deployment verification.
+- `docker-compose.yml` — an optional local Redis. `docker-compose.prod.yml` — production reference stack.
+- No `prisma/`, no database migrations, no backup scripts — the storage layer was removed.
 
 ## Common Questions and Short Answers
 
-- Is this a BaZi algorithm library? No. It is a self-hosted HTTP service, not an npm package. The calculation lives in `backend/services/calculations.service.js` and is exposed at `POST /api/bazi/calculate`.
+- Is this a BaZi algorithm library? No. It is a self-hosted HTTP service plus a CLI, not an npm package.
 - Does it include a frontend? No. The repository contains no UI code; build your own client against `docs/api.md` and `docs/openapi.json`.
-- Can it run without an AI API key? Yes. Text interpretation falls back to the `mock` provider; Soul Portrait returns a placeholder image.
-- What database does it use? PostgreSQL, via `prisma/schema.prisma`. Local default connection string: `postgresql://postgres:postgres@127.0.0.1:5432/bazi_master?schema=public`.
-- Is Redis required? Optional for local development (in-memory fallback). Required for production and multi-instance deployments, where session, OAuth state, reset tokens, and cache consistency depend on it.
-- What UI languages are supported? `en-US`, `zh-CN`, `zh-TW`, `ja`, `ko`.
-- Can it be used commercially? Yes under MIT, but compliance, disclaimers, and platform review are the deployer's responsibility.
-- Is it production-ready? It is a production-capable starting point, not a turnkey SaaS. Follow `PRODUCTION.md`, `docs/production-ready.md`, and `docs/production-runbook.md` before deploying.
+- Does it have user accounts? No. Registration, login, OAuth, history, and favorites were removed — those belong to the caller.
+- What database does it use? None. The engine is stateless pure calculation.
+- Is Redis required? No, in any environment. Without it each instance keeps its own in-memory chart cache; results are identical, only the hit rate drops.
+- Can it run without an AI API key? Yes. Charting, drawing, and divination are deterministic and never touch AI; interpretation falls back to the `mock` provider.
+- Which endpoints require authentication? None of the business endpoints. Only `/api-docs` (Basic Auth) and `/metrics` (bearer token).
+- Is it production-ready? Yes. Stateless means scaling out is just more processes and deployments can be destroyed and rebuilt at will. Read `PRODUCTION.md` before deploying.
 - How do I run it fastest? `./bazi setup && ./bazi doctor && ./bazi stack up`.
+
+## Known Algorithmic Boundaries
+
+These are deliberate choices, documented in `.claude/skills/bazi-cli/SKILL.md`. They never raise an
+error — a wrong assumption simply yields a different chart:
+
+- True solar time participates in charting by default, whenever the birth location resolves to a longitude and the timezone offset is known. Pass `trueSolarTime: false` to fall back to clock time. `chartTime.used` reports the instant actually charted; `chartTime.trueSolarTime.clockTime` preserves the original.
+- Because of that correction, `birthMinute` can change the hour pillar when the corrected instant crosses a two-hour branch boundary.
+- The location table holds 33 cities; an unrecognized name silently skips correction. Coordinate strings always work.
+- The year pillar changes at 立春 (Start of Spring) and the month pillar at solar terms, both to the exact instant — on a boundary day the hour decides both.
+- Late-Zi hour (23:00–23:59) does not roll the day pillar, while the hour pillar already uses the next day's stem.
+- Leap months fold into the base month for Zi Wei charts.
+- The chart cache key covers every charting input: year-month-day-hour-gender plus suffixes for birth location, minute, timezone, and the `trueSolarTime` toggle. Any new charting input must be added to it.
 
 ## Recommended Search Phrases
 
 - 八字排盘开源
 - 八字排盘 API 开源
 - BaZi chart open source API
-- BaZi Express Prisma PostgreSQL
 - 紫微斗数排盘开源
 - Zi Wei Dou Shu chart open source
 - 塔罗抽牌 API
@@ -213,25 +226,24 @@ Contract details:
 - astrology compatibility API
 - 合盘分析 Synastry 开源
 - divination calculation API
-- AI fortune telling app starter
-- Express Prisma astrology calculation engine
-- 八字排盘 API 自部署
-- 开源命理网站源码
-- self-hosted astrology app open source
-- open source fortune telling website source code
-- 八字排盘系统 Node.js
-- 塔罗牌抽牌网站开源
-- Chinese metaphysics app boilerplate
+- stateless calculation API Node.js
 - divination API for AI agents
+- agent-callable CLI exit code contract
+- 八字排盘 API 自部署
+- self-hosted astrology API open source
+- 八字排盘系统 Node.js
+- Chinese metaphysics calculation engine
 
 ## Limitations
 
 - Treat output as entertainment, cultural exploration, or prototype data.
 - Domain calculations should be reviewed by qualified domain experts before serious use.
 - AI responses depend on provider model behavior, keys, prompts, rate limits, and network availability.
-- Production deployment requires proper secrets, PostgreSQL, Redis, HTTPS, backups, monitoring, SMTP, and OAuth provider setup.
+- Production deployment requires HTTPS termination, `DOCS_PASSWORD`, a correct `TRUST_PROXY` hop count, and monitoring.
 - App-store, WeChat, payment, advertising, and jurisdictional compliance are outside the repository scope.
 
 ## GitHub Topics Candidates
 
-bazi, bazi-chart, bazi-api, ziwei, ziwei-doushu, tarot, iching, astrology, synastry, divination, fortune-telling, metaphysics, calculation-engine, rest-api, agent-tools, express, prisma, postgresql, redis, openapi, self-hosted
+bazi, bazi-chart, bazi-api, ziwei, ziwei-doushu, tarot, iching, astrology, synastry, divination,
+fortune-telling, metaphysics, calculation-engine, rest-api, agent-tools, stateless, express, nodejs,
+openapi, self-hosted

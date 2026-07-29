@@ -7,7 +7,6 @@ import {
   resolveHealthCacheTtlMs,
 } from '../services/health.service.js';
 
-const okDb = { ok: true };
 const okRedis = { ok: true };
 
 describe('health snapshot cache', () => {
@@ -28,123 +27,124 @@ describe('health snapshot cache', () => {
     );
     assert.equal(resolveHealthCacheTtlMs({ NODE_ENV: 'production', HEALTH_CACHE_TTL_MS: '0' }), 0);
     // Garbage falls back to the environment default rather than disabling the cache.
-    assert.equal(resolveHealthCacheTtlMs({ NODE_ENV: 'production', HEALTH_CACHE_TTL_MS: 'x' }), 1000);
+    assert.equal(
+      resolveHealthCacheTtlMs({ NODE_ENV: 'production', HEALTH_CACHE_TTL_MS: 'x' }),
+      1000
+    );
   });
 
-  it('probes on every call when the cache is disabled', async () => {
-    let dbCalls = 0;
-    const env = { NODE_ENV: 'test' };
-    const checkDatabaseFn = async () => {
-      dbCalls += 1;
-      return okDb;
-    };
-
-    await getHealthSnapshot({ env, checkDatabaseFn, checkRedisFn: async () => okRedis });
-    await getHealthSnapshot({ env, checkDatabaseFn, checkRedisFn: async () => okRedis });
-
-    assert.equal(dbCalls, 2);
-  });
-
-  it('serves a second call from cache within the TTL', async () => {
-    let dbCalls = 0;
-    const env = { NODE_ENV: 'production', HEALTH_CACHE_TTL_MS: '60000' };
-    const checkDatabaseFn = async () => {
-      dbCalls += 1;
-      return okDb;
-    };
-
-    const first = await getHealthSnapshot({ env, checkDatabaseFn, checkRedisFn: async () => okRedis });
-    const second = await getHealthSnapshot({
-      env,
-      checkDatabaseFn,
+  it('reports dependencies under a checks dictionary', async () => {
+    const snapshot = await getHealthSnapshot({
+      env: { NODE_ENV: 'test' },
       checkRedisFn: async () => okRedis,
     });
 
-    assert.equal(dbCalls, 1);
+    assert.deepEqual(snapshot, {
+      checks: { redis: { ok: true } },
+      ok: true,
+    });
+  });
+
+  it('probes on every call when the cache is disabled', async () => {
+    let redisCalls = 0;
+    const env = { NODE_ENV: 'test' };
+    const checkRedisFn = async () => {
+      redisCalls += 1;
+      return okRedis;
+    };
+
+    await getHealthSnapshot({ env, checkRedisFn });
+    await getHealthSnapshot({ env, checkRedisFn });
+
+    assert.equal(redisCalls, 2);
+  });
+
+  it('serves a second call from cache within the TTL', async () => {
+    let redisCalls = 0;
+    const env = { NODE_ENV: 'production', HEALTH_CACHE_TTL_MS: '60000' };
+    const checkRedisFn = async () => {
+      redisCalls += 1;
+      return okRedis;
+    };
+
+    const first = await getHealthSnapshot({ env, checkRedisFn });
+    const second = await getHealthSnapshot({ env, checkRedisFn });
+
+    assert.equal(redisCalls, 1);
     assert.equal(first.ok, true);
     assert.equal(second.ok, true);
   });
 
   it('re-probes once the TTL has elapsed', async () => {
-    let dbCalls = 0;
+    let redisCalls = 0;
     const env = { NODE_ENV: 'production', HEALTH_CACHE_TTL_MS: '10' };
-    const checkDatabaseFn = async () => {
-      dbCalls += 1;
-      return okDb;
+    const checkRedisFn = async () => {
+      redisCalls += 1;
+      return okRedis;
     };
 
-    await getHealthSnapshot({ env, checkDatabaseFn, checkRedisFn: async () => okRedis });
+    await getHealthSnapshot({ env, checkRedisFn });
     await new Promise((resolve) => setTimeout(resolve, 25));
-    await getHealthSnapshot({ env, checkDatabaseFn, checkRedisFn: async () => okRedis });
+    await getHealthSnapshot({ env, checkRedisFn });
 
-    assert.equal(dbCalls, 2);
+    assert.equal(redisCalls, 2);
   });
 
   // This is the property the endpoint actually depends on: a flood arriving on a cold
-  // cache must produce one database query, not one per request.
+  // cache must produce one dependency probe, not one per request.
   it('collapses a concurrent burst into a single probe', async () => {
-    let dbCalls = 0;
+    let redisCalls = 0;
     const env = { NODE_ENV: 'production', HEALTH_CACHE_TTL_MS: '60000' };
-    const checkDatabaseFn = async () => {
-      dbCalls += 1;
+    const checkRedisFn = async () => {
+      redisCalls += 1;
       await new Promise((resolve) => setTimeout(resolve, 10));
-      return okDb;
+      return okRedis;
     };
 
     const results = await Promise.all(
-      Array.from({ length: 50 }, () =>
-        getHealthSnapshot({ env, checkDatabaseFn, checkRedisFn: async () => okRedis })
-      )
+      Array.from({ length: 50 }, () => getHealthSnapshot({ env, checkRedisFn }))
     );
 
-    assert.equal(dbCalls, 1);
+    assert.equal(redisCalls, 1);
     assert.equal(results.length, 50);
     assert.ok(results.every((r) => r.ok === true));
   });
 
-  it('reports not-ok when a dependency fails, and treats disabled redis as ok', async () => {
+  // Redis is an optional dependency: not configured is healthy, configured-but-unreachable
+  // is not. Reporting "disabled" as a failure would leave a single-instance deployment
+  // permanently degraded.
+  it('treats a disabled redis as ok and an unavailable one as not ok', async () => {
     const env = { NODE_ENV: 'test' };
 
-    const dbDown = await getHealthSnapshot({
+    const disabled = await getHealthSnapshot({
       env,
-      checkDatabaseFn: async () => ({ ok: false, error: 'boom' }),
-      checkRedisFn: async () => okRedis,
-    });
-    assert.equal(dbDown.ok, false);
-
-    const redisDisabled = await getHealthSnapshot({
-      env,
-      checkDatabaseFn: async () => okDb,
       checkRedisFn: async () => ({ ok: true, status: 'disabled' }),
     });
-    assert.equal(redisDisabled.ok, true);
+    assert.equal(disabled.ok, true);
+    assert.equal(disabled.checks.redis.status, 'disabled');
 
-    const redisDown = await getHealthSnapshot({
+    const unavailable = await getHealthSnapshot({
       env,
-      checkDatabaseFn: async () => okDb,
       checkRedisFn: async () => ({ ok: false, status: 'unavailable' }),
     });
-    assert.equal(redisDown.ok, false);
+    assert.equal(unavailable.ok, false);
+    assert.equal(unavailable.checks.redis.status, 'unavailable');
   });
 
-  // A failed probe must not be pinned for the rest of the TTL in a way that outlives the
-  // outage, but it also must not be re-run on every request during one.
+  // A failed probe must not be re-run on every request during an outage, but it also must
+  // not outlive the TTL.
   it('caches a failing snapshot for the TTL as well', async () => {
-    let dbCalls = 0;
+    let redisCalls = 0;
     const env = { NODE_ENV: 'production', HEALTH_CACHE_TTL_MS: '60000' };
-    const checkDatabaseFn = async () => {
-      dbCalls += 1;
+    const checkRedisFn = async () => {
+      redisCalls += 1;
       return { ok: false, error: 'down' };
     };
 
-    const first = await getHealthSnapshot({ env, checkDatabaseFn, checkRedisFn: async () => okRedis });
-    const second = await getHealthSnapshot({
-      env,
-      checkDatabaseFn,
-      checkRedisFn: async () => okRedis,
-    });
+    const first = await getHealthSnapshot({ env, checkRedisFn });
+    const second = await getHealthSnapshot({ env, checkRedisFn });
 
-    assert.equal(dbCalls, 1);
+    assert.equal(redisCalls, 1);
     assert.equal(first.ok, false);
     assert.equal(second.ok, false);
   });

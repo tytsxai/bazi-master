@@ -134,7 +134,7 @@ describe('整盘结构不变量', () => {
 
     it(`${label}：杀破狼互隔四宫成三合`, () => {
       const stars = collectStars(calculateZiweiChart(sample));
-      const gap = (a, b) => ((stars.get(a) - stars.get(b) + 12) % 12);
+      const gap = (a, b) => (stars.get(a) - stars.get(b) + 12) % 12;
       assert.equal(gap('qisha', 'tanlang'), 4, '七杀贪狼未成三合');
       assert.equal(gap('pojun', 'qisha'), 4, '破军七杀未成三合');
       assert.equal(gap('tanlang', 'pojun'), 4, '贪狼破军未成三合');
@@ -142,7 +142,7 @@ describe('整盘结构不变量', () => {
 
     it(`${label}：七杀天府相冲、破军天相相冲`, () => {
       const stars = collectStars(calculateZiweiChart(sample));
-      const opposite = (a, b) => ((stars.get(a) - stars.get(b) + 12) % 12) === 6;
+      const opposite = (a, b) => (stars.get(a) - stars.get(b) + 12) % 12 === 6;
       assert.ok(opposite('qisha', 'tianfu'), '七杀天府应永远相对');
       assert.ok(opposite('pojun', 'tianxiang'), '破军天相应永远相对');
     });

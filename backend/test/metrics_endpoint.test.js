@@ -3,18 +3,14 @@ import assert from 'node:assert/strict';
 
 import { collectMetrics, createMetricsHandler } from '../services/metrics.service.js';
 
-const healthOk = async () => ({ db: { ok: true }, redis: { ok: true }, ok: true });
-const wsOk = () => ({
-  status: 'ok',
-  totalConnections: 7,
-  maxConnections: 500,
-  activeAiRequests: 2,
+const healthOk = async () => ({
+  checks: { db: { ok: true }, redis: { ok: true } },
+  ok: true,
 });
 
 const collectWith = (overrides = {}) =>
   collectMetrics({
     healthSnapshotFn: healthOk,
-    websocketMetricsFn: wsOk,
     shuttingDownFn: () => false,
     rateLimitDegradedFn: () => false,
     processRef: {
@@ -47,7 +43,7 @@ const createRes = () => ({
 });
 
 describe('metrics collection', () => {
-  it('emits the gauges an alert needs, in Prometheus text format', async () => {
+  it('emits the process gauges in Prometheus text format', async () => {
     const body = await collectWith();
 
     assert.match(body, /^# HELP bazi_up /m);
@@ -57,10 +53,6 @@ describe('metrics collection', () => {
     assert.match(body, /^bazi_process_resident_memory_bytes 1000$/m);
     assert.match(body, /^bazi_process_heap_used_bytes 500$/m);
     assert.match(body, /^bazi_shutting_down 0$/m);
-    // The pair the TODO asks for an alert on: ratio, not "wait until it starts refusing".
-    assert.match(body, /^bazi_websocket_connections 7$/m);
-    assert.match(body, /^bazi_websocket_connections_max 500$/m);
-    assert.match(body, /^bazi_websocket_ai_requests_active 2$/m);
     assert.ok(body.endsWith('\n'));
   });
 
@@ -69,28 +61,49 @@ describe('metrics collection', () => {
 
     assert.equal((body.match(/^# HELP bazi_dependency_up /gm) || []).length, 1);
     assert.equal((body.match(/^# TYPE bazi_dependency_up /gm) || []).length, 1);
-    assert.match(body, /^bazi_dependency_up\{dependency="database"\} 1$/m);
+    assert.match(body, /^bazi_dependency_up\{dependency="db"\} 1$/m);
     assert.match(body, /^bazi_dependency_up\{dependency="redis"\} 1$/m);
+  });
+
+  // The series are driven by whatever getHealthSnapshot reports, so adding or dropping a
+  // dependency there must not need a matching edit in the metrics service.
+  it('follows the checks dictionary rather than a hardcoded dependency list', async () => {
+    const body = await collectWith({
+      healthSnapshotFn: async () => ({ checks: { redis: { ok: true } }, ok: true }),
+    });
+
+    assert.match(body, /^bazi_dependency_up\{dependency="redis"\} 1$/m);
+    assert.ok(!body.includes('dependency="db"'));
+    assert.equal((body.match(/^# HELP bazi_dependency_up /gm) || []).length, 1);
+  });
+
+  it('omits the dependency family entirely when nothing is reported', async () => {
+    const body = await collectWith({
+      healthSnapshotFn: async () => ({ checks: {}, ok: true }),
+    });
+
+    assert.ok(!body.includes('bazi_dependency_up'));
+    assert.match(body, /^bazi_up 1$/m);
   });
 
   it('reports a dependency that is down', async () => {
     const body = await collectWith({
       healthSnapshotFn: async () => ({
-        db: { ok: false, error: 'boom' },
-        redis: { ok: false, status: 'unavailable' },
+        checks: { db: { ok: false, error: 'boom' }, redis: { ok: false, status: 'unavailable' } },
         ok: false,
       }),
     });
 
-    assert.match(body, /^bazi_dependency_up\{dependency="database"\} 0$/m);
+    assert.match(body, /^bazi_dependency_up\{dependency="db"\} 0$/m);
     assert.match(body, /^bazi_dependency_up\{dependency="redis"\} 0$/m);
   });
 
-  it('counts a deliberately disabled redis as up', async () => {
+  // Not configured is healthy; configured-but-unreachable is not. Reporting "disabled" as
+  // a failure would leave a deployment without Redis permanently degraded.
+  it('counts a deliberately disabled dependency as up', async () => {
     const body = await collectWith({
       healthSnapshotFn: async () => ({
-        db: { ok: true },
-        redis: { ok: true, status: 'disabled' },
+        checks: { redis: { ok: true, status: 'disabled' } },
         ok: true,
       }),
     });
@@ -106,14 +119,6 @@ describe('metrics collection', () => {
 
     assert.match(body, /^bazi_shutting_down 1$/m);
     assert.match(body, /^bazi_rate_limit_degraded 1$/m);
-  });
-
-  // Zeros would read as "no connections" rather than "the server was never started".
-  it('omits websocket gauges when the ws server is not initialised', async () => {
-    const body = await collectWith({ websocketMetricsFn: () => ({ status: 'not_initialized' }) });
-
-    assert.ok(!body.includes('bazi_websocket_connections'));
-    assert.match(body, /^bazi_up 1$/m);
   });
 });
 

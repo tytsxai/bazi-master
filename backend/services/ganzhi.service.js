@@ -54,9 +54,7 @@ export const getTwelveStage = (stem, branch) => {
   const target = branchIndex(branch);
   if (!start || target === -1) return null;
   const startIdx = branchIndex(start.branch);
-  const offset = start.forward
-    ? normalize12(target - startIdx)
-    : normalize12(startIdx - target);
+  const offset = start.forward ? normalize12(target - startIdx) : normalize12(startIdx - target);
   return { ...TWELVE_STAGE_NAMES[offset], index: offset };
 };
 
@@ -72,9 +70,7 @@ export const getStemCombination = (stemA, stemB) => {
 
 /** 天干相冲。 */
 export const isStemClash = (stemA, stemB) =>
-  STEM_CLASHES.some(
-    ([a, b]) => (a === stemA && b === stemB) || (a === stemB && b === stemA)
-  );
+  STEM_CLASHES.some(([a, b]) => (a === stemA && b === stemB) || (a === stemB && b === stemA));
 
 /**
  * 地支关系全集检测。
@@ -166,7 +162,11 @@ export const detectStemRelations = (stems = []) => {
       const combo = getStemCombination(stems[i], stems[j]);
       if (combo) combinations.push({ ...combo, positions: [i, j] });
       if (isStemClash(stems[i], stems[j])) {
-        clashes.push({ pair: [stems[i], stems[j]], positions: [i, j], cn: `${stems[i]}${stems[j]}相冲` });
+        clashes.push({
+          pair: [stems[i], stems[j]],
+          positions: [i, j],
+          cn: `${stems[i]}${stems[j]}相冲`,
+        });
       }
     }
   }

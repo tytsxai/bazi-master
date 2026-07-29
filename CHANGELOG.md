@@ -8,6 +8,66 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Removed
 
+- **Every artifact that documented or operated the deleted storage layer.** Removing the
+  database left a trail of files that still described a system that no longer exists —
+  the most expensive kind of documentation, because it reads as authoritative. Deleted:
+  - `scripts/backup-db.sh`, `restore-db.sh`, `cron-backup.sh`, `install-cron.sh` and
+    `failure-simulation.sh` — all of them drove `pg_dump`/`psql` against a database that
+    is gone.
+  - `docker/postgres-init/`.
+  - `docs/production-ready.md`, `docs/production-runbook.md`,
+    `docs/backend-reliability.md` and `docs/monitoring-guide.md` — roughly a thousand
+    lines whose substance was PostgreSQL backup, restore, migration, connection-pool
+    sizing and capacity planning. What survived (health-probe wiring, drain timing,
+    `/metrics` alerting) is folded into `PRODUCTION.md`.
+  - `./bazi db` and `./bazi verify` command trees, plus `core/prisma.mjs` and
+    `helpers/local-pg.mjs`. `bazi doctor` no longer checks for a Prisma Client or a
+    reachable PostgreSQL, `bazi setup` no longer generates a client, `bazi stack` manages
+    a single `api` component (so `--only` is gone), and `bazi test` drops `--use-dev-db`
+    — there is no dev database to protect any more.
+  - `OAUTH_FETCH_TIMEOUT_MS` in `backend/utils/http.js`, exported but imported nowhere
+    since the OAuth service was deleted.
+
+### Changed
+
+- **The CLI safety boundary now guards `.env` instead of the database.** `exit 7` was
+  attached to `db reset` / `db restore`; with those gone the contract would have become
+  vestigial. It is re-anchored on `bazi env init --force`, which overwrites the one file
+  in the repo holding real API keys. Both gates behave as before — `NODE_ENV=production`
+  is a hard refusal, `--dry-run` previews without executing, `--yes` confirms — and
+  `tools/cli/test/safety.test.mjs` covers the new target.
+- `env.production.template` and `docker-compose.prod.yml` rewritten against what the code
+  actually reads. Dropped the postgres service, its volume, the backup cron variables,
+  Prisma pool tuning, and every session / OAuth / SMTP / cookie key. `DOCS_PASSWORD` is
+  now `${DOCS_PASSWORD:?...}` in compose, matching the server's own startup validation —
+  it is the single hard requirement in production. Redis persistence is off (`--save ''`)
+  because the only thing in it is a recomputable chart cache.
+- `bazi env check` validates per `NODE_ENV` rather than against a fixed list: nothing is
+  required in development, and only `DOCS_PASSWORD` in production. Same rule as
+  `server.js`, so the two can no longer disagree.
+- README, README.en, `llms.txt`, `docs/api.md`, `docs/architecture.md`,
+  `docs/development.md`, `docs/faq.md` and `PRODUCTION.md` rewritten around the stateless
+  capability layer. The endpoint list is regenerated from the actual routes — the old
+  `docs/api.md` documented 60-plus endpoints, more than half of which (auth, records,
+  favorites, user settings, media, admin) no longer exist.
+
+### Fixed
+
+- `scripts/verify-deployment.sh` had three defects that made it structurally incapable of
+  passing, on a healthy deployment: its log helpers wrote to stdout, so every
+  `$(http_request ...)` capture came back with `[INFO] Attempting GET ...` glued to the
+  front of the JSON and **every** `validate_json` call reported "key not found";
+  `validate_json` declared `local expected_value=$3` under `set -u`, so any two-argument
+  call aborted the entire run; and `"${auth_args[@]}"` on an empty array is an unbound
+  variable under bash 3.2 (macOS), killing the OpenAPI check. Logging now goes to stderr,
+  the third parameter defaults, and the array expansion is guarded. The script's own
+  content was also brought up to date — it no longer asserts that `/api/tarot/cards`
+  requires authentication, no longer probes `/api/auth/*`, no longer reads
+  `checks.db.ok`, and no longer reports an unconfigured Redis as "connected and
+  operational". Six checks, all passing against a live engine.
+
+### Removed (earlier in this cycle)
+
 - **BREAKING — the bundled React frontend is gone.** The project is a professional
   calculation engine, delivered as a documented HTTP API for applications and AI agents;
   the UI was never the value, and shipping one blurred the boundary of the capability

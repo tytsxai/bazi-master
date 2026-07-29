@@ -1,6 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { docsBasicAuth } from '../middleware/auth.js';
+import { docsBasicAuth } from '../middleware/docs.middleware.js';
 
 const createRequest = ({ headers = {} } = {}) => ({
   headers,
