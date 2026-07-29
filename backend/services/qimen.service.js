@@ -20,10 +20,10 @@ import {
   EIGHT_GODS,
   XUNSHOU_TO_YI,
   JIEQI_JU,
-  JIEQI_ORDER,
   YUAN_BY_FUTOU_BRANCH,
   YUAN_NAMES,
 } from '../constants/qimen.js';
+import { resolveSolarTerm } from './jieqi.service.js';
 
 /**
  * 九宫飞泊次序。顺飞即 1→2→…→9→1，此处用一个环表表示，
@@ -61,27 +61,13 @@ const octStep = (palace, step) => {
 const hourBranchIndex = (hour) => Math.floor((Number(hour) + 1) / 2) % 12;
 
 /**
- * 定当前所处节气及其起始日。奇门按节气行局，节气一换局数即变。
+ * 定当前所处节气及其交节时刻。奇门按节气行局，节气一换局数即变。
+ *
+ * 判定精确到分，且给了 `hour` 才作数：交节当天，交节时刻前后分属两个节气，
+ * 局数完全不同 —— 冬至、夏至那两天更是阳遁与阴遁的分界。
  */
-export const resolveJieQi = (year, month, day) => {
-  const lunar = Solar.fromYmd(year, month, day).getLunar();
-  const table = lunar.getJieQiTable();
-  const target = new Date(year, month - 1, day);
-
-  let current = null;
-  JIEQI_ORDER.forEach((name) => {
-    const solar = table[name];
-    if (!solar) return;
-    const date = new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay());
-    if (date <= target && (!current || date > current.date)) {
-      current = { name, date };
-    }
-  });
-
-  // 年初尚未交小寒时仍在上一年的冬至节内
-  if (!current) current = { name: '冬至', date: new Date(year - 1, 11, 22) };
-  return current;
-};
+export const resolveJieQi = (year, month, day, hour = 0, minute = 0) =>
+  resolveSolarTerm({ year, month, day, hour, minute });
 
 /**
  * 定三元：拆补法以甲己日为符头，自占日**向前**寻最近的符头日，
@@ -108,15 +94,19 @@ export const resolveYuan = (year, month, day) => {
 };
 
 /** 定阴阳遁与局数。 */
-export const resolveJu = (year, month, day) => {
-  const jieqi = resolveJieQi(year, month, day);
+export const resolveJu = (year, month, day, hour = 0, minute = 0) => {
+  const jieqi = resolveJieQi(year, month, day, hour, minute);
   const yuanInfo = resolveYuan(year, month, day);
+  if (!jieqi) return null;
   const entry = JIEQI_JU[jieqi.name];
   if (!entry || !yuanInfo) return null;
 
   return {
     jieqi: jieqi.name,
-    jieqiDate: jieqi.date.toISOString().slice(0, 10),
+    // 交节时刻按东八区墙钟给出，不是某个瞬时的 UTC 表示，故不走 toISOString
+    jieqiAt: jieqi.iso,
+    jieqiDate: jieqi.iso.slice(0, 10),
+    daysSinceJieQi: jieqi.daysSinceTerm,
     yang: entry.yang,
     dunCn: entry.yang ? '阳遁' : '阴遁',
     ju: entry.ju[yuanInfo.yuan],
@@ -169,7 +159,7 @@ export const castQimenChart = ({ year, month, day, hour }) => {
   const h = Number(hour);
   if (![y, m, d, h].every(Number.isFinite)) return null;
 
-  const juInfo = resolveJu(y, m, d);
+  const juInfo = resolveJu(y, m, d, h);
   if (!juInfo) return null;
 
   const lunar = Solar.fromYmd(y, m, d).getLunar();

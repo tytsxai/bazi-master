@@ -41,25 +41,43 @@ const digitalRoot = (value) => {
  * 年份四位相加至个位得 N：男取 11 − N，女取 N + 4（逾九减九）。
  * 得五者男寄坤二、女寄艮八 —— 中五宫无卦，必须寄出去。
  *
- * 年以**立春**为界，不是元旦：正月初的生日可能仍属上一年，这里按节气年取。
+ * 这个数字根写法跨世纪同样成立：数字根恒等于年份模九，与常见的
+ * 「男 (100−YY) mod 9 / 女 (YY−4) mod 9」那组分世纪公式结果一致。
+ *
+ * 年以**立春**为界，不是元旦，且交节精确到分：2024 立春在 2/4 16:27，
+ * 当天 16:27 前出生的命卦属 2023 年，差一位卦，东四西四也可能翻。
+ * 因此给了月日却不给时刻时，交节当天只能按零点算，结果标 `precision: 'day'`
+ * —— 那一天的结论调用方必须自己去核实，不要当成确定值。
  */
-export const resolveLifeTrigram = (birthYear, gender, { birthMonth, birthDay } = {}) => {
-  let year = Number(birthYear);
-  if (!Number.isFinite(year)) return null;
+export const resolveLifeTrigram = (
+  birthYear,
+  gender,
+  { birthMonth, birthDay, birthHour, birthMinute } = {}
+) => {
+  const rawYear = Number(birthYear);
+  if (!Number.isFinite(rawYear)) return null;
 
-  // 立春前算作上一年
-  if (Number.isFinite(Number(birthMonth)) && Number.isFinite(Number(birthDay))) {
-    const lunar = Solar.fromYmd(year, Number(birthMonth), Number(birthDay)).getLunar();
-    year = lunar.getYearInGanZhiByLiChun
-      ? Solar.fromYmd(year, Number(birthMonth), Number(birthDay)).getLunar().getYear()
-      : year;
-    const table = lunar.getJieQiTable();
-    const lichun = table['立春'];
-    if (lichun) {
-      const lichunDate = new Date(lichun.getYear(), lichun.getMonth() - 1, lichun.getDay());
-      const target = new Date(Number(birthYear), Number(birthMonth) - 1, Number(birthDay));
-      year = target < lichunDate ? Number(birthYear) - 1 : Number(birthYear);
-    }
+  const hasMonthDay =
+    Number.isFinite(Number(birthMonth)) && Number.isFinite(Number(birthDay));
+  const hasHour = Number.isFinite(Number(birthHour));
+
+  let year = rawYear;
+  let precision = 'year';
+  let lichunAt = null;
+
+  if (hasMonthDay) {
+    const parts = {
+      year: rawYear,
+      month: Number(birthMonth),
+      day: Number(birthDay),
+      hour: hasHour ? Number(birthHour) : 0,
+      minute: Number.isFinite(Number(birthMinute)) ? Number(birthMinute) : 0,
+    };
+    const resolved = resolveLiChunYear(parts);
+    if (resolved !== null) year = resolved;
+    precision = hasHour ? 'minute' : 'day';
+    const lichun = resolveLiChun(rawYear);
+    lichunAt = lichun ? lichun.iso : null;
   }
 
   const male = String(gender || '').toLowerCase() === 'male';
@@ -75,6 +93,9 @@ export const resolveLifeTrigram = (birthYear, gender, { birthMonth, birthDay } =
     number,
     ...trigram,
     solarYearUsed: year,
+    /** `year` 表示只按公历年算、完全没有过立春这道关，交节当天必然存疑。 */
+    precision,
+    lichunAt,
     group: trigram.group,
     groupCn: GROUP_NAMES[trigram.group].cn,
   };

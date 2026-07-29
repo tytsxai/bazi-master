@@ -27,10 +27,10 @@ import {
 import { BRANCHES_MAP, STEMS_MAP } from '../constants/stems.js';
 import { getElementRelation } from './bazi.service.js';
 import { getXunkong } from './ganzhi.service.js';
+import { resolveSolarTerm } from './jieqi.service.js';
 import {
   MONTH_GENERALS,
   QI_TO_MONTH_GENERAL,
-  MID_QI_ORDER,
   STEM_LODGING,
   TWELVE_GENERALS,
   NOBLE_BY_DAY_STEM,
@@ -50,28 +50,19 @@ export const getHourBranch = (hour) => BRANCHES[Math.floor((Number(hour) + 1) / 
  * 定月将：取不晚于占日的最近一个**中气**，其对应之将即为当月月将。
  * 用节换将是另一派，本模块取中气派。
  */
-export const resolveMonthGeneral = (year, month, day) => {
-  const solar = Solar.fromYmd(year, month, day);
-  const lunar = solar.getLunar();
-  const table = lunar.getJieQiTable();
+export const resolveMonthGeneral = (year, month, day, hour = 0, minute = 0) => {
+  const qi = resolveSolarTerm({ year, month, day, hour, minute }, { midQiOnly: true });
 
-  let best = null;
-  MID_QI_ORDER.forEach((qi) => {
-    const qiSolar = table[qi];
-    if (!qiSolar) return;
-    const qiDate = new Date(qiSolar.getYear(), qiSolar.getMonth() - 1, qiSolar.getDay());
-    const target = new Date(year, month - 1, day);
-    if (qiDate <= target && (!best || qiDate > best.date)) {
-      best = { qi, date: qiDate };
-    }
-  });
-
-  // 年初尚未过雨水时，仍行上一年大寒之后的子将
-  const branch = best ? QI_TO_MONTH_GENERAL[best.qi] : '子';
+  // 中气交在占时之后而未给时辰时，退到上一个中气 —— 宁可慢一步换将，不可早换
+  const branch = qi ? QI_TO_MONTH_GENERAL[qi.name] : '子';
   return {
     branch,
     ...MONTH_GENERALS[branch],
-    afterQiDate: best ? best.date.toISOString().slice(0, 10) : null,
+    // 实际所处中气。与常量里的 afterQi 恒等，列出来是为了能直接核对换将时点。
+    // 交气时刻是东八区墙钟，不是某个瞬时的 UTC 表示，故不走 toISOString
+    currentMidQi: qi ? qi.name : null,
+    afterQiAt: qi ? qi.iso : null,
+    afterQiDate: qi ? qi.iso.slice(0, 10) : null,
   };
 };
 
@@ -454,7 +445,12 @@ export const castLiurenChart = ({ year, month, day, hour }) => {
   const dayBranch = dayGanzhi[1];
 
   const hourBranch = getHourBranch(hour);
-  const monthGeneral = resolveMonthGeneral(Number(year), Number(month), Number(day));
+  const monthGeneral = resolveMonthGeneral(
+    Number(year),
+    Number(month),
+    Number(day),
+    Number(hour) || 0
+  );
   const heavenPlate = buildHeavenPlate(monthGeneral.branch, hourBranch);
   if (!heavenPlate) return null;
 

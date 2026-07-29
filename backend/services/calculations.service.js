@@ -277,7 +277,25 @@ export const performCalculation = (data) => {
     }
   });
 
-  const tenGods = Object.entries(tenGodsCounts).map(([name, val]) => ({ name, strength: val }));
+  // 顶层 tenGods 的 name 是历史遗留的英文串，保留以免破坏既有调用方；
+  // 补上 cn 让它与 analysis.pillarDetails 里的十神口径一致，不再一份数据两种语言。
+  const TEN_GOD_CN = {
+    'Friend (Bi Jian)': '比肩',
+    'Rob Wealth (Jie Cai)': '劫财',
+    'Eating God (Shi Shen)': '食神',
+    'Hurting Officer (Shang Guan)': '伤官',
+    'Indirect Wealth (Pian Cai)': '偏财',
+    'Direct Wealth (Zheng Cai)': '正财',
+    'Seven Killings (Qi Sha)': '七杀',
+    'Direct Officer (Zheng Guan)': '正官',
+    'Indirect Resource (Pian Yin)': '偏印',
+    'Direct Resource (Zheng Yin)': '正印',
+  };
+  const tenGods = Object.entries(tenGodsCounts).map(([name, val]) => ({
+    name,
+    cn: TEN_GOD_CN[name] || null,
+    strength: val,
+  }));
 
   const genderInt = gender === 'male' ? 1 : 0;
   const yun = eightChar.getYun(genderInt);
@@ -463,22 +481,23 @@ export const calculateDailyScore = (userChart, dailyPillars) => {
   // Element Relationship
   const relation = getElementRelation(dayElement, dmElement); // Day acts on Me
 
+  // 断语一律用中文：能力层面向的是中文使用者，英文只留给 README.en / llms.txt 那类介绍文件
   if (relation === 'Generates') {
     score += 15;
-    advice.push('Today supports you securely. Good for planning.');
+    advice.push('流日生扶日主，得力之日。');
   } else if (relation === 'Same') {
     score += 10;
-    advice.push('Social energy is high. Connect with friends.');
+    advice.push('流日与日主同气，宜与人协作。');
   } else if (relation === 'Controls') {
     score -= 10;
-    advice.push('Pressure might be high. Stay disciplined.');
+    advice.push('流日克身，压力偏重，宜守不宜进。');
   } else if (relation === 'ControlledBy') {
-    score += 5; // Wealth element often
-    advice.push('Opportunity for gain, but requires effort.');
+    score += 5; // 日主克流日，多为财星
+    advice.push('日主克流日，多主财利，然须费力方得。');
   } else {
-    // GeneratedBy (I generate output)
+    // GeneratedBy：日主生流日，为食伤泄秀
     score += 5;
-    advice.push('Good day for creative expression.');
+    advice.push('日主生流日，泄秀之象，宜表达创作。');
   }
 
   // 流日地支与本命日支的关系。这里曾经另抄了一份罗马字的六冲表，既与
@@ -491,12 +510,12 @@ export const calculateDailyScore = (userChart, dailyPillars) => {
   relations.clashes.forEach((c) => {
     score -= 20;
     branchEffects.push({ type: 'clash', cn: c.cn });
-    advice.push('Day branch clashes your day pillar — expect friction.');
+    advice.push('流日地支冲本命日支，事多阻滞。');
   });
   relations.sixCombinations.forEach((c) => {
     score += 10;
     branchEffects.push({ type: 'sixCombination', cn: c.cn });
-    advice.push('Day branch combines with your day pillar.');
+    advice.push('流日地支合本命日支，事易谐和。');
   });
   relations.punishments.forEach((p) => {
     score -= 10;
@@ -517,5 +536,9 @@ export const calculateDailyScore = (userChart, dailyPillars) => {
     // score 是按上面几条规则折算的粗略指标，真正可断的是这里的客观关系
     branchRelations: branchEffects,
     dayMasterRelation: relation,
+    dayMasterRelationCn:
+      { Same: '同气', Generates: '生身', GeneratedBy: '泄秀', Controls: '克身', ControlledBy: '为财' }[
+        relation
+      ] || null,
   };
 };

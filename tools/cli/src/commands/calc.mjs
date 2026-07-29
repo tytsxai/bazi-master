@@ -21,6 +21,24 @@ import {
 
 // ------------------------------------------------------------------ 渲染
 
+/**
+ * 引擎的五行、生克、十神都用英文枚举作为机器契约（HTTP 响应里保持不变），
+ * 但 CLI 是给人看的，一律译回中文。译不出来时原样透出，不吞掉信息。
+ */
+const ELEMENT_CN = { Wood: '木', Fire: '火', Earth: '土', Metal: '金', Water: '水' };
+
+const RELATION_CN = {
+  Same: '同气',
+  Generates: '生',
+  GeneratedBy: '被生',
+  Controls: '克',
+  ControlledBy: '被克',
+  Unknown: '未知',
+};
+
+const el = (value) => ELEMENT_CN[value] || value || '?';
+const rel = (value) => RELATION_CN[value] || value || '?';
+
 const PILLAR_ORDER = [
   ['year', '年柱'],
   ['month', '月柱'],
@@ -35,9 +53,9 @@ const renderPillars = (pillars) => {
     const pillar = pillars[key];
     if (!pillar) continue;
     const chars = [pillar.charStem, pillar.charBranch].filter(Boolean).join('');
-    const romanized = [pillar.stem, pillar.branch].filter(Boolean).join(' ');
-    const elements = [pillar.elementStem, pillar.elementBranch].filter(Boolean).join('/');
-    lines.push(`  ${label}  ${(chars || '--').padEnd(4)}${romanized.padEnd(22)}${elements}`);
+    const elements = [pillar.elementStem, pillar.elementBranch].filter(Boolean).map(el).join('/');
+    // 罗马字转写（Geng Wu）对中文使用者是噪音，要拿它去 --json 里取 stem/branch
+    lines.push(`  ${label}  ${(chars || '--').padEnd(6)}${elements}`);
   }
   return lines.length > 1 ? lines.join('\n') : null;
 };
@@ -46,7 +64,7 @@ const renderFiveElements = (fiveElements) => {
   if (!fiveElements || typeof fiveElements !== 'object') return null;
   const entries = Object.entries(fiveElements).filter(([, v]) => typeof v === 'number');
   if (!entries.length) return null;
-  return `五行: ${entries.map(([k, v]) => `${k} ${v}`).join('  ')}`;
+  return `五行: ${entries.map(([k, v]) => `${el(k)} ${v}`).join('  ')}`;
 };
 
 /**
@@ -79,7 +97,7 @@ const renderBazi = (data) =>
       ? `旺衰: ${data.analysis.strength.levelCn}（同党占比 ${data.analysis.strength.ratio}）`
       : null,
     data.analysis?.usefulGod
-      ? `用神: ${data.analysis.usefulGod.favorable.join('/') || '（中和，宜改用调候或病药法）'}`
+      ? `用神: ${data.analysis.usefulGod.favorable.map(el).join('/') || '（中和，宜改用调候或病药法）'}`
       : null,
     renderSolarTime(data.chartTime),
   ]
@@ -153,7 +171,19 @@ const ziweiCommand = defineCommand({
     return out.ok(data, (d) => {
       const palaces = d.palaces || d.chart?.palaces;
       if (!Array.isArray(palaces)) return '排盘完成（结构见 --json）';
-      return `十二宫: ${palaces.length} 宫已排定\n完整结果请用 --json`;
+      const ming = palaces[d.mingPalace?.index];
+      const starsOf = (p) =>
+        [...(p?.stars?.major || []), ...(p?.stars?.minor || []), ...(p?.stars?.malefic || [])]
+          .map((x) => x.cn)
+          .join(' ') || '无主星';
+      return [
+        `${d.fiveElementBureau?.cn || '?'}（${d.fiveElementBureau?.nayin || '?'}·命宫 ${d.fiveElementBureau?.mingGanzhi || '?'}）`,
+        `命宫 ${ming?.branch?.key || '?'}：${starsOf(ming)}`,
+        `身宫 ${palaces[d.shenPalace?.index]?.branch?.key || '?'}`,
+        `本命四化：${(d.fourTransformations || []).map((t) => `${t.starCn}${t.typeCn}`).join(' ')}`,
+        `大限起 ${d.majorPeriods?.[0]?.startAge || '?'} 岁，${d.majorPeriodDirection === 1 ? '顺' : '逆'}行`,
+        '十二宫详情用 --json',
+      ].join('\n');
     });
   },
 });
@@ -218,9 +248,21 @@ const synastryCommand = defineCommand({
     const data = await callApi(path, { method: 'POST', body, timeoutMs: resolveTimeout(flags) });
     return out.ok(data, (d) => {
       const score = d.compatibility?.score;
-      const a = `${d.personA?.name || 'A'}（日主 ${d.personA?.dayMaster || '?'}）`;
-      const b = `${d.personB?.name || 'B'}（日主 ${d.personB?.dayMaster || '?'}）`;
-      return [`${a}  ×  ${b}`, score === undefined ? null : `相性评分: ${score}`]
+      const c = d.compatibility;
+      // personA.dayMaster 是罗马字（Yi），compatibility.dayMasters 里才是汉字
+      const a = `甲方 ${c?.dayMasters?.stemA || d.personA?.dayMaster || '?'}${el(d.personA?.element)}`;
+      const b = `乙方 ${c?.dayMasters?.stemB || d.personB?.dayMaster || '?'}${el(d.personB?.element)}`;
+      return [
+        `${a}  ×  ${b}`,
+        score === undefined ? null : `相性评分: ${score}`,
+        c?.dayMasters
+          ? `日主关系：${rel(c.dayMasters.relation)}（互看十神 ${c.dayMasters.tenGodAtoB?.cn || '?'} / ${c.dayMasters.tenGodBtoA?.cn || '?'}）`
+          : null,
+        c?.spousePalace
+          ? `夫妻宫 ${c.spousePalace.branchA}${c.spousePalace.branchB}：${c.spousePalace.relations.map((r) => r.cn).join('、') || '无合无冲'}`
+          : null,
+        c?.crossPillars?.length ? `交叉：${c.crossPillars.map((r) => r.cn).join(' ')}` : null,
+      ]
         .filter(Boolean)
         .join('\n');
     });
@@ -228,6 +270,58 @@ const synastryCommand = defineCommand({
 });
 
 const ZODIAC_PERIODS = ['daily', 'weekly', 'monthly'];
+
+/** 十二星座的中文名。引擎返回英文键名，CLI 一律译出。 */
+const ZODIAC_CN = {
+  aries: '白羊座',
+  taurus: '金牛座',
+  gemini: '双子座',
+  cancer: '巨蟹座',
+  leo: '狮子座',
+  virgo: '处女座',
+  libra: '天秤座',
+  scorpio: '天蝎座',
+  sagittarius: '射手座',
+  capricorn: '摩羯座',
+  aquarius: '水瓶座',
+  pisces: '双鱼座',
+};
+
+/** 守护星、象征、宫性的中文名 —— 这些是界面元素，一律译出。 */
+const PLANET_CN = {
+  Sun: '太阳',
+  Moon: '月亮',
+  Mercury: '水星',
+  Venus: '金星',
+  Mars: '火星',
+  Jupiter: '木星',
+  Saturn: '土星',
+  Uranus: '天王星',
+  Neptune: '海王星',
+  Pluto: '冥王星',
+};
+
+const SYMBOL_CN = {
+  'The Ram': '白羊',
+  'The Bull': '金牛',
+  'The Twins': '双子',
+  'The Crab': '巨蟹',
+  'The Lion': '狮子',
+  'The Maiden': '处女',
+  'The Scales': '天秤',
+  'The Scorpion': '天蝎',
+  'The Archer': '射手',
+  'The Goat': '山羊',
+  'The Water Bearer': '宝瓶',
+  'The Fish': '双鱼',
+};
+
+const MODALITY_CN = { Cardinal: '基本宫', Fixed: '固定宫', Mutable: '变动宫' };
+
+const signCn = (value) => {
+  const key = String(value || '').toLowerCase();
+  return ZODIAC_CN[key] ? `${ZODIAC_CN[key]}（${value}）` : value || '?';
+};
 
 const zodiacCommand = defineCommand({
   name: 'zodiac',
@@ -271,7 +365,26 @@ const zodiacCommand = defineCommand({
 
     out.step(`向引擎请求 ${sign} 的${period ? `${period} 运势` : '星座信息'}`);
     const data = await callApi(path, { timeoutMs: resolveTimeout(flags) });
-    return out.ok(data, (d) => d.summary || d.description || '完整结果请用 --json');
+    return out.ok(data, (d) => {
+      const info = d.sign || d.horoscope || d;
+      const head = signCn(info.key || info.value || sign);
+      const meta = [
+        info.dateRange,
+        info.element ? `${el(info.element)}象` : null,
+        MODALITY_CN[info.modality] || info.modality,
+        info.rulingPlanet ? `守护星 ${PLANET_CN[info.rulingPlanet] || info.rulingPlanet}` : null,
+        SYMBOL_CN[info.symbol] ? `象征 ${SYMBOL_CN[info.symbol]}` : null,
+      ]
+        .filter(Boolean)
+        .join('  ');
+      // keywords / strengths 是西方星座的原生英文描述，属内容而非界面，保留原文
+      const body =
+        info.summary ||
+        info.description ||
+        (info.keywords?.length ? `关键词：${info.keywords.join('、')}` : null) ||
+        '完整结果请用 --json';
+      return [head, meta || null, body].filter(Boolean).join('\n');
+    });
   },
 });
 
@@ -662,17 +775,6 @@ const nameCommand = defineCommand({
       body,
       step: '向引擎请求姓名五格',
       render: (d) => {
-        // 引擎回的五行与生克关系都是英文枚举，面向人的输出得译回来
-        const ELEMENT_CN = { Wood: '木', Fire: '火', Earth: '土', Metal: '金', Water: '水' };
-        const RELATION_CN = {
-          Same: '同气',
-          Generates: '生',
-          GeneratedBy: '被生',
-          Controls: '克',
-          ControlledBy: '被克',
-        };
-        const el = (v) => ELEMENT_CN[v] || v || '?';
-        const rel = (v) => RELATION_CN[v] || v || '?';
         const g = d.grids || {};
         const e = d.gridElements || {};
         return [
@@ -732,7 +834,7 @@ const dailyCommand = defineCommand({
         const lines = [`${d.date}  日柱 ${(p.charStem || '') + (p.charBranch || '')}`];
         // 不给出生信息时引擎只回一句 message，没有 score —— 别照着有分数的形状渲染
         if (typeof f?.score === 'number') {
-          lines.push(`流日分数 ${f.score}（日主关系 ${f.dayMasterRelation || '?'}）`);
+          lines.push(`流日分数 ${f.score}（流日天干对日主：${rel(f.dayMasterRelation)}）`);
           lines.push(
             f.branchRelations?.length
               ? `与本命日支：${f.branchRelations.map((r) => r.cn).join('、')}`
@@ -805,7 +907,7 @@ const risingCommand = defineCommand({
       step: '向引擎请求上升星座',
       render: (d) =>
         [
-          `上升星座: ${d.rising?.name || d.rising?.value || '?'}${d.rising?.dateRange ? `（${d.rising.dateRange}）` : ''}`,
+          `上升星座: ${signCn(d.rising?.value || d.rising?.name)}${d.rising?.dateRange ? `  ${d.rising.dateRange}` : ''}`,
           d.ascendant?.longitude !== undefined
             ? `上升黄经 ${d.ascendant.longitude}°  地方恒星时 ${d.ascendant.localSiderealTime}`
             : null,
