@@ -12,21 +12,12 @@ import {
   readPrismaProvider,
   resolveDatabaseUrl,
 } from '../core/context.mjs';
-import { PLAYWRIGHT_INSTALL_HINT, probePlaywrightBrowsers } from '../core/playwright.mjs';
 
 const MIN_NODE_MAJOR = 20;
 
 const check = (id, label, status, detail, fix) => ({ id, label, status, detail, fix: fix || null });
 
 const depsInstalled = (dir) => fileExists(path.join(dir, 'node_modules'));
-
-/** 探针在 core/playwright.mjs，setup 用同一份，避免两处各自维护"浏览器装没装"的判断。 */
-const PLAYWRIGHT_CHECK = {
-  ready: { status: 'ok', fix: null },
-  missing: { status: 'warn', fix: PLAYWRIGHT_INSTALL_HINT },
-  unknown: { status: 'warn', fix: PLAYWRIGHT_INSTALL_HINT },
-  'no-deps': { status: 'skip', fix: 'bazi setup --with-frontend' },
-};
 
 const collectChecks = async () => {
   const env = buildEnv();
@@ -60,7 +51,6 @@ const collectChecks = async () => {
   for (const [id, label, dir, fix] of [
     ['deps:root', '根依赖', paths.root, 'npm install'],
     ['deps:backend', '后端依赖', paths.backend, 'npm --prefix backend install'],
-    ['deps:frontend', '前端依赖', paths.frontend, 'npm --prefix frontend install'],
   ]) {
     const installed = depsInstalled(dir);
     results.push(
@@ -202,20 +192,16 @@ const collectChecks = async () => {
 
   // --- 端口占用 ---
   const backendPort = Number(env.PORT || 4000);
-  const frontendPort = 3000;
-  for (const [id, label, port] of [
-    ['port:backend', `后端端口 ${backendPort}`, backendPort],
-    ['port:frontend', `前端端口 ${frontendPort}`, frontendPort],
-  ]) {
-    const open = await checkPort(port, '127.0.0.1', 400);
-    results.push(check(id, label, 'ok', open ? '已被占用（服务可能已在运行）' : '空闲', null));
-  }
-
-  // --- E2E ---
-  const pw = probePlaywrightBrowsers();
-  // 兜底：doctor 是排障工具，不该因为多出一个没见过的 state 就自己崩掉。
-  const pwCheck = PLAYWRIGHT_CHECK[pw.state] || { status: 'warn', fix: PLAYWRIGHT_INSTALL_HINT };
-  results.push(check('e2e:browsers', 'Playwright 浏览器', pwCheck.status, pw.detail, pwCheck.fix));
+  const open = await checkPort(backendPort, '127.0.0.1', 400);
+  results.push(
+    check(
+      'port:backend',
+      `后端端口 ${backendPort}`,
+      'ok',
+      open ? '已被占用（服务可能已在运行）' : '空闲',
+      null
+    )
+  );
 
   const dockerPath = which('docker');
   results.push(
@@ -243,12 +229,6 @@ const AUTO_FIXES = [
     label: '安装后端依赖',
     exec: (opts) =>
       run('npm', ['install', '--no-audit', '--no-fund'], { cwd: paths.backend, ...opts }),
-  },
-  {
-    id: 'deps:frontend',
-    label: '安装前端依赖',
-    exec: (opts) =>
-      run('npm', ['install', '--no-audit', '--no-fund'], { cwd: paths.frontend, ...opts }),
   },
   {
     id: 'env:file',

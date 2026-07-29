@@ -3,7 +3,7 @@
 # Fails when build/test artifacts or oversized binaries get committed.
 #
 # The repository history had grown to 735MB: ~1600 full-page PNG screenshots written by
-# frontend/scripts/verify-*.mjs (3-6MB each) plus a PostgreSQL WAL segment and SQLite
+# the end-to-end verification suite (3-6MB each) plus a PostgreSQL WAL segment and SQLite
 # write-ahead logs from the e2e fixtures. The source tree itself is under 5MB. Cloning
 # cost 735MB for 5MB of code. .gitignore covers those paths now, but a `git add -f` or a
 # renamed output directory would put us right back there, so this makes it a CI failure
@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Anything above this is almost certainly not source. The largest legitimate file today is
-# frontend/package-lock.json at ~460KB.
+# backend/package-lock.json at ~1.5MB.
 MAX_BYTES="${MAX_BYTES:-1048576}"
 
 # Paths that must never be tracked, whatever their size: test evidence, Playwright output,

@@ -1,12 +1,11 @@
-# 目录型规则（结尾带 /、中间不带 /）在任意层级都生效，所以这里一条顶原来的三条：
-# node_modules/ 同时覆盖 frontend/ 和 backend/ 下的，verification/ 同时覆盖仓库根和
-# frontend/ 下的。CI 里另有 scripts/check-repo-artifacts.sh 兜底，防止 git add -f 绕过。
+# 目录型规则（结尾带 /、中间不带 /）在任意层级都生效，所以一条顶多条：node_modules/
+# 覆盖仓库根和 backend/ 下的。CI 里另有 scripts/check-repo-artifacts.sh 兜底，
+# 防止 git add -f 绕过。
 
 # 依赖与构建产物
 node_modules/
 dist/
 build/
-.vite/
 .tmp/
 
 # 本地环境与系统噪音
@@ -21,12 +20,10 @@ build/
 *.db-journal
 .pgdata-e2e/
 
-# 测试与巡检产物。
-# frontend/scripts/verify-*.mjs 的证据截图落在 verification/，历史上这些整页 PNG
-# 单张 3~6MB，被提交后把仓库撑到 735MB，务必保持忽略。
+# 测试与巡检产物。历史上端到端巡检的整页 PNG 证据（单张 3~6MB）被提交进 verification/，
+# 把仓库撑到 735MB。相关套件已随前端一起删除，但这些规则保留：再有人引入类似产物时，
+# 默认就是被忽略的，不用等到仓库又胖了才发现。
 verification/
 test-results/
 playwright-report/
 .lighthouseci/
-frontend/test-error*.txt
-frontend/test-output*.txt

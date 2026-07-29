@@ -42,15 +42,10 @@ if [ -d "$ROOT_DIR/backend" ]; then
   (cd "$ROOT_DIR/backend" && node scripts/prisma.mjs migrate deploy --schema=../prisma/schema.prisma)
 fi
 
-if [ -d "$ROOT_DIR/frontend" ]; then
-  echo "Checking frontend dependencies..."
-  (cd "$ROOT_DIR/frontend" && npm install)
-fi
-
 echo "\n-----------------------------------------------------------"
 echo "Setup Complete."
 echo "-----------------------------------------------------------"
-echo "To clean start services:"
-echo "1. Backend: cd backend && npm run dev (Runs on :4000)"
-echo "2. Frontend: cd frontend && npm run dev (Runs on :3000, proxies to :4000)"
+echo "To start the API:"
+echo "  ./bazi stack up          (db + api, api on :4000)"
+echo "  ./bazi stack status      (check what is running)"
 echo "-----------------------------------------------------------"

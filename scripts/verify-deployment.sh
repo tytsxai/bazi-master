@@ -7,7 +7,6 @@ set -euo pipefail
 
 # Configuration
 API_BASE_URL="${API_BASE_URL:-http://localhost:4000}"
-WEB_BASE_URL="${WEB_BASE_URL:-http://localhost:3000}"
 TIMEOUT="${TIMEOUT:-30}"
 RETRIES="${RETRIES:-3}"
 
@@ -132,14 +131,6 @@ test_basic_connectivity() {
     validate_json "$ready_response" "status"
     validate_json "$ready_response" "checks"
     log_success "API ready check passed"
-
-    # Test frontend accessibility
-    log_info "Testing frontend accessibility..."
-    if ! curl -f -s "$WEB_BASE_URL" >/dev/null 2>&1; then
-        log_error "Frontend is not accessible at $WEB_BASE_URL"
-        return 1
-    fi
-    log_success "Frontend is accessible"
 }
 
 # Test 2: Core API functionality
@@ -352,7 +343,6 @@ test_openapi() {
 main() {
     log_info "🚀 Starting BaZi Master deployment verification"
     log_info "API Base URL: $API_BASE_URL"
-    log_info "Web Base URL: $WEB_BASE_URL"
     log_info "Timeout: ${TIMEOUT}s, Retries: $RETRIES"
     echo
 
@@ -419,7 +409,6 @@ show_usage() {
     echo
     echo "Options:"
     echo "  --api-url URL       API base URL (default: $API_BASE_URL)"
-    echo "  --web-url URL       Web base URL (default: $WEB_BASE_URL)"
     echo "  --timeout SEC       Request timeout (default: $TIMEOUT)"
     echo "  --retries NUM       Number of retries (default: $RETRIES)"
     echo "  --skip-auth-tests   Skip authentication tests"
@@ -428,7 +417,6 @@ show_usage() {
     echo
     echo "Environment variables:"
     echo "  API_BASE_URL       Same as --api-url"
-    echo "  WEB_BASE_URL       Same as --web-url"
     echo "  SKIP_AUTH_TESTS    Same as --skip-auth-tests"
     echo "  SKIP_LOAD_TESTS    Same as --skip-load-tests"
 }
@@ -438,10 +426,6 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --api-url)
             API_BASE_URL="$2"
-            shift 2
-            ;;
-        --web-url)
-            WEB_BASE_URL="$2"
             shift 2
             ;;
         --timeout)

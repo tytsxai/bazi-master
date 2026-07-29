@@ -12,7 +12,6 @@ import { collectStackStatus } from './stack.mjs';
  * 仓库里新增一个 verify-xxx.mjs，CLI 立刻就能跑它，不需要改 CLI，也不需要改 SKILL.md。
  */
 const SOURCES = [
-  { scope: 'frontend', dir: () => path.join(paths.frontend, 'scripts'), needs: ['api', 'web'] },
   { scope: 'backend', dir: () => path.join(paths.backend, 'scripts'), needs: ['db'] },
 ];
 
@@ -53,8 +52,8 @@ const selectScripts = (names, scope) => {
 /**
  * 前置断言。
  *
- * frontend/scripts/verify-*.mjs 全都直接打 http://localhost:3000 —— 它们自己不会把栈拉起来。
- * 没有这道检查，栈没起时的表现是 playwright 超时后吐一大堆无关报错，Agent 会误判成功能坏了。
+ * verify-*.mjs 直连数据库/后端，它们自己不会把栈拉起来。没有这道检查，栈没起时的表现是
+ * 一堆连接超时的无关报错，Agent 会误判成功能坏了。
  */
 const assertDependencies = async (scripts) => {
   const needed = new Set(scripts.flatMap((s) => s.needs));
@@ -160,13 +159,13 @@ export const verifyCommand = defineCommand({
   name: 'verify',
   summary: '跑仓库里的端到端校验脚本（verify-*.mjs）',
   description:
-    '脚本清单是扫目录得来的，不是写死的：新增 scripts/verify-xxx.mjs 立刻可用。\n' +
-    'frontend 系脚本会直接访问 http://localhost:3000，跑之前 CLI 会强制检查栈是否就绪。',
+    '脚本清单是扫目录得来的，不是写死的：新增 backend/scripts/verify-xxx.mjs 立刻可用。\n' +
+    '脚本需要本地栈在跑，CLI 在执行前会强制检查栈是否就绪。',
   commands: [
     defineCommand({
       name: 'list',
       summary: '列出所有可跑的校验脚本',
-      flags: [{ name: 'scope', type: 'string', summary: '只看 frontend 或 backend' }],
+      flags: [{ name: 'scope', type: 'string', summary: '只看指定 scope（目前只有 backend）' }],
       run: ({ flags, out }) => {
         const scripts = discover().filter((s) => !flags.scope || s.scope === flags.scope);
         return out.ok(
@@ -191,7 +190,7 @@ export const verifyCommand = defineCommand({
         { name: 'timeout', type: 'number', summary: '单个脚本超时秒数', default: 300 },
         { name: 'bail', type: 'boolean', summary: '第一个失败就停' },
       ],
-      examples: [{ note: '跑一个', command: 'bazi verify run guest-menu' }],
+      examples: [{ note: '跑一个', command: 'bazi verify run bazi-hard-delete' }],
       run: async ({ positionals, flags, out }) => {
         if (!positionals.length) {
           throw usageError('要给至少一个脚本名', { next: 'bazi verify list' });
@@ -204,7 +203,7 @@ export const verifyCommand = defineCommand({
       name: 'all',
       summary: '按顺序跑全部校验脚本（慢，串行，避免互相踩状态）',
       flags: [
-        { name: 'scope', type: 'string', summary: '只跑 frontend 或 backend' },
+        { name: 'scope', type: 'string', summary: '只跑指定 scope（目前只有 backend）' },
         { name: 'timeout', type: 'number', summary: '单个脚本超时秒数', default: 300 },
         { name: 'bail', type: 'boolean', summary: '第一个失败就停' },
       ],

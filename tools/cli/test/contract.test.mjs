@@ -169,7 +169,7 @@ test('失败时给出的 next 必须是一条真实存在的命令', () => {
 test('-- 之后的参数原样透传，不被当成本命令的选项', () => {
   // --nope 在 -- 之后，不应该触发"未知选项"。
   // 注意 --json 必须写在 -- 之前，否则它自己也会被透传掉。
-  const result = bazi(['test', 'e2e', '--dry-run', '--json', '--', '--nope']);
+  const result = bazi(['test', 'backend', '--dry-run', '--json', '--', '--nope']);
   assert.equal(result.code, 0);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.ok, true);

@@ -48,7 +48,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: |
             backend/package-lock.json
-            frontend/package-lock.json
 
       # Backend Setup & Test
       - name: Install Backend Dependencies
@@ -78,6 +77,15 @@ jobs:
       - name: Check env template covers every variable the code reads
         run: ./scripts/check-env-template.sh
 
+      # Runtime dependencies only: a vulnerability in a build-time devDependency does not
+      # ship, and letting those fail the build is how audit gates get switched off. `high`
+      # is the threshold because moderate advisories in this tree are routinely
+      # unreachable ones, and a gate that cries wolf stops being read.
+      - name: Audit production dependencies
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm --prefix backend audit --omit=dev --audit-level=high
+
       - name: Run Backend Tests
         run: |
           cd backend
@@ -86,22 +94,7 @@ jobs:
           export DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/bazi_master_e2e?schema=public'
           npm test
 
-      # Frontend Setup & Test
-      - name: Install Frontend Dependencies
-        run: |
-          cd frontend
-          npm ci
-
-      # Unit tests are fast and were never wired into CI, so a green pipeline said
-      # nothing about them. Run them before the much slower Playwright suite.
-      - name: Run Frontend Unit Tests
-        run: |
-          cd frontend
-          npm run test:unit:run
-
-      - name: Run Frontend E2E Tests
-        run: |
-          cd frontend
-          npm test
-        env:
-          E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/bazi_master_e2e?schema=public
+      # The CLI is how every workflow in this repo is driven, so a break in it blocks
+      # all of them. Its own contract tests are fast and need no services.
+      - name: Run CLI Contract Tests
+        run: npm run test:cli

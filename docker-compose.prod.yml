@@ -211,38 +211,6 @@ services:
       retries: 5
       start_period: 15s
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
-        VITE_CDN_URL: ${VITE_CDN_URL:-/}
-    container_name: bazi_frontend
-    restart: always
-    logging: *default-logging
-    depends_on:
-      - backend
-    ports:
-      - '${FRONTEND_BIND_ADDR:-127.0.0.1}:3000:80'
-    # nginx 代理一条 WebSocket 要占两个 fd（对客户端一个、对 backend 一个），所以这一层
-    # 的 fd 需求是后端的两倍左右。nginx 的 worker_connections 同样受 fd 上限约束：
-    # 到顶时日志里是 "worker_connections are not enough"，而不是任何和 WebSocket
-    # 有关的字样，很容易查错方向。
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    labels:
-      autoheal: 'true'
-    healthcheck:
-      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1/ || exit 1']
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    stop_grace_period: 15s
-
   # Restarts any container labelled autoheal=true once its healthcheck reports
   # unhealthy. Plain `docker compose` never does this itself — that behaviour belongs to
   # Swarm/Kubernetes — so without this a wedged backend sits unhealthy indefinitely with

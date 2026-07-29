@@ -24,18 +24,6 @@ export const TARGETS = {
     script: 'lint',
     args: ['run', 'lint'],
   },
-  typecheck: {
-    label: '前端 TypeScript 类型检查',
-    cwd: () => paths.frontend,
-    script: 'typecheck',
-    args: ['run', 'typecheck'],
-  },
-  unit: {
-    label: '前端单测（vitest）',
-    cwd: () => paths.frontend,
-    script: 'test:unit:run',
-    args: ['run', 'test:unit:run'],
-  },
   backend: {
     label: '后端测试（脚本自带临时 PostgreSQL）',
     cwd: () => paths.backend,
@@ -43,20 +31,11 @@ export const TARGETS = {
     args: ['test'],
     isolatedDb: true,
   },
-  e2e: {
-    label: 'Playwright 端到端（自带 dev-server，较慢）',
-    cwd: () => paths.frontend,
-    script: 'test',
-    args: ['test'],
-    slow: true,
-    isolatedDb: true,
-  },
 };
 
 // cli 排在最前面：它最快，而且它挂了意味着"你正在用的这个工具本身坏了"，
 // 后面几个目标的结论都不再可信，先看到它比先看到 lint 有用。
-const FAST_SET = ['cli', 'lint', 'typecheck', 'unit', 'backend'];
-const ALL_SET = [...FAST_SET, 'e2e'];
+const DEFAULT_SET = ['cli', 'lint', 'backend'];
 
 /**
  * 目标不可跑的原因 —— 返回 null 表示可跑。
@@ -67,7 +46,7 @@ const ALL_SET = [...FAST_SET, 'e2e'];
  */
 const blockedReason = (target, cwd) => {
   if (!fileExists(path.join(cwd, 'node_modules'))) {
-    return { reason: `${cwd} 依赖未安装`, next: 'bazi setup --with-frontend' };
+    return { reason: `${cwd} 依赖未安装`, next: 'bazi setup' };
   }
   if (!target.script) return null;
   const pkg = readJsonFile(path.join(cwd, 'package.json'));
@@ -96,14 +75,13 @@ const buildTestEnv = ({ useDevDb }) => {
 
 export const testCommand = defineCommand({
   name: 'test',
-  summary: '跑测试（lint / typecheck / unit / backend / e2e）',
+  summary: '跑测试（cli / lint / backend）',
   description:
-    '不带参数跑快集合：lint typecheck unit backend。加 --all 或显式写 e2e 才会跑端到端。\n' +
+    '不带参数把三个目标全跑一遍。\n' +
     '测试默认使用隔离的临时数据库，不会碰你的开发库。',
-  usage: 'bazi test [目标...] [--all] [-- 透传给底层的参数]',
+  usage: 'bazi test [目标...] [-- 透传给底层的参数]',
   args: [{ name: 'targets', summary: '要跑的目标', choices: Object.keys(TARGETS) }],
   flags: [
-    { name: 'all', type: 'boolean', summary: '包含 e2e 在内全部跑一遍' },
     { name: 'bail', type: 'boolean', summary: '第一个失败就停，不跑后面的' },
     {
       name: 'fail-on-skip',
@@ -119,7 +97,7 @@ export const testCommand = defineCommand({
   examples: [
     { note: '提交前的快检查', command: 'bazi test --json' },
     { note: '只看后端', command: 'bazi test backend' },
-    { note: '把参数透传给 playwright', command: 'bazi test e2e -- --grep @smoke' },
+    { note: '把参数透传给底层 runner', command: 'bazi test backend -- --test-name-pattern=zodiac' },
   ],
   run: async ({ positionals, passthrough, flags, out }) => {
     const bad = positionals.filter((p) => !TARGETS[p]);
@@ -128,7 +106,7 @@ export const testCommand = defineCommand({
         next: `可选：${Object.keys(TARGETS).join(' / ')}`,
       });
     }
-    const targets = positionals.length ? positionals : flags.all ? ALL_SET : FAST_SET;
+    const targets = positionals.length ? positionals : DEFAULT_SET;
 
     if (passthrough.length && targets.length > 1) {
       throw usageError('`--` 透传参数只能配单个目标使用', {
@@ -222,7 +200,7 @@ export const testCommand = defineCommand({
       });
     }
 
-    // 依赖没装导致的跳过默认只是 warn，本地开发不该被前端依赖卡住。
+    // 依赖没装导致的跳过默认只是 warn，本地开发不该被它卡住。
     // 但 CI 里"什么都没跑"和"全跑过了"都返回 0 是最危险的绿灯，所以给一个显式开关。
     // 退出码用 ENV 而不是 FAILED：跳过的原因是环境未就绪，该去装依赖而不是查代码。
     if (skipped.length && flags['fail-on-skip']) {
@@ -231,7 +209,7 @@ export const testCommand = defineCommand({
         exit: EXIT.ENV,
         code: 'targets_skipped',
         hint: skipped.map((s) => `${s.target}: ${s.reason}`).join('; '),
-        next: skipped[0].next || 'bazi setup --with-frontend',
+        next: skipped[0].next || 'bazi setup',
         details: data,
       });
     }

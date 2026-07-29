@@ -25,12 +25,11 @@ import {
 import { clearRecord, logFile, readRecord, tailLog, writeRecord } from '../core/stackState.mjs';
 import { migrationState } from '../core/prisma.mjs';
 
-const COMPONENTS = ['db', 'api', 'web'];
+const COMPONENTS = ['db', 'api'];
 const here = path.dirname(fileURLToPath(import.meta.url));
 const localPgHelper = path.resolve(here, '..', 'helpers', 'local-pg.mjs');
 
 const apiPort = (env) => Number(env.PORT || 4000);
-const webPort = (env) => Number(env.BAZI_WEB_PORT || 3000);
 
 const resolveTargets = (only) => {
   if (!only) return COMPONENTS;
@@ -406,61 +405,6 @@ const startApi = async ({ env, out, dryRun }) => {
   });
 };
 
-// ------------------------------------------------------------------ web
-
-const startWeb = async ({ env, out, dryRun }) => {
-  const port = webPort(env);
-  const record = readRecord('web');
-
-  if (record?.alive && (await checkPort(port, '127.0.0.1', 600))) {
-    return { component: 'web', status: 'already-running', pid: record.pid, port };
-  }
-  if (await checkPort(port, '127.0.0.1', 600)) {
-    return {
-      component: 'web',
-      status: 'foreign',
-      port,
-      detail: `端口 ${port} 已被占用，但不是 bazi 启动的，不接管`,
-    };
-  }
-
-  const viteBin = path.join(
-    paths.frontend,
-    'node_modules',
-    '.bin',
-    process.platform === 'win32' ? 'vite.cmd' : 'vite'
-  );
-  if (!fileExists(viteBin)) {
-    throw envError('前端依赖未安装（找不到 vite）', {
-      next: 'bazi setup --with-frontend',
-    });
-  }
-
-  if (dryRun) return { component: 'web', status: 'dry-run', port };
-
-  out.step(`启动前端（端口 ${port}，代理到后端 ${apiPort(env)}）`);
-  const pid = spawnDetached({
-    name: 'web',
-    command: viteBin,
-    args: ['--port', String(port), '--strictPort', '--host', '127.0.0.1'],
-    cwd: paths.frontend,
-    // vite.config.ts 用 BACKEND_PORT 决定 /api 代理到哪
-    env: { ...env, BACKEND_PORT: String(apiPort(env)) },
-  });
-
-  const up = await waitForPort(port, '127.0.0.1', 60_000);
-  if (!up) {
-    killPid(pid, 'SIGKILL');
-    clearRecord('web');
-    throw new CliError('前端启动失败或端口未就绪', {
-      exit: EXIT.ENV,
-      code: 'web_start_failed',
-      ...diagnose('web', 'bazi stack logs web --tail 60'),
-    });
-  }
-  return { component: 'web', status: 'started', pid, port };
-};
-
 // ------------------------------------------------------------------ status
 
 const collectStatus = async (env) => {
@@ -510,20 +454,6 @@ const collectStatus = async (env) => {
     next: health.healthy ? null : 'bazi stack up --only api',
   });
 
-  const wPort = webPort(env);
-  const webRecord = readRecord('web');
-  const webOpen = await checkPort(wPort, '127.0.0.1', 800);
-  components.push({
-    name: 'web',
-    running: webOpen,
-    port: wPort,
-    pid: webRecord?.alive ? webRecord.pid : null,
-    managedBy: webRecord?.alive ? 'bazi' : webOpen ? 'foreign' : null,
-    url: webOpen ? `http://127.0.0.1:${wPort}/` : null,
-    detail: webOpen ? '端口已监听' : '未运行',
-    next: webOpen ? null : 'bazi stack up --only web',
-  });
-
   return { ready: components.every((c) => c.running), components };
 };
 
@@ -547,20 +477,20 @@ const renderStatus = (out) => (data) => {
 
 // ------------------------------------------------------------------ 命令
 
-const STARTERS = { db: startDb, api: startApi, web: startWeb };
+const STARTERS = { db: startDb, api: startApi };
 
 export const stackCommand = defineCommand({
   name: 'stack',
-  summary: '管理本地开发栈（db / api / web）的生命周期',
+  summary: '管理本地开发栈（db / api）的生命周期',
   description:
-    '三个组件各自独立托管，可以单独起停查，像 kubectl 那样先看状态再动手。\n' +
+    '两个组件各自独立托管，可以单独起停查，像 kubectl 那样先看状态再动手。\n' +
     'CLI 只会停自己启动的进程；端口被别人占用时会报 foreign 并拒绝接管。',
   commands: [
     defineCommand({
       name: 'up',
-      summary: '按 db -> api -> web 顺序启动（幂等，已在跑的会跳过）',
+      summary: '按 db -> api 顺序启动（幂等，已在跑的会跳过）',
       flags: [
-        { name: 'only', type: 'string', summary: '只启动指定组件，逗号分隔：db,api,web' },
+        { name: 'only', type: 'string', summary: '只启动指定组件，逗号分隔：db,api' },
         { name: 'wait', type: 'boolean', summary: '启动后再跑一次 status 确认', default: true },
       ],
       examples: [
@@ -588,7 +518,7 @@ export const stackCommand = defineCommand({
 
     defineCommand({
       name: 'down',
-      summary: '按 web -> api -> db 顺序停止（只停 bazi 自己启动的进程）',
+      summary: '按 api -> db 顺序停止（只停 bazi 自己启动的进程）',
       flags: [{ name: 'only', type: 'string', summary: '只停指定组件，逗号分隔' }],
       run: async ({ flags, out }) => {
         const env = buildEnv();
@@ -599,7 +529,7 @@ export const stackCommand = defineCommand({
             results.push(await stopDb({ env, out, dryRun: flags['dry-run'] }));
             continue;
           }
-          const port = name === 'api' ? apiPort(env) : webPort(env);
+          const port = apiPort(env);
           if (flags['dry-run']) {
             results.push({ component: name, status: 'dry-run', port });
             continue;
@@ -651,7 +581,7 @@ export const stackCommand = defineCommand({
     defineCommand({
       name: 'logs',
       summary: '看某个组件的日志',
-      usage: 'bazi stack logs <db|api|web> [--tail N] [--follow]',
+      usage: 'bazi stack logs <db|api> [--tail N] [--follow]',
       args: [{ name: 'component', required: true, choices: COMPONENTS }],
       flags: [
         { name: 'tail', type: 'number', summary: '取最后 N 行', default: 60 },
@@ -694,7 +624,7 @@ export const stackCommand = defineCommand({
             stopped.push(await stopDb({ env, out, dryRun: flags['dry-run'] }));
             continue;
           }
-          const port = name === 'api' ? apiPort(env) : webPort(env);
+          const port = apiPort(env);
           if (flags['dry-run']) {
             stopped.push({ component: name, status: 'dry-run' });
             continue;

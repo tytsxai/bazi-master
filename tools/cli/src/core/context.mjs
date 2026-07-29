@@ -10,7 +10,6 @@ export const repoRoot = path.resolve(here, '..', '..', '..', '..');
 export const paths = {
   root: repoRoot,
   backend: path.join(repoRoot, 'backend'),
-  frontend: path.join(repoRoot, 'frontend'),
   prismaSchema: path.join(repoRoot, 'prisma', 'schema.prisma'),
   envFile: path.join(repoRoot, '.env'),
   envExample: path.join(repoRoot, '.env.example'),

@@ -26,7 +26,6 @@ const scriptsIn = (dir) => {
 
 const AREA_DIR = {
   root: ROOT,
-  frontend: path.join(ROOT, 'frontend'),
   backend: path.join(ROOT, 'backend'),
 };
 
