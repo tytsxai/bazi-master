@@ -686,6 +686,136 @@ const nameCommand = defineCommand({
   },
 });
 
+// ------------------------------------------------------ 流日 / 上升星座
+
+const dailyCommand = defineCommand({
+  name: 'daily',
+  summary: '流日：当日日柱，给了出生信息则结合本命盘',
+  description:
+    '不给出生信息时只返回当日日柱；要结合本命盘就把 --birth 与 --gender 一起给全，\n' +
+    '缺一个引擎会退 4。fortune.branchRelations 给的是流日地支与本命日支的客观关系，\n' +
+    'score 只是按这些关系折算的粗略指标。',
+  flags: [
+    { name: 'birth', type: 'string', summary: '出生时刻 YYYY-MM-DDTHH:mm（可选）' },
+    { name: 'gender', type: 'string', summary: '性别（male / female），与 --birth 同进同退' },
+    { name: 'timeout', type: 'number', summary: '请求超时毫秒数' },
+  ],
+  examples: [
+    { note: '只看当日日柱', command: 'bazi calc daily --json' },
+    {
+      note: '结合本命盘',
+      command: 'bazi calc daily --birth 1990-05-20T14:30 --gender male --json',
+    },
+  ],
+  run: async ({ flags, out }) => {
+    const params = new URLSearchParams();
+    if (flags.birth !== undefined) {
+      const birth = parseBirth(flags.birth, { flag: '--birth' });
+      params.set('birthYear', birth.birthYear);
+      params.set('birthMonth', birth.birthMonth);
+      params.set('birthDay', birth.birthDay);
+      params.set('birthHour', birth.birthHour);
+      params.set('gender', parseGender(flags.gender));
+    }
+    const query = params.toString();
+    const path = `/api/calendar/daily${query ? `?${query}` : ''}`;
+
+    return previewOrCall({
+      flags,
+      out,
+      method: 'GET',
+      path,
+      step: '向引擎请求流日',
+      render: (d) => {
+        const p = d.dailyPillar || {};
+        const f = d.fortune;
+        const lines = [`${d.date}  日柱 ${(p.charStem || '') + (p.charBranch || '')}`];
+        // 不给出生信息时引擎只回一句 message，没有 score —— 别照着有分数的形状渲染
+        if (typeof f?.score === 'number') {
+          lines.push(`流日分数 ${f.score}（日主关系 ${f.dayMasterRelation || '?'}）`);
+          lines.push(
+            f.branchRelations?.length
+              ? `与本命日支：${f.branchRelations.map((r) => r.cn).join('、')}`
+              : '与本命日支：无合无冲'
+          );
+        } else if (f?.message) {
+          lines.push('未给出生信息，只返回当日日柱（要个人化流日就把 --birth 与 --gender 给全）');
+        }
+        return lines.join('\n');
+      },
+    });
+  },
+});
+
+const risingCommand = defineCommand({
+  name: 'rising',
+  summary: '上升星座：按出生时刻与经纬度计算',
+  description:
+    '需要经纬度与时区偏移 —— 上升星座对地点和时刻都敏感，差几分钟就可能换一个星座。\n' +
+    '--location 只接受 "纬度,经度" 坐标串，这里不走八字那张城市表。',
+  flags: [
+    { name: 'birth', type: 'string', summary: '出生时刻 YYYY-MM-DDTHH:mm' },
+    { name: 'location', type: 'string', summary: '"纬度,经度"，如 "39.90,116.40"' },
+    { name: 'tz-offset', type: 'number', summary: '时区偏移分钟数，东八区为 480' },
+    { name: 'timeout', type: 'number', summary: '请求超时毫秒数' },
+  ],
+  examples: [
+    {
+      note: '北京出生',
+      command:
+        'bazi calc rising --birth 1990-05-20T14:30 --location "39.90,116.40" --tz-offset 480 --json',
+    },
+  ],
+  run: async ({ flags, out }) => {
+    if (flags.birth === undefined) {
+      throw usageError('缺少 --birth', {
+        next: 'bazi calc rising --birth 1990-05-20T14:30 --location "39.90,116.40" --tz-offset 480 --json',
+      });
+    }
+    const coords = String(flags.location || '').match(
+      /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/
+    );
+    if (!coords) {
+      throw usageError('--location 需要 "纬度,经度" 坐标串', {
+        next: 'bazi calc rising --birth 1990-05-20T14:30 --location "39.90,116.40" --tz-offset 480 --json',
+      });
+    }
+    const offset = Number(flags['tz-offset']);
+    if (!Number.isInteger(offset)) {
+      throw usageError('--tz-offset 需要整数分钟数（东八区为 480）', {
+        next: 'bazi calc rising --birth 1990-05-20T14:30 --location "39.90,116.40" --tz-offset 480 --json',
+      });
+    }
+
+    const birth = parseBirth(flags.birth, { flag: '--birth' });
+    const pad = (n) => String(n).padStart(2, '0');
+    const body = {
+      birthDate: `${birth.birthYear}-${pad(birth.birthMonth)}-${pad(birth.birthDay)}`,
+      birthTime: `${pad(birth.birthHour)}:${pad(birth.birthMinute || 0)}`,
+      timezoneOffsetMinutes: offset,
+      latitude: Number(coords[1]),
+      longitude: Number(coords[2]),
+    };
+
+    return previewOrCall({
+      flags,
+      out,
+      path: '/api/zodiac/rising',
+      body,
+      step: '向引擎请求上升星座',
+      render: (d) =>
+        [
+          `上升星座: ${d.rising?.name || d.rising?.value || '?'}${d.rising?.dateRange ? `（${d.rising.dateRange}）` : ''}`,
+          d.ascendant?.longitude !== undefined
+            ? `上升黄经 ${d.ascendant.longitude}°  地方恒星时 ${d.ascendant.localSiderealTime}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+    });
+  },
+});
+
 export const calcCommand = defineCommand({
   name: 'calc',
   summary:
@@ -706,6 +836,8 @@ export const calcCommand = defineCommand({
     nameCommand,
     synastryCommand,
     zodiacCommand,
+    risingCommand,
+    dailyCommand,
   ],
   examples: [
     {

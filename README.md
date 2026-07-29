@@ -150,6 +150,7 @@ curl -X POST http://127.0.0.1:4000/api/tarot/draw \
 ./bazi calc liuren --date 2024-05-20 --hour 14 --json
 ./bazi calc qimen --date 2024-05-20 --hour 14 --json
 ./bazi calc bazhai --birth 1990 --gender male --json
+./bazi calc daily --birth 1990-05-20T14:30 --gender male --json
 ./bazi cast tarot --spread ThreeCard --json
 ```
 
