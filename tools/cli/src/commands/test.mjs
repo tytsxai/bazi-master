@@ -77,8 +77,7 @@ export const testCommand = defineCommand({
   name: 'test',
   summary: '跑测试（cli / lint / backend）',
   description:
-    '不带参数把三个目标全跑一遍。\n' +
-    '测试默认使用隔离的临时数据库，不会碰你的开发库。',
+    '不带参数把三个目标全跑一遍。\n' + '测试默认使用隔离的临时数据库，不会碰你的开发库。',
   usage: 'bazi test [目标...] [-- 透传给底层的参数]',
   args: [{ name: 'targets', summary: '要跑的目标', choices: Object.keys(TARGETS) }],
   flags: [

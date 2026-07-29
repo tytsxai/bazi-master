@@ -4,7 +4,7 @@
 
 本文件概述当前代码中实际实现的 HTTP API。所有响应均为 JSON；时间戳采用 ISO 8601。
 
-English summary: BaZi Master exposes a React + Express + Prisma backend API for BaZi chart calculation, Tarot draw, I Ching divination, Zodiac data, Zi Wei Dou Shu charts, Synastry analysis, AI interpretation, user records, favorites, health checks, OpenAPI JSON and Swagger UI.
+English summary: BaZi Master exposes an Express + Prisma HTTP API for BaZi chart calculation, Tarot draw, I Ching divination, Zodiac data, Zi Wei Dou Shu charts, Synastry analysis, AI interpretation, user records, favorites, health checks, OpenAPI JSON and Swagger UI. It ships no UI — this document is the contract your client or agent codes against.
 
 核心关键词 / Keywords: BaZi API, 八字排盘 API, Tarot draw API, I Ching divination API, Zi Wei Dou Shu API, Zodiac compatibility API, Synastry API, AI divination API, Express Prisma PostgreSQL API.
 
@@ -63,7 +63,7 @@ OAuth 入口（302 重定向）。
 
 ### GET /api/auth/google/callback
 
-OAuth 回调（设置 session cookie 并重定向前端）。
+OAuth 回调（设置 session cookie 并重定向到 `FRONTEND_URL` 指向的客户端）。
 
 ### GET /api/auth/wechat/redirect
 
@@ -71,7 +71,7 @@ WeChat OAuth 入口（302 重定向）。
 
 ### GET /api/auth/wechat/callback
 
-WeChat OAuth 回调（设置 session cookie 并重定向前端）。
+WeChat OAuth 回调（设置 session cookie 并重定向到 `WECHAT_FRONTEND_URL` 指向的客户端；未配置时回落到 `FRONTEND_URL`）。
 
 ### GET /api/auth/me _(需认证)_
 
@@ -334,11 +334,11 @@ WeChat OAuth 回调（设置 session cookie 并重定向前端）。
 
 ### GET /api/live
 
-同 `/live`，用于前端/工具探测。
+同 `/live`，用于客户端/编排器探测。
 
 ### GET /api/health
 
-同 `/health`，用于前端/工具探测。
+同 `/health`，用于客户端/编排器探测。
 
 ### GET /api/ready
 

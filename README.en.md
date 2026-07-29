@@ -1,38 +1,40 @@
-# BaZi Master — Open-Source Full-Stack Divination Web App Starter
+# BaZi Master — Open-Source Divination Calculation API
 
 [![Release](https://img.shields.io/github/v/release/tytsxai/bazi-master)](https://github.com/tytsxai/bazi-master/releases) · [简体中文 README](README.md) · [llms.txt](llms.txt) · [API Docs](docs/api.md) · [Architecture](docs/architecture.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/tytsxai/bazi-master/issues)
 
-**BaZi Master is an open-source, self-hostable full-stack reference application for Chinese
-metaphysics and astrology products.** It implements BaZi charting (八字排盘), Tarot draws, I Ching
-divination (周易起卦), Zodiac / Ascendant calculations, Zi Wei Dou Shu charting (紫微斗数),
-Synastry analysis (合盘), and AI-assisted interpretation on a React 18 + Express + Prisma +
-PostgreSQL stack.
+**BaZi Master is an open-source, self-hostable calculation engine for Chinese metaphysics and
+astrology**, exposed as a documented HTTP API. It implements BaZi charting (八字排盘), Tarot draws,
+I Ching divination (周易起卦), Zodiac / Ascendant calculations, Zi Wei Dou Shu charting (紫微斗数),
+Synastry analysis (合盘), and AI-assisted interpretation on an Express + Prisma + PostgreSQL stack.
 
-It is meant to be forked, self-hosted, studied, and extended — not consumed as a hosted SaaS.
+It ships no UI of its own. Consume it from whatever client you build — web, mobile, mini-program —
+or wire it into an AI agent as a tool. It is meant to be forked and self-hosted, not consumed as a
+hosted SaaS.
 
 > This is an English summary of the [Simplified Chinese README](README.md), which is the
 > authoritative documentation.
 
 ## Project snapshot
 
-| Field              | Answer                                                                                                                                                             |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Project type       | Open-source full-stack divination / astrology web app reference implementation                                                                                     |
-| Problem solved     | Gives a runnable code skeleton covering BaZi, Tarot, I Ching, Zodiac, Zi Wei, AI interpretation, auth, history, favorites, and deployment                          |
-| Who it is for      | Frontend / full-stack / AI application developers who want to learn from or extend a metaphysics product, and teams that need a self-hosted reference architecture |
-| Tech stack         | React 18, Vite, Tailwind CSS, Express 4, Node.js 20+, Prisma, PostgreSQL, Redis, Playwright, Vitest                                                                |
-| Local dependencies | Prisma schema targets PostgreSQL; `docker-compose.yml` provides local PostgreSQL + Redis                                                                           |
-| AI capability      | mock / OpenAI / Anthropic text interpretation; Soul Portrait image generation via OpenAI or a mock placeholder                                                     |
-| UI languages       | Five bundled locales — `en-US`, `zh-CN`, `zh-TW`, `ja`, `ko` (`frontend/src/i18n/locales`)                                                                         |
-| Dev entry point    | `./bazi`, a programmatic CLI for setup, local stack lifecycle, migrations, tests, and E2E verification — every command supports `--json`                           |
-| Main entry points  | Pages in `frontend/src/pages`, API routes in `backend/routes`, data model in `prisma/schema.prisma`                                                                |
-| Key limitation     | Output is for entertainment, cultural research, or product prototyping only — never medical, legal, financial, or life advice                                      |
-| License            | MIT — fork, modify, self-host, and use commercially; compliance and disclaimers are the deployer's responsibility                                                  |
+| Field              | Answer                                                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Project type       | Open-source divination / astrology calculation engine, delivered as a self-hosted HTTP API (no UI)                                        |
+| Problem solved     | Gives a runnable code skeleton covering BaZi, Tarot, I Ching, Zodiac, Zi Wei, AI interpretation, auth, history, favorites, and deployment |
+| Who it is for      | Backend / full-stack developers adding metaphysics calculation to their own product, and teams giving an AI agent a real calculation tool |
+| Tech stack         | Node.js 20+, Express 4, Prisma, PostgreSQL, Redis, Node.js test runner                                                                    |
+| Local dependencies | Prisma schema targets PostgreSQL; `docker-compose.yml` provides local PostgreSQL + Redis                                                  |
+| AI capability      | mock / OpenAI / Anthropic text interpretation; Soul Portrait image generation via OpenAI or a mock placeholder                            |
+| How you consume it | Call the HTTP API directly, register it as an agent tool, or put your own frontend in front of it                                         |
+| Dev entry point    | `./bazi`, a programmatic CLI for setup, local stack lifecycle, migrations, tests, and E2E verification — every command supports `--json`  |
+| Main entry points  | API routes in `backend/routes`, calculations in `backend/services`, data model in `prisma/schema.prisma`                                  |
+| Key limitation     | Output is for entertainment, cultural research, or product prototyping only — never medical, legal, financial, or life advice             |
+| License            | MIT — fork, modify, self-host, and use commercially; compliance and disclaimers are the deployer's responsibility                         |
 
 ### What it is not
 
-- Not a hosted online fortune-telling service — the repository ships no public instance.
-- Not a standalone npm BaZi algorithm library; the calculation lives inside the app as a service.
+- Not a web application — the repository contains no frontend code and ships no public instance.
+- Not a hosted online fortune-telling service.
+- Not a standalone npm BaZi algorithm library; the calculation lives inside the service and is reached over HTTP.
 - Not a scientific endorsement of divination or astrology accuracy.
 - Not a turnkey compliance package for app stores, WeChat, payments, ads, or local regulations.
 
@@ -51,12 +53,10 @@ It is meant to be forked, self-hosted, studied, and extended — not consumed as
 - **Synastry** — basic compatibility analysis across two sets of birth data.
 - **User flows** — email signup/login, session tokens, cookies, Google / WeChat OAuth, password
   reset, self-service account deletion.
-- **History and favorites** — records for BaZi, Tarot, I Ching, and Zi Wei with client-side
-  filtering, bulk operations, favorites, and snapshots.
-- **Internationalization** — react-i18next with five bundled locales (`en-US`, `zh-CN`, `zh-TW`,
-  `ja`, `ko`) and browser-language detection.
-- **Operations** — `/live`, `/health`, `/api/ready`, admin health check, Pino JSON logs,
-  OpenAPI / Swagger UI, and WebSocket AI streaming at `/ws/ai`.
+- **History and favorites** — records for BaZi, Tarot, I Ching, and Zi Wei with bulk operations,
+  favorites, and snapshots.
+- **Operations** — `/live`, `/health`, `/api/ready`, `/metrics` (Prometheus), admin health check,
+  Pino JSON logs, OpenAPI / Swagger UI, and WebSocket AI streaming at `/ws/ai`.
 - **Programmatic CLI** — `./bazi` wraps setup, local stack lifecycle, migrations, tests, and E2E
   verification behind `--json` output and documented exit codes, so scripts and AI agents can drive it.
 
@@ -78,10 +78,10 @@ production, inject variables via your shell, process manager, or platform.
 git clone https://github.com/tytsxai/bazi-master.git
 cd bazi-master
 
-./bazi setup --with-frontend   # install deps + generate .env + generate Prisma Client
-./bazi doctor                  # environment health check; each failure prints a fix command
-./bazi stack up                # start db + api + web
-./bazi test                    # run tests
+./bazi setup     # install deps + generate .env + generate Prisma Client
+./bazi doctor    # environment health check; each failure prints a fix command
+./bazi stack up  # start db + api
+./bazi test      # run tests (cli + lint + backend)
 ```
 
 Every command supports `--json` and uses documented exit codes, which makes it script- and
@@ -92,12 +92,10 @@ agent-friendly. Full command list: `./bazi help --json`.
 ```bash
 npm install
 npm -C backend install
-npm -C frontend install
 
 docker compose up -d postgres redis          # local PostgreSQL + Redis
 npm -C backend run prisma:migrate:deploy     # apply migrations
 NODE_ENV=development npm -C backend run dev  # API on http://127.0.0.1:4000
-npm -C frontend run dev                      # web on http://localhost:3000
 ```
 
 Health checks: `curl http://127.0.0.1:4000/live`, `/health`, `/api/ready`, `/api/ai/providers`.
@@ -139,7 +137,8 @@ Zi Wei records, Soul Portrait, user settings, admin endpoints.
 
 ## Use cases
 
-- Learning how BaZi, Tarot, I Ching, zodiac, and Zi Wei modules compose into one React web app.
+- Adding a metaphysics calculation backend to an existing product, with the UI entirely your own.
+- Giving an AI agent a real charting algorithm to call instead of having the model invent results.
 - Bootstrapping a self-hosted prototype for a divination / astrology / entertainment AI product.
 - Studying how Express + Prisma + PostgreSQL + Redis organize auth, history, favorites, health
   checks, and OpenAPI documentation.
@@ -155,7 +154,9 @@ Key variables:
 
 - `DATABASE_URL` — PostgreSQL connection string
 - `SESSION_TOKEN_SECRET` — must be a 32+ character random string in production
-- `FRONTEND_URL` / `BACKEND_BASE_URL` — CORS, OAuth callbacks, OpenAPI base URL
+- `FRONTEND_URL` / `CORS_ALLOWED_ORIGINS` — the **origin of your client app**: CORS allow-list,
+  OAuth callback redirect target, and links in outbound email. This service has no UI of its own
+- `BACKEND_BASE_URL` — OpenAPI base URL
 - `REDIS_URL` — optional locally, required for production / multi-instance deployments
 - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — optional; `AI_PROVIDER=mock` without them
 - `TRUST_PROXY` — set to the **hop count** (`1` for a single nginx layer). Setting `true` trusts all
@@ -166,10 +167,9 @@ Key variables:
 
 ```bash
 ./bazi test                            # fast set: lint + typecheck + unit + backend, on an isolated temp DB
-./bazi test --all                      # everything, including Playwright E2E
+./bazi test backend                    # just one target
 npm -C backend test                    # backend tests (prepares a local test PostgreSQL if needed)
-npm -C frontend run test:unit:run      # frontend unit tests
-npm -C frontend test                   # Playwright E2E (requires browser deps)
+npm run test:cli                       # CLI contract tests
 npm test                               # combined
 ```
 
@@ -202,6 +202,6 @@ MIT License. See [LICENSE](LICENSE).
 
 ---
 
-**Search keywords**: open-source BaZi chart app, BaZi charting API, Chinese astrology web app,
+**Search keywords**: open-source BaZi chart API, BaZi charting engine, Chinese astrology API,
 Zi Wei Dou Shu chart open source, Tarot draw API, I Ching divination API, synastry compatibility API,
-React Express Prisma PostgreSQL starter, AI fortune-telling app starter, self-hosted divination app.
+Express Prisma PostgreSQL calculation engine, AI fortune-telling backend, agent tools, self-hosted divination API.

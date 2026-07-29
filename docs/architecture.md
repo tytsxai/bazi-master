@@ -2,14 +2,14 @@
 
 > 版本: v0.2.0 | 更新: 2026-07-28
 
-BaZi Master 是一个 self-hostable open-source divination web app starter。它不是单独算法库或托管 SaaS，而是把八字排盘、塔罗、周易、星座、紫微斗数、合盘分析、AI 解读、用户系统和生产基础设施放在同一个 React + Express + Prisma + PostgreSQL 仓库中，便于学习、fork 和二次开发。
+BaZi Master 是一个 self-hostable 的玄学计算引擎，以文档化 HTTP API 的形式交付。它不是单独算法库、不是托管 SaaS，也不含前端界面：八字排盘、塔罗、周易、星座、紫微斗数、合盘分析、AI 解读、用户系统和生产基础设施收敛在一个 Express + Prisma + PostgreSQL 仓库里，供你自己的客户端或智能体调用。
 
 ## 系统概览
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   React SPA     │────▶│  Express API    │────▶│  PostgreSQL     │
-│   (Vite:3000)   │     │  (Node:4000)    │     │  (Prisma DS)    │
+│  你的客户端 /   │────▶│  Express API    │────▶│  PostgreSQL     │
+│  AI Agent       │ HTTP│  (Node:4000)    │     │  (Prisma DS)    │
 └─────────────────┘     └────────┬────────┘     └─────────────────┘
                                  │
                                  ▼
@@ -19,8 +19,8 @@ BaZi Master 是一个 self-hostable open-source divination web app starter。它
                         └─────────────────┘
 ```
 
-- **前端**: React 18 SPA（Vite 构建，端口 3000）
-- **后端**: Node.js 20+ / Express 4 / Prisma ORM（端口 4000）
+- **调用方**: 任意 HTTP 客户端 —— 你自己的 Web/App/小程序前端，或把 OpenAPI 转成 tool schema 的智能体。本仓库不提供界面
+- **服务端**: Node.js 20+ / Express 4 / Prisma ORM（端口 4000）
 - **数据库**: PostgreSQL（当前 Prisma schema 的 datasource）
 - **缓存/会话**: Redis（本地可选，生产/多实例必需，用于会话/八字缓存/OAuth state/密码重置）
 - **AI Provider**: mock / OpenAI / Anthropic 文本解读；Soul Portrait 图片当前走 OpenAI 或 mock 占位
@@ -81,25 +81,6 @@ bazi-master/
 │   ├── constants/             # 常量 (天干地支/紫微/生肖)
 │   └── test/                  # 后端测试
 │
-├── frontend/
-│   ├── src/
-│   │   ├── pages/             # 页面组件 (12+)
-│   │   ├── components/        # 业务组件
-│   │   │   ├── auth/          # 登录/注册表单
-│   │   │   ├── bazi/          # 八字表单/结果
-│   │   │   ├── chat/          # AI 聊天界面
-│   │   │   ├── history/       # 历史记录
-│   │   │   ├── profile/       # 用户资料
-│   │   │   ├── tarot/         # 塔罗组件
-│   │   │   ├── ziwei/         # 紫微组件
-│   │   │   └── ui/            # 通用 UI 组件
-│   │   ├── auth/              # AuthContext
-│   │   ├── hooks/             # 自定义 hooks
-│   │   ├── i18n/              # 多语言 (en/zh-CN/zh-TW/ja/ko)
-│   │   └── utils/             # 工具函数
-│   ├── tests/                 # Playwright E2E 测试
-│   └── scripts/               # 开发脚本
-│
 ├── prisma/                    # 数据库 schema & migrations
 ├── docs/                      # 项目文档
 ├── docker/                    # Docker 初始化脚本
@@ -158,7 +139,7 @@ createAiGuard: 同用户同时仅允许 1 个 AI 请求
 ## 安全机制
 
 - **Helmet**: 安全响应头
-- **CORS**: 白名单控制 (`FRONTEND_URL` / `CORS_ALLOWED_ORIGINS`)
+- **CORS**: 白名单控制 (`FRONTEND_URL` / `CORS_ALLOWED_ORIGINS`，填调用方客户端的来源)
 - **速率限制**: 窗口/最大值控制 (`RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX`)
 - **输入校验**: URL 长度、请求体大小、参数验证
 - **管理员**: 邮箱白名单 `ADMIN_EMAILS`
@@ -171,11 +152,11 @@ createAiGuard: 同用户同时仅允许 1 个 AI 请求
 
 ## 测试覆盖
 
-| 类型     | 覆盖范围                                 | 工具                     |
-| -------- | ---------------------------------------- | ------------------------ |
-| 后端单测 | 认证、核心服务、路由、中间件、API 契约   | Node.js test / Supertest |
-| 前端单测 | 页面、组件、hooks、认证上下文            | Vitest / Testing Library |
-| E2E 测试 | 登录、注册、核心功能流、安全与响应式路径 | Playwright               |
+| 类型     | 覆盖范围                               | 工具                           |
+| -------- | -------------------------------------- | ------------------------------ |
+| 后端单测 | 认证、核心服务、路由、中间件、API 契约 | Node.js test / Supertest       |
+| 端到端   | 数据删除与级联的真实数据库校验         | `backend/scripts/verify-*.mjs` |
+| CLI 契约 | 退出码约定、JSON 输出、安全闸          | Node.js test                   |
 
 ## 版本历史
 

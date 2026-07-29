@@ -1,6 +1,6 @@
 ---
 name: bazi-cli
-description: bazi-master 仓库的操作入口。当需要在这个项目里准备环境、起停本地开发栈（db/api/web）、跑数据库迁移或重置、跑测试、跑 verify-*.mjs 端到端校验、排查后端起不来或 /health 503 时使用。所有操作都通过仓库根的 ./bazi CLI 完成，不要直接调 npm script 或手动起进程。
+description: bazi-master 仓库的操作入口。当需要在这个项目里准备环境、起停本地开发栈（db/api）、跑数据库迁移或重置、跑测试、跑 verify-*.mjs 端到端校验、排查 API 起不来或 /health 503 时使用。所有操作都通过仓库根的 ./bazi CLI 完成，不要直接调 npm script 或手动起进程。
 ---
 
 # bazi-master 操作手册
@@ -55,7 +55,7 @@ description: bazi-master 仓库的操作入口。当需要在这个项目里准�
 
 ```
 ./bazi doctor --json        # 退 3 就照每一项的 fix 修，或者 ./bazi doctor --fix 让它自己修
-./bazi stack up --json      # 起 db -> api -> web，幂等，已经在跑的会跳过
+./bazi stack up --json      # 起 db -> api，幂等，已经在跑的会跳过
 ./bazi stack status --json  # 任何时候先看这个再动手
 ```
 
@@ -64,7 +64,7 @@ Agent 在动手改代码前，用 `./bazi stack status --require-ready --json` �
 
 ## 依赖顺序（最容易踩的坑）
 
-**db → 迁移 → api → web**，中间那步最容易漏。
+**db → 迁移 → api**，中间那步最容易漏。
 
 迁移没跑时，后端进程起得来、端口也通，但 `/health` 会一直返回 503，日志里刷的是
 `The table public.User does not exist`。CLI 已经在启动 api 前替你查了迁移状态并直接报
@@ -94,40 +94,35 @@ Agent 在动手改代码前，用 `./bazi stack status --require-ready --json` �
 ## 测试：skipped 不等于 passed
 
 `bazi test` 的目标未就绪时会记 `skipped` 并**照样返回 0**。未就绪有两种：依赖没装，或者
-对应的 npm script 不存在。这是给本地开发用的——不该因为没装前端依赖就没法跑后端测试。
-但它意味着 `bazi test --all` 可能一个目标都没跑还报成功：
+对应的 npm script 不存在。这是给本地开发用的，但它意味着一次"什么都没跑"也会报成功：
 
 ```
-summary: {"passed": 2, "failed": 0, "skipped": 3}   # exit 0，但 typecheck/unit/e2e 根本没跑
+summary: {"passed": 1, "failed": 0, "skipped": 2}   # exit 0，但 lint/backend 根本没跑
 ```
 
 **永远读 `summary.skipped`，别只看退出码。** 要让"什么都没跑"变成硬失败（CI、或者你需要一次
 可信的全量），加 `--fail-on-skip`：有跳过就退 3（环境未就绪，去装依赖，不是去查代码）。
 
 ```
-./bazi test --all --fail-on-skip --json
+./bazi test --fail-on-skip --json
 ```
 
-第一个目标 `cli` 是 CLI 自己的契约测试（退出码语义、`--json` 单文档、安全闸不可绕）。它两秒跑完，
-排在最前面是因为：它挂了说明你正在用的这个工具本身坏了，后面几个目标的结论都不再可信。
-
-e2e 还额外依赖 Playwright 浏览器二进制，`npm install` 不会带上它。缺了的表现是每个用例
-清一色 `browserType.launch: Executable doesn't exist`，看起来像"前端全崩了"，其实只是没装浏览器。
-`bazi setup --with-frontend` 已经会补齐，`bazi doctor` 的 `e2e:browsers` 也会报——
-跑 e2e 前先 doctor 一下比跑完一轮再回头查省事得多。
+三个目标是 `cli` / `lint` / `backend`，不带参数就全跑。`cli` 排在最前面是它自己的契约测试
+（退出码语义、`--json` 单文档、安全闸不可绕），两秒跑完：它挂了说明你正在用的这个工具本身
+坏了，后面两个目标的结论都不再可信。
 
 ## foreign：CLI 不碰不是自己起的进程
 
-`stack status` 里每个组件都有 `managedBy`，**api/web 和 db 的取值不是一套**：
+`stack status` 里每个组件都有 `managedBy`，**api 和 db 的取值不是一套**：
 
-| 组件      | 取值                                   | 含义                         |
-| --------- | -------------------------------------- | ---------------------------- |
-| api / web | `bazi`                                 | CLI 起的，能停               |
-|           | `foreign`                              | 端口被别的进程占了，CLI 不碰 |
-|           | `null`                                 | 没在跑                       |
-| db        | `pg_ctl` / `docker-compose` / `remote` | CLI 起的（值就是启动方式）   |
-|           | `external`                             | 库是活的，但不是 CLI 起的    |
-|           | `null`                                 | 连不上                       |
+| 组件 | 取值                                   | 含义                         |
+| ---- | -------------------------------------- | ---------------------------- |
+| api  | `bazi`                                 | CLI 起的，能停               |
+|      | `foreign`                              | 端口被别的进程占了，CLI 不碰 |
+|      | `null`                                 | 没在跑                       |
+| db   | `pg_ctl` / `docker-compose` / `remote` | CLI 起的（值就是启动方式）   |
+|      | `external`                             | 库是活的，但不是 CLI 起的    |
+|      | `null`                                 | 连不上                       |
 
 所以**不要用 `managedBy === 'bazi'` 判断归属**——db 永远不会是 `bazi`。要判断"这个组件是不是我们管的"，
 看它是不是 `foreign` / `external` / `null` 更可靠。
@@ -135,18 +130,19 @@ e2e 还额外依赖 Playwright 浏览器二进制，`npm install` 不会带上�
 看到 `foreign` 时 CLI 会拒绝接管，也拒绝 kill。这是故意的：按端口去杀进程会误伤用户自己开的终端、
 另一个 worktree、或者同事的服务。
 
-正确处理：告诉用户 `4000/3000 端口上有不是 bazi 起的进程`，让他们决定。不要自己去 `kill $(lsof -ti:4000)`。
+正确处理：告诉用户 `4000 端口上有不是 bazi 起的进程`，让他们决定。不要自己去 `kill $(lsof -ti:4000)`。
 
 推论：**不要绕过 CLI 手动起服务**（`npm run dev`、`node server.js`）。那样起的进程 CLI 管不到，
 后面 `stack down` 停不掉，`stack status` 只会显示 foreign。
 
 ## verify：跑之前栈必须就绪
 
-`frontend/scripts/verify-*.mjs` 全都直接访问 `http://localhost:3000`，它们**自己不会把栈拉起来**。
-栈没起时的原始表现是 Playwright 超时后吐一屏无关报错，很容易被误读成"功能坏了"。
+`backend/scripts/verify-*.mjs` 直连数据库做真实的删除/级联校验，它们**自己不会把栈拉起来**。
+栈没起时的原始表现是一屏连接超时的无关报错，很容易被误读成"功能坏了"。
 
 CLI 已经加了前置断言（退 3，`next: bazi stack up`），所以走 `./bazi verify` 就不会误判。
-清单是扫目录来的，新增一个 `scripts/verify-xxx.mjs` 立刻可用，不需要改 CLI 也不需要改这份文档。
+清单是扫目录来的，新增一个 `backend/scripts/verify-xxx.mjs` 立刻可用，不需要改 CLI 也不需要
+改这份文档。
 
 **校验脚本不要自己写建表 DDL**。`prisma/schema.prisma` 的 provider 是 postgresql，而手写的
 `CREATE TABLE` 很容易顺手写成 SQLite 方言（`AUTOINCREMENT` / `DATETIME` / `INSERT OR IGNORE`），
@@ -163,7 +159,6 @@ CLI 已经加了前置断言（退 3，`next: bazi stack up`），所以走 `./b
 ```
 ./bazi stack logs api --tail 60     # 后端日志（pino JSON）
 ./bazi stack logs db                # PostgreSQL 日志
-./bazi stack logs web
 ```
 
 启动失败时 CLI 会把日志压成一条诊断再返回，不会把几十 KB 原始日志塞进 `hint`。
@@ -173,7 +168,7 @@ CLI 已经加了前置断言（退 3，`next: bazi stack up`），所以走 `./b
 
 ## 端口
 
-api `4000`（`.env` 的 `PORT`）、web `3000`、db `5433`（本地 pg_ctl）或 `5432`（docker compose）。
+api `4000`（`.env` 的 `PORT`）、db `5433`（本地 pg_ctl）或 `5432`（docker compose）。
 装了 Docker 时 `env init` 默认给 5432 走 compose，没装就给 5433 走 pg_ctl。
 
 ## 要改 CLI 本身的时候

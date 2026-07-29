@@ -43,7 +43,7 @@ curl -i http://localhost:4000/api/ready
 （事件循环卡死、连接池耗尽）时，compose 自己不会做任何事——那是 Swarm/K8s 的行为。
 没有这个服务，backend 会一直挂在 unhealthy 状态没人管。
 
-已打标签：`backend`、`frontend`。
+已打标签：`backend`。
 **故意没打**：`postgres`、`redis` —— 有状态服务，healthcheck 失败就自动重启数据库
 往往会把一个问题变成两个。这两个转红需要人去看。
 
@@ -196,5 +196,5 @@ This avoids concurrent migration attempts during rolling restarts.
 
 - **Redis Connection Failed**: Check if `REDIS_URL` is correct and the Redis container is running.
 - **Database Timeout**: Ensure the database is accessible from the backend container. Check security groups/firewalls.
-- **CORS Errors**: Verify `CORS_ALLOWED_ORIGINS` includes the frontend URL.
+- **CORS Errors**: Verify `CORS_ALLOWED_ORIGINS` includes the calling client's origin.
 - **Password reset email failed**: Verify SMTP env vars (`SMTP_HOST`, `SMTP_FROM`, auth). Check provider logs for rejected connections.

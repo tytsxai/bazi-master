@@ -4,14 +4,15 @@
 
 ## 当前状态
 
-| 指标         | 状态                        |
-| ------------ | --------------------------- |
-| 后端测试     | 397/397 通过                |
-| 前端单元测试 | 86 用例 / 16 文件 (Vitest)  |
-| 前端 E2E     | 89 文件 (Playwright)        |
-| 数据库       | PostgreSQL（不支持 SQLite） |
-| Redis        | 生产必需，缺失则拒绝启动    |
-| Lint         | 0 error / 40 warning        |
+| 指标     | 状态                                |
+| -------- | ----------------------------------- |
+| 交付形态 | HTTP API，无前端界面                |
+| 后端测试 | 待重新确认                          |
+| 端到端   | 2 个 `backend/scripts/verify-*.mjs` |
+| CLI 契约 | 82 项通过                           |
+| 数据库   | PostgreSQL（不支持 SQLite）         |
+| Redis    | 生产必需，缺失则拒绝启动            |
+| Lint     | 待重新确认                          |
 
 > 数字请在改动后用 `./bazi test --json` 重新确认再更新，不要凭印象写。
 
@@ -32,9 +33,11 @@
       换 k8s 要 35000、ALB 要 65000，且都要同步抬高 `stop_grace_period`
 - [ ] 给 `totalConnections / maxConnections` 配告警（比值告警，不是等它开始拒绝）。
       指标已由 `/api/admin/health` 暴露，缺的是监控侧的告警规则
-- [ ] 前端容器前面若再套外层 nginx / CDN，要为 `limit_conn ws_per_ip` 配
-      `set_real_ip_from` / `real_ip_header`（配置里已留注释位），否则按 IP 限流
-      会退化成全站共用一个桶
+- [ ] 按 IP 的 WebSocket 并发限制随前端 nginx 一起删掉了，现在只剩后端的
+      `WS_MAX_CONNECTIONS` 总数上限。要恢复按来源限流，得在你自己的反向代理上配，
+      并注意套了 CDN 时要设 `set_real_ip_from` / `real_ip_header`，否则会退化成
+      全站共用一个桶
+- [ ] 给调用方的接入示例：把 `docs/openapi.json` 转成 agent tool schema 的最小样例
 
 ## 已完成
 
@@ -44,14 +47,10 @@
 - [x] 备份/恢复脚本 + 恢复后校验
 - [x] 添加 LICENSE 文件
 - [x] 生成 OpenAPI/Swagger 文档 (`/api-docs`，生产 Basic Auth 保护)
-- [x] 前端 E2E 测试稳定性 (Playwright retries)
-- [x] Bundle 优化 (代码分割, `npm run analyze`)
-- [x] React 组件单元测试 (AuthContext, ProtectedRoute, BaziForm)
 - [x] 健康检查 (`/live`, `/health`, `/api/ready`)
 - [x] 八字重复记录检测
 - [x] 历史记录客户端搜索过滤
 - [x] 根级 ESLint/Prettier 配置，并接入 CI
-- [x] React Router v7 future flags 兼容
 - [x] 错误追踪集成 (Sentry，采样率/environment/release 可配)
 - [x] 性能基线 (Lighthouse CI)
 - [x] PWA 离线支持
@@ -67,16 +66,18 @@
 - [x] AI 流式响应加空闲超时（原来只有响应头有 deadline，中途卡住会永久挂住
       连接和该用户的 AI 并发槽）
 - [x] `/ws/ai` 连接总数上限（upgrade 握手不经过 HTTP 限流）
-- [x] 前端 `index.html` / `sw.js` 禁缓存、`/assets/` 长缓存，修掉发布后白屏
 - [x] 后端容器直接 `node scripts/start.mjs`，不再经 npm/sh 转发 SIGTERM
-- [x] 按 IP 的 WebSocket 并发限制（`frontend/nginx.conf` 的 `limit_conn ws_per_ip 10`，
-      实测第 11 条返回 503、关闭一条后立即归还）
-- [x] 容器 `ulimits.nofile` 显式钉死：每条 WS 连接占一个 fd（前端代理占两个），
+- [x] 容器 `ulimits.nofile` 显式钉死：每条 WS 连接占一个 fd，
       实测每条只吃 ~9KB 内存，所以先撞上的一定是 fd 而不是内存限额
+- [x] 删除前端，项目收敛为纯算法能力层（frontend/ 全部 232 个文件、CLI 的 web 组件、
+      compose 的 frontend 服务、CI 的前端三步）
 - [x] 排水时序端到端实测并写进 PRODUCTION.md（+2ms 摘流 / 误差 10ms 量级）
 - [x] 备份定时调度 (`scripts/install-cron.sh` + `cron-backup.sh`，带锁和失败告警)
 
 ## 已放弃
 
-- WebAssembly 重计算逻辑 —— `frontend/assembly/` 只有三个未被任何代码调用的函数，
+- WebAssembly 重计算逻辑 —— 前端 `assembly/` 只有三个未被任何代码调用的函数，
   却被 `predev`/`prebuild` 钉在构建关键路径上，是个纯粹的失败点。已整条移除。
+- 自带 React 前端 —— 界面形态因产品而异（Web / 小程序 / App / 纯 agent 调用），
+  塞一套参考实现进来只会模糊能力层的边界，还要为它维护 91 个 Playwright 用例和
+  一整套浏览器依赖。已整体删除，界面交给调用方。

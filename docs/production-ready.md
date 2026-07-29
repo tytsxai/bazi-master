@@ -18,7 +18,7 @@
 - `PORT=4000`
 - `DATABASE_URL=postgresql://user:pass@host:5432/dbname`
 - `SESSION_TOKEN_SECRET=<32+ chars>`
-- `FRONTEND_URL=https://your-domain.com`
+- `FRONTEND_URL=https://your-domain.com`（调用方客户端的来源，不是本服务自己的地址）
 - `BACKEND_BASE_URL=https://api.your-domain.com`
 - `REDIS_URL=redis://redis:6379`
 - `RATE_LIMIT_WINDOW_MS=60000`
@@ -42,7 +42,7 @@
 ## 安全
 
 - [ ] HTTPS 全站强制
-- [ ] CORS 限定为 `FRONTEND_URL`
+- [ ] CORS 限定为 `FRONTEND_URL` / `CORS_ALLOWED_ORIGINS`
 - [ ] 管理员邮箱通过 `ADMIN_EMAILS` 显式配置
 - [ ] 会话密钥定期轮换（建议 90 天）
 - [ ] 速率限制启用
@@ -67,7 +67,7 @@
 
 - [ ] 压测基础路径（Auth、Bazi、Tarot AI）
 - [ ] 评估 Redis/DB 资源水位并设置报警
-- [ ] 前端 bundle 体积与首屏时间基线
+- [ ] API 响应时间与 `/metrics` 指标基线
 
 ## 变更与回滚
 

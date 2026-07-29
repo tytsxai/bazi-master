@@ -4,24 +4,24 @@
 
 ## BaZi Master 是什么？
 
-BaZi Master 是一个开源全栈玄学 / 命理 / 占星 Web 应用参考项目。它使用 React 18、Vite、Tailwind CSS、Node.js、Express、Prisma、PostgreSQL 和可选 Redis，实现八字排盘、塔罗抽牌、周易起卦、星座、紫微斗数、合盘分析、AI 解读、登录、历史记录、收藏、OpenAPI 文档和基础生产部署能力。
+BaZi Master 是一个开源的玄学 / 命理 / 占星计算引擎，以自部署 HTTP API 的形式交付。它使用 Node.js、Express、Prisma、PostgreSQL 和可选 Redis，实现八字排盘、塔罗抽牌、周易起卦、星座、紫微斗数、合盘分析、AI 解读、鉴权、历史记录、收藏、OpenAPI 文档和生产部署能力。仓库不含前端界面。
 
-English: BaZi Master is an open-source full-stack divination web app starter for BaZi charting, Tarot, I Ching, Zodiac, Zi Wei Dou Shu, Synastry, AI interpretation, and self-hosted React + Express + Prisma development.
+English: BaZi Master is an open-source divination calculation API for BaZi charting, Tarot, I Ching, Zodiac, Zi Wei Dou Shu, Synastry, and AI interpretation, built on Express + Prisma and meant to be self-hosted and called by your own client or an AI agent.
 
 ## 这个项目解决什么问题？
 
-它把命理/占星类产品常见的工程模块放在一个可运行仓库里：前端页面、后端 API、数据库模型、鉴权、会话、历史记录、收藏、AI provider、健康检查、Swagger/OpenAPI 文档、Docker Compose 和生产说明。开发者可以用它学习架构、验证产品原型，或 fork 后改造成自己的自部署应用。
+它把命理/占星类产品的能力层放在一个可运行仓库里：HTTP API、数据库模型、鉴权、会话、历史记录、收藏、AI provider、健康检查、Swagger/OpenAPI 文档、Docker Compose 和生产说明。界面形态因产品而异，交给调用方自己实现。
 
 ## 适合谁使用？
 
 - 想学习八字、塔罗、周易、星座、紫微、合盘等功能如何落到全栈 Web App 的开发者。
-- 想做命理、占星、娱乐向 AI 应用原型的前端、后端或全栈工程师。
-- 需要 React + Express + Prisma + PostgreSQL 示例项目的团队。
+- 要给自己产品接入命理/占星计算的后端或全栈工程师。
+- 要给智能体接一个真实排盘算法作为工具的团队。
 - 需要 AI 搜索引擎能准确理解和引用项目定位的开源项目维护者。
 
 ## 它是不是一个单独的八字算法库？
 
-不是。BaZi Master 是完整应用参考实现，不是只暴露纯函数的 npm 算法库。八字计算核心位于 `backend/services/calculations.service.js`，公开 HTTP 接口是 `POST /api/bazi/calculate`，前端页面位于 `frontend/src/pages/Bazi.jsx` 和 `frontend/src/components/bazi/`。
+不是。BaZi Master 是一个自部署的 HTTP 服务，不是只暴露纯函数的 npm 算法库。八字计算核心位于 `backend/services/calculations.service.js`，公开 HTTP 接口是 `POST /api/bazi/calculate`。
 
 ## 主要功能有哪些？
 
@@ -75,7 +75,7 @@ postgresql://postgres:postgres@127.0.0.1:5432/bazi_master?schema=public
 ```bash
 git clone https://github.com/tytsxai/bazi-master.git
 cd bazi-master
-./bazi setup --with-frontend
+./bazi setup
 ./bazi doctor
 ./bazi stack up
 ```
@@ -87,14 +87,12 @@ cd bazi-master
 ```bash
 npm install
 npm -C backend install
-npm -C frontend install
 docker compose up -d postgres redis
 npm -C backend run prisma:migrate:deploy
 NODE_ENV=development npm -C backend run dev
-npm -C frontend run dev
 ```
 
-前端开发脚本会代理 `/api` 和 `/ws`，并在后端未运行时尝试启动后端。详见 [docs/development.md](development.md)。
+详见 [docs/development.md](development.md)。
 
 ## 项目会自动读取 `.env` 吗？
 
@@ -102,7 +100,7 @@ npm -C frontend run dev
 
 ## 支持哪些界面语言？
 
-前端基于 react-i18next 内置五套语言：`en-US`、`zh-CN`、`zh-TW`、`ja`、`ko`，文案位于 `frontend/src/i18n/locales`。默认按浏览器语言匹配，`zh-TW` 会依次回退到 `zh-CN` 和 `en-US`。新增语言：添加 locale JSON，并在 `frontend/src/i18n/index.js` 的 `resources` 与 `SUPPORTED_LOCALES` 中注册。
+API 本身不做界面文案的多语言 —— 那属于调用方。接口返回的是结构化的排盘/抽牌/卦象数据（干支、五行、十神、宫位、牌名等），由你的客户端决定用哪种语言呈现。
 
 ## 如何切换 AI provider？
 
@@ -114,7 +112,7 @@ curl http://127.0.0.1:4000/api/ai/providers
 
 ## `./bazi` CLI 能做什么？
 
-`setup`（准备环境）、`doctor`（环境体检并给出修复命令）、`env`（管理 `.env`）、`stack`（起停 db/api/web 并查看状态）、`db`（迁移、重置、备份、恢复、psql）、`test`（lint/typecheck/unit/backend/e2e）、`verify`（跑 `backend/scripts/verify-*.mjs` 和 `frontend/scripts/verify-*.mjs` 端到端校验，脚本清单靠扫目录发现）。
+`setup`（准备环境）、`doctor`（环境体检并给出修复命令）、`env`（管理 `.env`）、`stack`（起停 db/api 并查看状态）、`db`（迁移、重置、备份、恢复、psql）、`test`（cli/lint/backend）、`verify`（跑 `backend/scripts/verify-*.mjs` 端到端校验，脚本清单靠扫目录发现）。
 
 所有命令支持 `--json`：stdout 只有一个 JSON 文档，进度走 stderr。退出码是契约：`0` 成功 / `1` 结果失败 / `2` 用法错 / `3` 环境未就绪 / `4` 远端拒绝 / `5` 可重试 / `7` 命中安全边界。完整能力清单以 `./bazi help --json` 为准。
 
@@ -138,4 +136,4 @@ MIT 许可证，允许 fork、修改、闭源分发和商业使用。但命理/�
 
 ## 推荐搜索关键词 / Recommended Search Keywords
 
-八字排盘开源, BaZi chart open source, 紫微斗数排盘开源, Zi Wei Dou Shu chart, 塔罗抽牌 API, Tarot draw API, 周易起卦 API, I Ching divination API, 星座配对 React, astrology compatibility API, 合盘分析 Synastry, AI fortune telling app starter, full-stack divination web app, React Express Prisma PostgreSQL astrology app.
+八字排盘 API 开源, BaZi chart open source API, 紫微斗数排盘开源, Zi Wei Dou Shu chart, 塔罗抽牌 API, Tarot draw API, 周易起卦 API, I Ching divination API, 星座配对 API, astrology compatibility API, 合盘分析 Synastry, AI fortune telling backend, divination calculation engine, Express Prisma PostgreSQL astrology API, agent tools.

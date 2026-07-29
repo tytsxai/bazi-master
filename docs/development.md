@@ -2,7 +2,7 @@
 
 > 版本: v0.2.0 | 更新: 2026-07-28
 
-BaZi Master 是一个 React + Express + Prisma + PostgreSQL 全栈示例项目，覆盖八字排盘、塔罗、周易、星座、紫微、合盘和 AI 解读。本文面向本地开发、二次开发和自部署前的验证。
+BaZi Master 是一个 Express + Prisma + PostgreSQL 玄学计算引擎，以 HTTP API 形式对外提供八字排盘、塔罗、周易、星座、紫微、合盘和 AI 解读。仓库不含前端。本文面向本地开发、二次开发和自部署前的验证。
 
 ## 前置要求
 
@@ -10,7 +10,6 @@ BaZi Master 是一个 React + Express + Prisma + PostgreSQL 全栈示例项目�
 - npm >= 9
 - 本地 PostgreSQL：装了 Docker 就走 `docker-compose.yml`；没装 Docker 时 `./bazi stack up` 会回退到本机 PostgreSQL（需要 `initdb` / `pg_ctl`，例如 Homebrew 装的 postgresql）
 - 可选：Redis（本地可不配，生产和多实例必须配）
-- 可选：Playwright 浏览器依赖（只有跑 e2e 时需要，`npm --prefix frontend exec -- playwright install chromium`）
 
 跑 `./bazi doctor` 会逐项检查上面这些，并对每个失败项给出可直接执行的修复命令。
 
@@ -28,11 +27,11 @@ BaZi Master 是一个 React + Express + Prisma + PostgreSQL 全栈示例项目�
 ### 推荐：用 `./bazi` CLI
 
 ```bash
-./bazi setup --with-frontend   # 装依赖 + 生成 .env + 生成 Prisma Client
-./bazi doctor                  # 环境体检，每项失败都带可执行的修复命令
-./bazi stack up                # 起 db + api + web
-./bazi stack status            # 看当前栈状态
-./bazi stack down              # 停掉
+./bazi setup          # 装依赖 + 生成 .env + 生成 Prisma Client
+./bazi doctor         # 环境体检，每项失败都带可执行的修复命令
+./bazi stack up       # 起 db + api
+./bazi stack status   # 看当前栈状态
+./bazi stack down     # 停掉
 ```
 
 所有命令支持 `--json`；`./bazi help --json` 是能力清单的唯一真源。
@@ -55,45 +54,35 @@ npm -C backend run prisma:migrate:deploy
 
 # 启动 API
 NODE_ENV=development npm -C backend run dev   # http://127.0.0.1:4000
-
-# 前端
-npm -C frontend install
-npm -C frontend run dev                      # http://localhost:3000
 ```
-
-`npm -C frontend run dev` 使用项目内置 dev server（`frontend/scripts/dev-server.mjs`）启动或复用后端，并让 Vite 代理 `/api` 与 `/ws`。如果需要分别查看前后端日志，可以先显式执行 `NODE_ENV=development npm -C backend run dev`，再启动前端。
 
 ## 测试
 
 ```bash
-./bazi test              # 快集合：lint + typecheck + unit + backend，使用隔离临时库
-./bazi test --all        # 含 Playwright E2E 全跑
+./bazi test              # 全部目标：cli + lint + backend，使用隔离临时库
 ./bazi test backend      # 只跑后端
 
-npm -C backend test       # 后端 Node.js test
-npm -C frontend run test:unit:run # 前端 Vitest 单元测试（一次性；test:unit 是 watch 模式）
-npm -C frontend test      # 前端 Playwright E2E
-npm test                 # 组合执行
+./bazi stack up          # 端到端校验脚本需要栈在跑
+./bazi verify all        # 跑 backend/scripts/verify-*.mjs
+
+npm -C backend test      # 后端 Node.js test
+npm run test:cli         # CLI 自身的契约测试
 ```
 
 > `./bazi test` 默认在隔离的临时数据库上跑，不会碰开发库；只有显式加 `--use-dev-db` 才会直连 `.env` 里的开发库。
-
-> 若前端 E2E 依赖真实后端/数据库，请确保相关服务已启动且数据可用。
 
 ## 常用脚本
 
 - `npm -C backend run prisma:migrate:deploy` — 应用迁移
 - `npm -C backend run prisma:generate` — 生成 Prisma Client
-- `npm -C frontend run build` — 前端打包
-- `npm -C frontend run preview` — 静态预览
+- `npm -C backend run generate:openapi` — 重新生成 `docs/openapi.json`
 
 ## 代码结构提示
 
 - 业务逻辑集中在 `backend/services/*.service.js`
 - API 路由在 `backend/routes/*`
 - 会话/鉴权逻辑在 `backend/middleware/auth.js`
-- 前端路由与页面在 `frontend/src/App.tsx` 与 `frontend/src/pages/*`
-- 多语言资源在 `frontend/src/i18n/locales`
+- 对外接口契约在 `docs/openapi.json`，运行时挂在 `/api-docs`
 - AI 搜索友好摘要在 `llms.txt`
 - 常见问题和限制说明在 `docs/faq.md`
 
@@ -111,7 +100,7 @@ npm run format
 
 ## 开发约定
 
-- 默认 CORS 允许 `FRONTEND_URL`；如需跨域，请在环境变量中增加 `CORS_ALLOWED_ORIGINS`
+- 默认 CORS 允许 `FRONTEND_URL`（填你自己客户端的来源）；要放行多个来源，用 `CORS_ALLOWED_ORIGINS`
 - 未配置 Redis 时会话存内存，调试 OK，生产/多实例需 Redis
 - AI Provider 根据密钥自动选择；无密钥时为 `mock`
 

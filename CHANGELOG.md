@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- **BREAKING — the bundled React frontend is gone.** The project is a professional
+  calculation engine, delivered as a documented HTTP API for applications and AI agents;
+  the UI was never the value, and shipping one blurred the boundary of the capability
+  layer while costing a full browser toolchain to maintain. Deleted `frontend/` in its
+  entirety — the React app, 91 Playwright specs, 19 `verify-*.mjs` browser checks, its
+  Dockerfile and `nginx.conf` — 232 files in all. Anyone who was running the bundled UI
+  should pin the previous tag or build their own client against `docs/api.md` and
+  `docs/openapi.json`; the API itself is unchanged.
+- The `frontend` service in `docker-compose.prod.yml`, along with `FRONTEND_BIND_ADDR`
+  and the `VITE_*` build args. TLS termination and the public edge now belong entirely
+  to a reverse proxy you run yourself.
+- Per-source-IP WebSocket limiting went with `frontend/nginx.conf`. `WS_MAX_CONNECTIONS`
+  still bounds the process as a whole, but nothing now stops one client from holding
+  every slot — configure `limit_conn` at your own edge if that matters to you.
+- `docs/performance-audit.md`, which measured frontend bundles and Playwright runs.
+
+### Changed
+
+- `./bazi stack` manages `db` and `api` only; the `web` component and its vite process
+  management are gone. `./bazi setup` drops `--with-frontend`, `./bazi doctor` drops the
+  `deps:frontend` / `port:frontend` / `e2e:browsers` checks, and `./bazi test` narrows to
+  `cli` / `lint` / `backend` — with `--all` removed, since it no longer selects anything
+  the default run does not already cover.
+- `./bazi verify` discovers `backend/scripts/verify-*.mjs` only.
+- CI drops the frontend install/unit/E2E steps and gains the CLI contract tests, which
+  previously ran nowhere.
+- `FRONTEND_URL`, `WECHAT_FRONTEND_URL` and `CORS_ALLOWED_ORIGINS` are **kept** and keep
+  their behaviour — they are the OAuth callback target, the CORS allow-list, and the
+  origin used in outbound email links. Their meaning is now "the origin of the client
+  application calling this API" rather than "the UI we ship"; documentation reworded
+  accordingly.
+
 ## [0.2.0] - 2026-07-28
 
 Production-readiness pass. No API changes — every item below closes a gap that would
