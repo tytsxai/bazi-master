@@ -50,7 +50,7 @@
     "express": "^4.21.1",
     "helmet": "^7.1.0",
     "lunar-javascript": "^1.7.7",
-    "nodemailer": "^8.0.10",
+    "nodemailer": "^9.0.3",
     "pino": "^10.1.0",
     "pino-http": "^11.0.0",
     "redis": "^4.6.14",
