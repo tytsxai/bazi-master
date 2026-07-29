@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **Solar-term boundaries are now resolved to the minute, in one shared place.** Anything that
+  splits on a solar term — BaZi year/month pillars, the Da Liu Ren month general, the Qi Men
+  bureau, the Ba Zhai life trigram — used to compare _dates_, so the day a term falls on could
+  not be told apart from the day before it. 立春 2024 lands at 16:27; a birth at 10:00 and one at
+  17:00 that day belong to different years. `services/jieqi.service.js` now owns term resolution
+  and the four call sites share it.
+- Ba Zhai answers carry `lifeTrigram.precision` — `minute` (full birth time given), `day` (no
+  time, so the term day is assumed to start at midnight) or `year` (only a year given, the
+  立春 boundary was never applied) — plus `lifeTrigram.lichunAt`, the exact instant, so a caller
+  can tell a solid result from one that needs the birth time pinned down. Reporting the
+  precision beats silently picking a side.
+
 - **Six new divination engines, and the shared 干支 foundation they sit on.** The engine
   previously covered BaZi and Zi Wei only; the traditional Chinese canon is now largely
   complete. A new `constants/ganzhi.js` + `services/ganzhi.service.js` layer holds what

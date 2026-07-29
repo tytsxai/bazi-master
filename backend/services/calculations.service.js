@@ -541,8 +541,12 @@ export const calculateDailyScore = (userChart, dailyPillars) => {
     branchRelations: branchEffects,
     dayMasterRelation: relation,
     dayMasterRelationCn:
-      { Same: '同气', Generates: '生身', GeneratedBy: '泄秀', Controls: '克身', ControlledBy: '为财' }[
-        relation
-      ] || null,
+      {
+        Same: '同气',
+        Generates: '生身',
+        GeneratedBy: '泄秀',
+        Controls: '克身',
+        ControlledBy: '为财',
+      }[relation] || null,
   };
 };

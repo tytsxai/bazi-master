@@ -62,7 +62,13 @@ describe('节气基座：交节精确到分', () => {
     const term = resolveLiChun(2024);
     assert.equal(term.iso, '2024-02-04 16:27:07');
     assert.equal(
-      resolveLiChunYear({ year: 2024, month: 2, day: 4, hour: term.at.hour, minute: term.at.minute }),
+      resolveLiChunYear({
+        year: 2024,
+        month: 2,
+        day: 4,
+        hour: term.at.hour,
+        minute: term.at.minute,
+      }),
       2024
     );
   });
@@ -93,10 +99,7 @@ describe('节气基座：交节精确到分', () => {
   });
 
   it('不给时刻的八宅结果标 precision: day，不冒充确定值', () => {
-    assert.equal(
-      resolveLifeTrigram(2024, 'male', { birthMonth: 2, birthDay: 4 }).precision,
-      'day'
-    );
+    assert.equal(resolveLifeTrigram(2024, 'male', { birthMonth: 2, birthDay: 4 }).precision, 'day');
     assert.equal(
       resolveLifeTrigram(2024, 'male', { birthMonth: 2, birthDay: 4, birthHour: 17 }).precision,
       'minute'
@@ -122,7 +125,8 @@ describe('节气基座：与 lunar-javascript 交叉验证', () => {
           if (mine.name === theirs.getName()) continue;
           const s = theirs.getSolar();
           const isTermDay = s.getYear() === year && s.getMonth() === month && s.getDay() === day;
-          if (!isTermDay) diffs.push(`${year}-${month}-${day}: ${mine.name} vs ${theirs.getName()}`);
+          if (!isTermDay)
+            diffs.push(`${year}-${month}-${day}: ${mine.name} vs ${theirs.getName()}`);
         }
       }
     }

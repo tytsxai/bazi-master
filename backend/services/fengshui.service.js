@@ -58,8 +58,7 @@ export const resolveLifeTrigram = (
   const rawYear = Number(birthYear);
   if (!Number.isFinite(rawYear)) return null;
 
-  const hasMonthDay =
-    Number.isFinite(Number(birthMonth)) && Number.isFinite(Number(birthDay));
+  const hasMonthDay = Number.isFinite(Number(birthMonth)) && Number.isFinite(Number(birthDay));
   const hasHour = Number.isFinite(Number(birthHour));
 
   let year = rawYear;
