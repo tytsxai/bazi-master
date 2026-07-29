@@ -25,7 +25,7 @@ import {
   buildBirthTimeMeta,
 } from '../utils/timezone.js';
 import { analyzeChart, getTenGod } from './bazi.service.js';
-import { getNayin } from './ganzhi.service.js';
+import { getNayin, detectBranchRelations } from './ganzhi.service.js';
 
 // Pinyin and Element mappings for Stems (TianGan)
 export const STEMS_MAP = {
@@ -481,29 +481,31 @@ export const calculateDailyScore = (userChart, dailyPillars) => {
     advice.push('Good day for creative expression.');
   }
 
-  // Simple Branch Clash check (Zi-Wu, etc.) - Simplified list
-  const clashes = {
-    Zi: 'Wu',
-    Wu: 'Zi',
-    Chou: 'Wei',
-    Wei: 'Chou',
-    Yin: 'Shen',
-    Shen: 'Yin',
-    Mao: 'You',
-    You: 'Mao',
-    Chen: 'Xu',
-    Xu: 'Chen',
-    Si: 'Hai',
-    Hai: 'Si',
-  };
+  // 流日地支与本命日支的关系。这里曾经另抄了一份罗马字的六冲表，既与
+  // constants/ganzhi.js 的那份重复，又只认冲、看不见合刑害 —— 改为直接走基础层。
+  const userBranch = userChart.pillars.day.charBranch;
+  const dayBranch = dailyPillars.charBranch;
+  const relations = detectBranchRelations([userBranch, dayBranch].filter(Boolean));
 
-  const userBranch = userChart.pillars.day.branch;
-  const dayBranch = dailyPillars.branch;
-
-  if (clashes[userBranch] === dayBranch) {
+  const branchEffects = [];
+  relations.clashes.forEach((c) => {
     score -= 20;
-    advice.push('Watch out for conflicts in personal life.');
-  }
+    branchEffects.push({ type: 'clash', cn: c.cn });
+    advice.push('Day branch clashes your day pillar — expect friction.');
+  });
+  relations.sixCombinations.forEach((c) => {
+    score += 10;
+    branchEffects.push({ type: 'sixCombination', cn: c.cn });
+    advice.push('Day branch combines with your day pillar.');
+  });
+  relations.punishments.forEach((p) => {
+    score -= 10;
+    branchEffects.push({ type: 'punishment', cn: p.cn });
+  });
+  relations.harms.forEach((h) => {
+    score -= 5;
+    branchEffects.push({ type: 'harm', cn: h.cn });
+  });
 
   // Normalize
   score = Math.max(0, Math.min(100, score));
@@ -512,5 +514,8 @@ export const calculateDailyScore = (userChart, dailyPillars) => {
     score,
     advice: advice.join(' '),
     element: dayElement,
+    // score 是按上面几条规则折算的粗略指标，真正可断的是这里的客观关系
+    branchRelations: branchEffects,
+    dayMasterRelation: relation,
   };
 };

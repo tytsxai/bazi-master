@@ -85,6 +85,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **The I Ching endpoint still served placeholder hexagram names.** Adding real names in the
+  Liu Yao work left the repository holding two versions of the same data: the Liu Yao module
+  knew 乾为天 while `GET /api/iching/hexagrams` answered `"Heaven over Heaven"` with a
+  templated `summary`. The names now live in `data/ichingHexagrams.js` as the single source
+  both read; each hexagram carries its Chinese name, King Wen number, and the old directional
+  phrasing preserved under `nameEn` for callers that were matching on it.
+- **Synastry compared only the _elements_ of the day pillars.** Its own comment admitted it —
+  "for now we'll do a basic element check". But element relations cannot express what matters
+  most in a compatibility reading: 子 and 丑 are "water generates earth" _and_ a six-combination;
+  子 and 午 are "water controls fire" _and_ a clash. The element view sees no difference.
+  Rewritten on the ganzhi foundation: day-master ten-gods in both directions (they are not
+  symmetric), the spouse palace's six-combination / triple / half / clash / punishment / harm,
+  cross-pillar relations labelled by which two pillars, and elemental complement computed from
+  hidden-stem weights rather than the coarse count-based percentages. `score` remains, but it is
+  now folded from those relations with the weights returned alongside it.
+- **The daily-fortune helper kept a second, romanised clash table.** It duplicated the one in
+  `constants/ganzhi.js`, and being clash-only it could not see combinations, punishments or
+  harms. It now goes through `detectBranchRelations`, and the response carries the objective
+  relations next to the score.
+- `docs/architecture.md` still listed `birthTime.service`, a file that had been deleted, and had
+  not been told about any of the new modules. Its service table, directory tree and
+  `llms.txt`'s feature list are back in sync with the code.
+- The OpenAPI spec had drifted from what the engine actually returns: `BaziCalculation` was
+  missing `analysis`, `chartTime` and `luckStart`; `Hexagram` was missing the real name and
+  sequence; synastry and calendar responses were described by a bare `score`.
+
 - **Zi Wei Dou Shu was placing every star incorrectly.** This was not a precision gap; the
   chart was wrong. 紫微 was located by `month branch + (lunar day − 1)`, a formula with no
   basis — the orthodox method derives the 五行局 from the 纳音 of the life-palace's

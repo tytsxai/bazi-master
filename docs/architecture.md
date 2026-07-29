@@ -49,14 +49,16 @@ bazi-master/
 │   ├── server.js            # 组装中间件链、挂路由、优雅停机、启动校验
 │   ├── bootstrap/           # asyncRoutes：给 Express 4 打异步错误传播的补丁
 │   ├── config/              # app（配置读取与校验）、logger（pino）、redis
-│   ├── routes/              # bazi / ziwei / tarot / iching / zodiac
-│   │                        # synastry / calendar / locations / ai / api
+│   ├── routes/              # bazi / ziwei / liuyao / liuren / qimen / fengshui
+│   │                        # tarot / iching / zodiac / synastry / calendar
+│   │                        # locations / ai / api
 │   ├── controllers/         # calendar / synastry / zodiac 三条路由的处理函数
 │   ├── services/            # 算法与业务逻辑，见下表
 │   ├── middleware/          # cors / docs / error / rateLimit / requestId
 │   │                        # security / urlLength / validation
-│   ├── constants/           # ganzhi / shensha / stems / ziwei / zodiac 静态表
-│   ├── data/                # 塔罗牌库、六十四卦
+│   ├── constants/           # ganzhi / shensha / stems / ziwei / liuyao
+│   │                        # liuren / qimen / bazhai / zodiac 静态表
+│   ├── data/                # 塔罗牌库、六十四卦（含真卦名，易经与六爻共用）
 │   ├── lib/concurrency.js   # AI 并发闸
 │   ├── utils/               # express / http / redact / timezone / validation
 │   ├── scripts/             # start.mjs（容器入口）、generate-openapi.js
@@ -71,25 +73,28 @@ bazi-master/
 
 ## services 的分工
 
-| 文件                   | 职责                                                         |
-| ---------------------- | ------------------------------------------------------------ |
-| `calculations.service` | 八字**排盘**：定排盘时刻、四柱、五行个数、十神、大运         |
-| `bazi.service`         | 八字**断命**：藏干加权、旺衰、用神、神煞、刑冲合会           |
-| `ganzhi.service`       | 干支关系判定层：纳音、藏干、长生、合冲刑害破会、旬空、五行局 |
-| `ziwei.service`        | 紫微斗数：农历换算、五行局、十二宫、安星、四化、大限流年     |
-| `tarot.service`        | 塔罗牌阵与抽牌                                               |
-| `iching.service`       | 六十四卦、起卦、变爻                                         |
-| `zodiac.service`       | 星座信息、运势、上升星座、配对                               |
-| `synastry.service`     | 两张八字盘的相性分析                                         |
-| `solarTime.service`    | 真太阳时校正（经度差 + 均时差）与地点表                      |
-| `birthTime.service`    | 出生信息 → 时间元数据，HTTP 路由与 CLI 共用同一份            |
-| `ai.service`           | AI 供应商适配、超时、流式空闲超时                            |
-| `prompts.service`      | 各类解读的提示词模板                                         |
-| `cache.service`        | 八字排盘缓存（进程内 + 可选 Redis 镜像）                     |
-| `health.service`       | 深度健康检查与结果快照缓存                                   |
-| `metrics.service`      | Prometheus 文本格式指标                                      |
-| `lifecycle.service`    | 优雅停机与排水状态                                           |
-| `apiSchema.service`    | OpenAPI 规格的唯一来源，`docs/openapi.json` 由它生成         |
+| 文件                   | 职责                                                           |
+| ---------------------- | -------------------------------------------------------------- |
+| `calculations.service` | 八字**排盘**：定排盘时刻、四柱、五行个数、十神、大运           |
+| `bazi.service`         | 八字**断命**：藏干加权、旺衰、用神、神煞、刑冲合会             |
+| `ganzhi.service`       | 干支关系判定层：纳音、藏干、长生、合冲刑害破会、旬空、五行局   |
+| `ziwei.service`        | 紫微斗数：农历换算、五行局、十二宫、安星、四化、大限流年       |
+| `tarot.service`        | 塔罗牌阵与抽牌                                                 |
+| `iching.service`       | 起卦与变爻（卦名数据在 `data/ichingHexagrams.js`，与六爻共用） |
+| `liuyao.service`       | 六爻纳甲：八宫推衍、装卦、六亲六神、伏神、动爻变卦             |
+| `liuren.service`       | 大六壬：月将、天地盘、四课、三传九宗门、十二天将               |
+| `qimen.service`        | 奇门遁甲：三元定局、地盘三奇六仪、值符值使、转盘排星门神       |
+| `fengshui.service`     | 八宅命卦与游年、择吉历注、姓名五格三才                         |
+| `zodiac.service`       | 星座信息、运势、上升星座、配对                                 |
+| `synastry.service`     | 合盘：日主十神、夫妻宫合冲刑害、交叉柱关系、五行互补           |
+| `solarTime.service`    | 真太阳时校正（经度差 + 均时差）与地点表                        |
+| `ai.service`           | AI 供应商适配、超时、流式空闲超时                              |
+| `prompts.service`      | 各类解读的提示词模板                                           |
+| `cache.service`        | 八字排盘缓存（进程内 + 可选 Redis 镜像）                       |
+| `health.service`       | 深度健康检查与结果快照缓存                                     |
+| `metrics.service`      | Prometheus 文本格式指标                                        |
+| `lifecycle.service`    | 优雅停机与排水状态                                             |
+| `apiSchema.service`    | OpenAPI 规格的唯一来源，`docs/openapi.json` 由它生成           |
 
 ## 数据流
 

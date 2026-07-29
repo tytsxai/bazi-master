@@ -3,7 +3,7 @@ import { analyzeSynastry } from '../controllers/synastry.controller.js';
 
 const router = express.Router();
 
-// Analyze Synastry - Public or Protected? Let's make it public for now or protected if user saving
+// 合盘分析。账号系统已从项目移除，所有业务接口一律公开，无需鉴权。
 // The plan implies just analyzing.
 router.post('/analyze', analyzeSynastry);
 

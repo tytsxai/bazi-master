@@ -39,7 +39,12 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
     title: 'BaZi Master API',
     version: '2.0.0',
     description: [
-      '八字 / 紫微斗数 / 塔罗 / 周易 / 星座 / 合盘的算法能力层。',
+      '中国传统术数的算法能力层：八字、紫微斗数、六爻纳甲、大六壬、奇门遁甲、八宅风水、',
+      '择吉、姓名五格，以及塔罗、周易起卦、星座、合盘。',
+      '',
+      '**结构归引擎，断语归调用方**：盘怎么排（三传、安星、排局、游年）有唯一正确答案，',
+      '引擎必须算准；盘怎么解（庙旺利陷、奇门格局）各家分歧大，引擎只把断语所需的原料给全。',
+      '有流派分歧的排盘口径（藏干权重、闰月归属、拆补定局、转盘排星）在各端点的 description 里注明。',
       '',
       '**无状态**：不存数据、不认用户、没有数据库。同样的入参永远得到同样的结果，',
       '可以随意水平扩容，也不需要迁移或备份。',
@@ -180,7 +185,27 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
               properties: { name: { type: 'string' }, strength: { type: 'number' } },
             },
           },
-          luckCycles: { type: 'array', items: { type: 'object' } },
+          luckCycles: {
+            type: 'array',
+            items: { type: 'object' },
+            description: '八步大运，每步带十神、纳音与逐年流年',
+          },
+          luckStart: {
+            type: 'object',
+            description: '起运还需几年几月几天，以及交运的公历日期',
+          },
+          analysis: {
+            type: 'object',
+            description:
+              '断命层，也是该拿去做判断的那一份：藏干加权五行、身强身弱、扶抑法用神喜忌、' +
+              '逐柱藏干与十神、神煞、四柱刑冲合会、旬空。与顶层 fiveElements 的个数统计不是一回事。',
+          },
+          chartTime: {
+            type: 'object',
+            description:
+              '实际用于排盘的时刻。真太阳时生效时 used 与 trueSolarTime.clockTime 会不同，' +
+              '差一个时辰即差一柱。',
+          },
           strength: { type: 'object' },
           timezoneOffsetMinutes: { type: 'integer', nullable: true },
           trueSolarTime: ref('TrueSolarTime'),
@@ -223,7 +248,9 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
       Hexagram: {
         type: 'object',
         properties: {
-          name: { type: 'string' },
+          name: { type: 'string', description: '中文卦名，如「水雷屯」', example: '乾为天' },
+          nameEn: { type: 'string', description: '上下卦方位描述，如 Heaven over Heaven' },
+          sequence: { type: 'integer', description: '《周易》卦序 1..64', example: 1 },
           number: { type: 'integer' },
           upperTrigram: { type: 'object' },
           lowerTrigram: { type: 'object' },
@@ -1052,7 +1079,32 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
               },
               compatibility: {
                 type: 'object',
-                properties: { score: { type: 'number' } },
+                description:
+                  '合盘结果。score 是把下列客观关系按 weights 折算出的粗略指标，' +
+                  '真正可断的是各项关系本身。',
+                properties: {
+                  score: { type: 'number', description: '0..100' },
+                  dayMasters: {
+                    type: 'object',
+                    description: '双方日主的五行生克与互看十神（两边不对称）',
+                  },
+                  spousePalace: {
+                    type: 'object',
+                    description: '夫妻宫（两人日支）之间的六合/三合/半合/六冲/相刑/相害',
+                  },
+                  crossPillars: {
+                    type: 'array',
+                    items: { type: 'object' },
+                    description: '四柱交叉的合与冲，标明是哪两柱',
+                  },
+                  elementComplement: {
+                    type: 'object',
+                    description: '五行互补。source 为 weighted 表示用的是藏干加权而非干支个数统计',
+                  },
+                  nayin: { type: 'object', description: '双方日柱纳音' },
+                  weights: { type: 'object', description: '计分权重口径，便于调用方自定' },
+                  insights: { type: 'array', items: { type: 'object' } },
+                },
               },
             },
           }),
@@ -1080,7 +1132,20 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
             properties: {
               date: { type: 'string' },
               dailyPillar: { type: 'object' },
-              fortune: { type: 'object' },
+              fortune: {
+                type: 'object',
+                description:
+                  'score 是按日主五行关系与地支冲合刑害折算的粗略指标；' +
+                  'branchRelations 给出流日地支与本命日支之间的客观关系，' +
+                  'dayMasterRelation 给出流日天干与日主的五行关系。',
+                properties: {
+                  score: { type: 'number' },
+                  advice: { type: 'string' },
+                  element: { type: 'string' },
+                  branchRelations: { type: 'array', items: { type: 'object' } },
+                  dayMasterRelation: { type: 'string' },
+                },
+              },
             },
           }),
           400: errorResponse('出生参数给了一部分但不完整，或日期非法'),

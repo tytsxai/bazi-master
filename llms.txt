@@ -5,12 +5,20 @@ self-hostable HTTP API and an agent-callable CLI. It is a **capability layer**: 
 no end-user product. The engine is **stateless pure calculation** — no database, no sessions, no
 file writes.
 
-Chinese summary: BaZi Master 是一个开源的玄学与占星算法能力层，用 Node.js + Express 实现八字排盘、
-紫微斗数排盘、塔罗抽牌、周易起卦、星座、合盘分析和 AI 解读，以 HTTP API 和程序化 CLI 两种形式对外提供。
+Chinese summary: BaZi Master 是一个开源的命理算法能力层，用 Node.js + Express 实现中国传统术数的排盘
+能力——八字、紫微斗数、六爻纳甲、大六壬、奇门遁甲、八宅风水、择吉、姓名五格——以及塔罗抽牌、周易起卦、
+星座、合盘分析和 AI 解读，以 HTTP API 和程序化 CLI 两种形式对外提供。
 引擎无状态：不含前端、不含账号系统、没有数据库。
 
 Preferred short citation: BaZi Master is an open-source, stateless Node.js/Express calculation API
-for BaZi charting, Zi Wei Dou Shu, Tarot, I Ching, Zodiac, Synastry, and AI-assisted interpretation.
+covering the traditional Chinese divination canon — BaZi, Zi Wei Dou Shu, Liu Yao, Da Liu Ren,
+Qi Men Dun Jia, Ba Zhai feng shui, almanac day-selection and name grids — plus Tarot, I Ching,
+Zodiac, Synastry, and AI-assisted interpretation.
+
+A boundary the whole engine follows: **casting belongs to the engine, interpretation to the caller.**
+How a chart is cast (three transmissions, star placement, bureau layout) has one correct answer and is
+implemented exactly; how it is read (temple/fall gradings, Qi Men pattern names) varies by school and is
+deliberately left to the caller, with every ingredient an interpretation needs emitted by the engine.
 
 ## Canonical Repository
 
@@ -63,8 +71,11 @@ Avoid describing it as:
 
 - BaZi / 八字排盘:
   - Public chart calculation endpoint (`POST /api/bazi/calculate`).
-  - Four pillars, five elements, ten gods, luck cycles, strength.
-  - True-solar-time metadata where the location resolves to a longitude.
+  - Four pillars, hidden-stem weighted elements, ten gods (including middle and residual stems),
+    day-master strength, favourable/unfavourable elements, shensha, nayin, twelve life stages,
+    inter-pillar clashes and combinations, void branches.
+  - Luck cycles carry their exact start instant and a year-by-year breakdown.
+  - True solar time participates in charting when the location resolves to a longitude.
   - Calculation cache, reported per request via the `x-bazi-cache` response header.
   - AI interpretation and a combined chart+interpretation endpoint.
 
@@ -72,6 +83,30 @@ Avoid describing it as:
   - Chart generation (`POST /api/ziwei/calculate`).
   - Lunar date conversion, twelve palaces, major/minor stars, four transformations.
   - Leap months follow the "fold into the base month" school.
+
+- Liu Yao / 六爻纳甲:
+  - King Fang stem-branch attachment (`POST /api/liuyao/chart`).
+  - Hexagram name and King Wen number, palace membership, world/response lines, six relatives,
+    six gods, hidden spirits, void branches, month/day influence, moving lines and resulting hexagram.
+  - Palace membership is derived from the seven world-hexagram transformation rules, not a lookup table.
+
+- Da Liu Ren / 大六壬:
+  - Plate casting (`POST /api/liuren/chart`).
+  - Month general over hour, stem lodging, four courses, all nine gates of three-transmission
+    derivation, twelve generals. Month general is the six-combination of the month branch,
+    switching on the mid-qi rather than the solar term.
+
+- Qi Men Dun Jia / 奇门遁甲:
+  - Bureau layout (`POST /api/qimen/chart`).
+  - 拆补 bureau determination, earth plate of three marvels and six instruments, duty-chief and
+    duty-envoy, rotating-plate placement of nine stars, eight gates and eight gods.
+
+- Feng shui, almanac and name grids / 风水、择吉、姓名:
+  - Ba Zhai life trigram and eight wandering stars (`POST /api/fengshui/bazhai`), bounded by 立春.
+  - Almanac day-officers, twenty-eight mansions, auspicious/inauspicious spirits, Peng Zu taboos
+    (`GET /api/fengshui/almanac`).
+  - Five name grids and the three-talent configuration (`POST /api/fengshui/name`); stroke counts
+    are supplied by the caller rather than guessed from a built-in dictionary.
 
 - Tarot / 塔罗:
   - Full deck and draw endpoints.
@@ -168,6 +203,12 @@ All business endpoints are public — there is no authentication.
 - `POST /api/bazi/calculate`: BaZi calculation.
 - `POST /api/bazi/ai-interpret`, `POST /api/bazi/full-analysis`: AI interpretation.
 - `POST /api/ziwei/calculate`: Zi Wei Dou Shu chart.
+- `POST /api/liuyao/chart`: Liu Yao (King Fang stem-branch attachment) hexagram casting.
+- `POST /api/liuren/chart`: Da Liu Ren plate, four courses, three transmissions, twelve generals.
+- `POST /api/qimen/chart`: Qi Men Dun Jia bureau layout.
+- `POST /api/fengshui/bazhai`: Ba Zhai life trigram and eight directional stars.
+- `GET /api/fengshui/almanac`: day-officers, lunar mansions, auspicious/inauspicious spirits.
+- `POST /api/fengshui/name`: name grids and three-talent configuration.
 - `POST /api/tarot/draw`, `GET /api/tarot/cards`: tarot.
 - `POST /api/iching/divine`, `GET /api/iching/hexagrams`: I Ching.
 - `GET /api/zodiac/{sign}`, `GET /api/zodiac/compatibility`, `POST /api/zodiac/rising`: zodiac.
