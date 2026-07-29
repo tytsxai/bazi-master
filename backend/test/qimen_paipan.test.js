@@ -45,6 +45,21 @@ describe('三元局数表', () => {
     assert.deepEqual(JIEQI_JU['大雪'].ju, [4, 7, 1]);
   });
 
+  it('阴遁局数与阳遁对称：同位节气两局相加恒为十', () => {
+    // 阳遁那半张表已与三元定局口诀逐条核对过（冬至惊蛰一七四、小寒二八五、
+    // 大寒春分三九六、立春八五二、雨水九六三、清明立夏四一七、谷雨小满五二八、
+    // 芒种六三九）。二至分顺逆，阴阳遁同位节气的局数互补为十 —— 这条规律成立，
+    // 就等于用已核对的阳遁半张表验证了未逐条核对的阴遁半张表。
+    for (let i = 0; i < 12; i += 1) {
+      const yangQi = JIEQI_ORDER[i];
+      const yinQi = JIEQI_ORDER[i + 12];
+      JIEQI_JU[yangQi].ju.forEach((yangJu, idx) => {
+        const yinJu = JIEQI_JU[yinQi].ju[idx];
+        assert.equal(yangJu + yinJu, 10, `${yangQi}(${yangJu}) 与 ${yinQi}(${yinJu}) 之和应为 10`);
+      });
+    }
+  });
+
   it('阳遁与阴遁的三元局数互为逆序对应', () => {
     // 阳遁诸气的三元多为「顺三」，阴遁多为「逆三」，此处校验步长恒为 ±3（模 9）
     Object.entries(JIEQI_JU).forEach(([name, entry]) => {

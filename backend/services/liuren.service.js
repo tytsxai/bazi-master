@@ -316,6 +316,23 @@ export const deriveThreeTransmissions = (courses, heavenPlate, dayStem, options 
     });
   }
 
+  // 四课去重看课体：八专为「四课备二」，别责为「四课缺一（只三课）」。
+  // 要按上下神成对去重 —— 只看上神会把「上神同而下神异」误判成缺课。
+  const distinctCourses = new Set(courses.map((c) => `${c.upper}/${c.lower}`));
+  const yang = isYangDay(dayStem);
+  const dayGanzhi = `${dayStem}${options.dayBranch || ''}`;
+
+  // 八专：日干支同位，四课备二。此门**不取遥克**，故必须排在遥克之前判定。
+  if (BAZHUAN_DAYS.includes(dayGanzhi) || distinctCourses.size === 2) {
+    // 阳日自干上神顺数三位，阴日自第四课上神逆数三位（含本位计一，故步长为 2）
+    const base = yang ? stemUpper(courses) : courses[3].upper;
+    const step = yang ? 2 : -2;
+    const initial = BRANCHES[normalize12(branchIndex(base) + step)];
+    return buildExplicit(initial, stemUpper(courses), stemUpper(courses), COURSE_TYPES.bazhuan, {
+      note: '八专：中末传皆取干上神；此门不取遥克',
+    });
+  }
+
   // 遥克法：四课无克，先取上神遥克日干（蒿矢），次取日干遥克上神（弹射）
   const stemElement = STEMS_MAP[dayStem]?.element;
   const shooters = courses.filter(
@@ -344,22 +361,8 @@ export const deriveThreeTransmissions = (courses, heavenPlate, dayStem, options 
     return buildByUpper(chosen, heavenPlate, remoteType);
   }
 
-  // 无克无遥克。四课不备用别责，干支同位用八专，四课俱全用昴星。
-  const distinctUppers = new Set(courses.map((c) => c.upper));
-  const dayGanzhi = `${dayStem}${options.dayBranch || ''}`;
-  const yang = isYangDay(dayStem);
-
-  if (BAZHUAN_DAYS.includes(dayGanzhi)) {
-    // 八专：阳日自干上神顺数三位，阴日自四课上神逆数三位（含本位计一）
-    const base = yang ? stemUpper(courses) : courses[3].upper;
-    const step = yang ? 2 : -2;
-    const initial = BRANCHES[normalize12(branchIndex(base) + step)];
-    return buildExplicit(initial, stemUpper(courses), stemUpper(courses), COURSE_TYPES.bazhuan, {
-      note: '八专：中末传皆取干上神',
-    });
-  }
-
-  if (distinctUppers.size < 4) {
+  // 无克亦无遥克：四课缺一（只三课）用别责，四课俱全用昴星。
+  if (distinctCourses.size === 3) {
     // 别责：阳日取日干之合的寄宫上神，阴日取日支三合的前一位
     let initial;
     if (yang) {

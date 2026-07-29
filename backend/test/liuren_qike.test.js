@@ -8,7 +8,7 @@ import {
   SELF_PUNISH_BRANCHES,
   YIMA_BY_GROUP,
 } from '../constants/ganzhi.js';
-import { MONTH_GENERALS, STEM_LODGING } from '../constants/liuren.js';
+import { MONTH_GENERALS, STEM_LODGING, BAZHUAN_DAYS } from '../constants/liuren.js';
 import {
   getHourBranch,
   resolveMonthGeneral,
@@ -250,6 +250,48 @@ describe('三传', () => {
     // 本家即所乘位时无途可涉，深度 0
     const same = buildHeavenPlate('子', '子');
     assert.equal(calculateShehaiDepth('子', same), 0);
+  });
+
+  it('八专排在遥克之前：八专日的课体不得落到遥克', () => {
+    // 八专课的成立条件是「日干支同位、上下无克」，此门**不取遥克**。
+    // 若把八专判定放在遥克之后，八专日会被蒿矢/弹射先截走，课体就判错了。
+    let seenBazhuan = 0;
+    for (let month = 1; month <= 12; month += 1) {
+      for (let day = 1; day <= 28; day += 1) {
+        for (let hour = 0; hour < 24; hour += 2) {
+          const chart = castLiurenChart({ year: 2024, month, day, hour });
+          if (!BAZHUAN_DAYS.includes(chart.dayGanzhi)) continue;
+          const key = chart.threeTransmissions.courseType.key;
+          assert.ok(
+            key !== 'haoshi' && key !== 'tanshe',
+            `八专日 ${chart.dayGanzhi} 不该走遥克，实得 ${chart.threeTransmissions.courseType.cn}`
+          );
+          if (key === 'bazhuan') {
+            seenBazhuan += 1;
+            const stemUpper = chart.fourCourses[0].upper;
+            assert.equal(chart.threeTransmissions.middle.branch, stemUpper, '中传应取干上神');
+            assert.equal(chart.threeTransmissions.last.branch, stemUpper, '末传应取干上神');
+          }
+        }
+      }
+    }
+    assert.ok(seenBazhuan > 0, '样本中应出现八专课');
+  });
+
+  it('别责按「四课缺一」判定，而非只看上神重复', () => {
+    // 四课缺一指的是上下神成对重复、实际只剩三课；
+    // 两课上神相同而下神不同时仍是四课，不该判为别责。
+    for (let month = 1; month <= 12; month += 1) {
+      for (let day = 1; day <= 28; day += 2) {
+        for (let hour = 0; hour < 24; hour += 3) {
+          const chart = castLiurenChart({ year: 2024, month, day, hour });
+          const tri = chart.threeTransmissions;
+          if (tri.courseType.key !== 'bieze') continue;
+          const distinct = new Set(chart.fourCourses.map((c) => `${c.upper}/${c.lower}`));
+          assert.equal(distinct.size, 3, '别责课应恰为四课缺一');
+        }
+      }
+    }
   });
 
   it('九宗门各课体都能在样本中出现，取法互不冲突', () => {

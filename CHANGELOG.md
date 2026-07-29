@@ -85,6 +85,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **Two Da Liu Ren three-transmission gates were ordered and gated wrongly**, found by
+  verifying the implementation against source material rather than by any failing test.
+  八专 (eight-specialists) is defined as "stem and branch share a position, no controlling
+  relation among the four courses, **and remote control is not consulted**" — it must be
+  decided _before_ 遥克, or an eight-specialists day gets intercepted by the remote-control
+  gate and the course type comes out wrong. Separately, 别责 requires "one course short, only
+  three remain", which is a duplicate _pair_ of upper and lower gods; testing only for a
+  repeated upper god misclassifies charts where two courses share an upper god but differ
+  below. Both are corrected and covered by tests.
+
 - **The I Ching endpoint still served placeholder hexagram names.** Adding real names in the
   Liu Yao work left the repository holding two versions of the same data: the Liu Yao module
   knew 乾为天 while `GET /api/iching/hexagrams` answered `"Heaven over Heaven"` with a
