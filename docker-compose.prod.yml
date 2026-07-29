@@ -32,8 +32,32 @@ services:
     container_name: bazi_redis
     restart: always
     logging: *default-logging
+    # 默认配置有两个会在生产上咬人的缺省值：
+    #   1. 没有 maxmemory —— session、rate-limit、bazi-cache、oauth-state 全在这里，
+    #      key 只受各自 TTL 约束，流量一大就一路涨到把宿主内存吃光。撞上 Docker 内存
+    #      限额时是整个容器被 OOM killer 干掉，所有人当场掉线。
+    #   2. 默认淘汰策略是 noeviction —— 内存到顶后写命令直接报错，表现为用户能读不能
+    #      登录，比丢几条缓存难查得多。
+    # 这里所有 key 都带 TTL，所以用 volatile-lru：先淘汰最久没用的、本来就会过期的 key。
+    # appendonly 打开是因为 session 存在 Redis 里：默认只有 RDB 快照（最长 1 小时一次），
+    # Redis 一重启就等于把所有登录态清空。everysec 的代价是最多丢 1 秒写入。
+    command:
+      - redis-server
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - volatile-lru
+      - --appendonly
+      - 'yes'
+      - --appendfsync
+      - everysec
     volumes:
       - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          # 必须高于 maxmemory：AOF 重写期间 Redis 会 fork，短时间内内存占用会高出一截。
+          memory: ${REDIS_MEMORY_LIMIT:-512m}
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -56,7 +80,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-bazi_master}?schema=public
+      # connection_limit 是显式写死的：Prisma 的默认值是 num_cpus * 2 + 1，而容器里读到
+      # 的是宿主机的核数，不是这个容器分到的份额。在一台 32 核的机器上，单实例就会去开
+      # 65 条连接，而 postgres 默认 max_connections 只有 100 —— 再叠上备份脚本和一个
+      # psql 会话就把连接打满，表现是 "too many clients already"，所有请求一起失败。
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-bazi_master}?schema=public&connection_limit=${DB_CONNECTION_LIMIT:-10}&pool_timeout=${DB_POOL_TIMEOUT:-10}
       REDIS_URL: redis://redis:6379
       FRONTEND_URL: ${FRONTEND_URL}
       BACKEND_BASE_URL: ${BACKEND_BASE_URL}
@@ -130,6 +158,8 @@ services:
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
       SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-}
+      HEALTH_CACHE_TTL_MS: ${HEALTH_CACHE_TTL_MS:-}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
       # Make sure to set these in .env or CI secrets
       ADMIN_EMAILS: ${ADMIN_EMAILS}
     ports:

@@ -1,5 +1,5 @@
 import express from 'express';
-import { checkDatabase, checkRedis } from '../services/health.service.js';
+import { checkRedis, getHealthSnapshot } from '../services/health.service.js';
 import { isShuttingDown } from '../services/lifecycle.service.js';
 import { handleLogin, handleRegister } from '../controllers/auth.controller.js';
 import { requireAuth, sessionStore } from '../middleware/auth.js';
@@ -35,8 +35,7 @@ router.get('/health', async (req, res) => {
     });
   }
 
-  const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
-  const ok = db.ok && (redis.ok || redis.status === 'disabled');
+  const { db, redis, ok } = await getHealthSnapshot();
 
   res.status(ok ? 200 : 503).json({
     service: SERVICE_NAME,
@@ -70,8 +69,7 @@ router.get('/ready', async (req, res) => {
     });
   }
 
-  const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
-  const ok = db.ok && (redis.ok || redis.status === 'disabled');
+  const { db, redis, ok } = await getHealthSnapshot();
 
   res.status(ok ? 200 : 503).json({
     service: SERVICE_NAME,

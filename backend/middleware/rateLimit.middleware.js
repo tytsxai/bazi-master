@@ -3,10 +3,15 @@ import { initRedis } from '../config/redis.js';
 
 const rateLimitStore = new Map();
 const DEFAULT_REDIS_PREFIX = 'rate-limit:';
+// Falling back is a real degradation, not a debug detail, so production must hear about
+// it — but one line per request would bury everything else in the log. Re-announce on a
+// fixed cadence instead, which also makes the alert re-fire while the outage continues.
+const FALLBACK_LOG_INTERVAL_MS = 60_000;
 let lastRateLimitCleanup = 0;
 let redisClient = null;
 let redisInitPromise = null;
-let warnedOnFallback = false;
+let lastFallbackAt = 0;
+let lastFallbackLogAt = 0;
 
 const logWarn = (...args) => {
   logger.warn(...args);
@@ -19,13 +24,25 @@ const resetRateLimitState = () => {
   lastRateLimitCleanup = 0;
   redisClient = null;
   redisInitPromise = null;
-  warnedOnFallback = false;
+  lastFallbackAt = 0;
+  lastFallbackLogAt = 0;
 };
 
-const warnOnFallback = () => {
-  if (warnedOnFallback) return;
-  if (process.env.NODE_ENV === 'production') return;
-  warnedOnFallback = true;
+// Without Redis the limiter counts per process, so an N-instance deployment silently
+// hands out N times the configured quota. This used to return early in production, which
+// meant the one environment where that matters was also the only one that never said so.
+const warnOnFallback = (now = Date.now()) => {
+  lastFallbackAt = now;
+  if (lastFallbackLogAt && now - lastFallbackLogAt < FALLBACK_LOG_INTERVAL_MS) return;
+  lastFallbackLogAt = now;
+  if (process.env.NODE_ENV === 'production') {
+    logger.error(
+      { degraded: 'rate-limit-store' },
+      '[rate-limit] Redis unavailable; falling back to the in-memory store. ' +
+        'The configured quota is now enforced per instance, not per deployment.'
+    );
+    return;
+  }
   logWarn('[rate-limit] Redis unavailable; using in-memory rate limit store.');
 };
 
@@ -196,9 +213,17 @@ const createRateLimitMiddleware = (config) => {
   };
 };
 
+// Surfaced on /metrics: a deployment that quietly lost its shared limiter looks completely
+// healthy from the outside until someone notices the quota is no longer being enforced.
+// Time-windowed rather than a latched boolean, so the signal clears on its own once Redis
+// comes back instead of staying red until the next restart.
+const isRateLimitDegraded = (now = Date.now()) =>
+  lastFallbackAt > 0 && now - lastFallbackAt < FALLBACK_LOG_INTERVAL_MS;
+
 export {
   rateLimitStore,
   resetRateLimitState,
+  isRateLimitDegraded,
   maybeCleanupRateLimitStore,
   getRateLimitKey,
   isLocalAddress,

@@ -11,7 +11,8 @@ import * as Sentry from '@sentry/node';
 
 // Import configurations
 // Health Check imports
-import { checkDatabase, checkRedis } from './services/health.service.js';
+import { getHealthSnapshot } from './services/health.service.js';
+import { createMetricsHandler } from './services/metrics.service.js';
 import { beginShutdown, isShuttingDown, resolveDrainMs } from './services/lifecycle.service.js';
 
 // Import configurations
@@ -124,7 +125,15 @@ app.use(validationMiddleware);
 import pinoHttp from 'pino-http';
 // Orchestrator and load-balancer probes hit these every few seconds. Logging them
 // produces thousands of lines a day that say nothing, and drowns real traffic.
-const HEALTH_PROBE_PATHS = new Set(['/live', '/health', '/api/health', '/api/ready']);
+// /metrics belongs here too: a scraper polls it as often as the probes, and its lines say
+// nothing that the metrics themselves do not already report.
+const HEALTH_PROBE_PATHS = new Set([
+  '/live',
+  '/health',
+  '/metrics',
+  '/api/health',
+  '/api/ready',
+]);
 
 app.use(
   pinoHttp({
@@ -191,8 +200,7 @@ app.get('/health', async (req, res) => {
     });
   }
 
-  const [db, redis] = await Promise.all([checkDatabase(), checkRedis()]);
-  const ok = db.ok && (redis.ok || redis.status === 'disabled');
+  const { db, redis, ok } = await getHealthSnapshot();
 
   if (!ok) {
     logger.warn({ checks: { db, redis } }, 'Health check failed');
@@ -206,6 +214,12 @@ app.get('/health', async (req, res) => {
     uptime: process.uptime(),
   });
 });
+
+// Prometheus scrape target. Registered alongside the probes and ahead of the rate limiter
+// for the same reason they are: a scraper polling on a fixed interval must not be able to
+// exhaust the quota (nor be throttled into gaps in the metrics). It reuses the cached
+// health snapshot, so scraping is cheap regardless of interval.
+app.get('/metrics', createMetricsHandler());
 
 // URL length validation
 app.use(urlLengthMiddleware);
