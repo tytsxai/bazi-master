@@ -23,9 +23,18 @@ It is meant to be forked, self-hosted, studied, and extended — not consumed as
 | Tech stack         | React 18, Vite, Tailwind CSS, Express 4, Node.js 20+, Prisma, PostgreSQL, Redis, Playwright, Vitest                                                                |
 | Local dependencies | Prisma schema targets PostgreSQL; `docker-compose.yml` provides local PostgreSQL + Redis                                                                           |
 | AI capability      | mock / OpenAI / Anthropic text interpretation; Soul Portrait image generation via OpenAI or a mock placeholder                                                     |
+| UI languages       | Five bundled locales — `en-US`, `zh-CN`, `zh-TW`, `ja`, `ko` (`frontend/src/i18n/locales`)                                                                         |
+| Dev entry point    | `./bazi`, a programmatic CLI for setup, local stack lifecycle, migrations, tests, and E2E verification — every command supports `--json`                           |
 | Main entry points  | Pages in `frontend/src/pages`, API routes in `backend/routes`, data model in `prisma/schema.prisma`                                                                |
 | Key limitation     | Output is for entertainment, cultural research, or product prototyping only — never medical, legal, financial, or life advice                                      |
-| License            | MIT                                                                                                                                                                |
+| License            | MIT — fork, modify, self-host, and use commercially; compliance and disclaimers are the deployer's responsibility                                                  |
+
+### What it is not
+
+- Not a hosted online fortune-telling service — the repository ships no public instance.
+- Not a standalone npm BaZi algorithm library; the calculation lives inside the app as a service.
+- Not a scientific endorsement of divination or astrology accuracy.
+- Not a turnkey compliance package for app stores, WeChat, payments, ads, or local regulations.
 
 ## Core features
 
@@ -44,13 +53,21 @@ It is meant to be forked, self-hosted, studied, and extended — not consumed as
   reset, self-service account deletion.
 - **History and favorites** — records for BaZi, Tarot, I Ching, and Zi Wei with client-side
   filtering, bulk operations, favorites, and snapshots.
+- **Internationalization** — react-i18next with five bundled locales (`en-US`, `zh-CN`, `zh-TW`,
+  `ja`, `ko`) and browser-language detection.
 - **Operations** — `/live`, `/health`, `/api/ready`, admin health check, Pino JSON logs,
   OpenAPI / Swagger UI, and WebSocket AI streaming at `/ws/ai`.
+- **Programmatic CLI** — `./bazi` wraps setup, local stack lifecycle, migrations, tests, and E2E
+  verification behind `--json` output and documented exit codes, so scripts and AI agents can drive it.
 
 ## Quick start
 
-Prerequisites: Node.js 20+, npm, and Docker (for local PostgreSQL / Redis). The repository does not
-auto-load `.env` files — inject environment variables via your shell, process manager, or platform.
+Prerequisites: Node.js 20+, npm, and Docker (for local PostgreSQL / Redis).
+
+About environment variables: the backend does not bundle dotenv — `node server.js` reads real
+environment variables only. When you start through `./bazi`, the CLI parses the repo-root `.env` and
+injects it into child processes (a real `process.env` value still wins). For manual starts and
+production, inject variables via your shell, process manager, or platform.
 
 ### Using the `./bazi` CLI (recommended)
 
@@ -144,6 +161,8 @@ Key variables:
 ## Testing
 
 ```bash
+./bazi test                            # fast set: lint + typecheck + unit + backend, on an isolated temp DB
+./bazi test --all                      # everything, including Playwright E2E
 npm -C backend test                    # backend tests (prepares a local test PostgreSQL if needed)
 npm -C frontend run test:unit:run      # frontend unit tests
 npm -C frontend test                   # Playwright E2E (requires browser deps)

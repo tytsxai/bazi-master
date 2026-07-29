@@ -8,6 +8,8 @@ English summary: **BaZi Master is an open-source full-stack divination web app s
 
 > 关键词 / Keywords: 八字排盘开源, BaZi chart open source, 紫微斗数排盘, Zi Wei Dou Shu chart, 塔罗抽牌 API, Tarot draw API, 周易起卦 API, I Ching divination API, 星座配对, astrology compatibility, 合盘分析 Synastry, React Vite Tailwind, Express Prisma PostgreSQL, AI fortune telling app starter, full-stack divination web app.
 
+**目录**：[项目定位](#项目定位--project-snapshot) · [核心功能](#核心功能--core-features) · [快速开始](#快速开始--quick-start) · [API 示例](#api-使用示例--usage-examples) · [适用场景](#适用场景--use-cases) · [技术栈](#技术栈--tech-stack) · [环境变量](#环境变量--configuration) · [FAQ](#faq--常见问题) · [项目结构](#项目结构--repository-structure) · [测试](#测试--testing) · [生产部署](#部署与生产注意事项--production-notes) · [限制](#限制与免责声明--limitations)
+
 ## 项目定位 / Project Snapshot
 
 | 维度         | 说明                                                                                                |
@@ -18,8 +20,18 @@ English summary: **BaZi Master is an open-source full-stack divination web app s
 | 技术栈       | React 18, Vite, Tailwind CSS, Express 4, Node.js 20+, Prisma, PostgreSQL, Redis, Playwright, Vitest |
 | 默认本地依赖 | 当前 Prisma schema 使用 PostgreSQL；`docker-compose.yml` 提供本地 PostgreSQL + Redis                |
 | AI 能力      | 支持 mock / OpenAI / Anthropic 文本解读；Soul Portrait 图片生成当前通过 OpenAI 或 mock 占位         |
+| 多语言       | 前端内置 5 种界面语言：`en-US`、`zh-CN`、`zh-TW`、`ja`、`ko`（`frontend/src/i18n/locales`）          |
+| 开发入口     | 仓库根 `./bazi` 程序化 CLI：环境准备、起停本地栈、迁移、测试、端到端校验，全部支持 `--json`         |
 | 主要入口     | 前端页面在 `frontend/src/pages`；API 路由在 `backend/routes`；数据模型在 `prisma/schema.prisma`     |
+| 许可证       | MIT，可自由 fork、修改、自部署和商用（需自行承担合规与免责声明）                                    |
 | 重要限制     | 输出仅适合娱乐、文化研究或产品原型验证；不要当作医疗、法律、投资、人生决策建议                      |
+
+### 这不是什么 / What it is not
+
+- 不是托管的在线算命服务，仓库不提供任何线上实例。
+- 不是一个纯 npm 八字算法库；八字计算是应用内部的一个 service，不是独立发布的包。
+- 不是对命理、占星准确性的科学背书。
+- 不是开箱即用的商业合规方案（应用商店、微信、支付、广告和各地法规需自行处理）。
 
 ## 核心功能 / Core Features
 
@@ -32,11 +44,15 @@ English summary: **BaZi Master is an open-source full-stack divination web app s
 - **合盘 Synastry**：提供两组出生信息的基础合盘分析。
 - **用户系统 User flows**：邮箱注册/登录、会话 token、cookie、Google / WeChat OAuth、密码重置、自助删除账号。
 - **记录与收藏 History / Favorites**：八字、塔罗、周易、紫微历史记录，客户端搜索过滤、批量操作、收藏与快照。
+- **多语言 i18n**：前端基于 react-i18next 内置 `en-US` / `zh-CN` / `zh-TW` / `ja` / `ko` 五套文案，并按浏览器语言自动匹配。
 - **运维基础 Operations**：`/live`、`/health`、`/api/ready`、管理员健康检查、Pino JSON 日志、OpenAPI / Swagger UI、WebSocket AI 流式输出 `/ws/ai`。
+- **程序化 CLI**：`./bazi` 把环境准备、本地栈生命周期、数据库迁移、测试和端到端校验收敛成一套命令，全部支持 `--json` 和约定退出码，方便脚本与 AI Agent 调用。
 
 ## 快速开始 / Quick Start
 
-前置要求：Node.js 20+、npm、Docker（用于本地 PostgreSQL / Redis）。当前仓库不自动加载 `.env` 文件；如需自定义环境变量，请通过 shell、进程管理器或部署平台注入。
+前置要求：Node.js 20+、npm、Docker（用于本地 PostgreSQL / Redis）。
+
+关于环境变量：后端进程本身不引入 dotenv，`node server.js` 只读取真实环境变量。用 `./bazi` 启动时，CLI 会读取仓库根的 `.env` 并注入子进程（真实 `process.env` 优先级更高）。手动启动或生产部署时，需要由 shell、进程管理器或部署平台注入。
 
 ### 用 `./bazi`（推荐）
 
@@ -181,6 +197,18 @@ curl -X POST http://127.0.0.1:4000/api/tarot/draw \
 
 八字计算、塔罗抽牌、周易起卦、星座信息、上升星座、星座配对、合盘分析和位置搜索是公开接口；AI 解读、历史记录、收藏、紫微记录、灵魂画像、用户设置和管理端接口需要登录或管理员权限。完整清单见 [docs/api.md](docs/api.md)。
 
+### 支持哪些界面语言？
+
+前端内置 `en-US`、`zh-CN`、`zh-TW`、`ja`、`ko` 五套文案，位于 `frontend/src/i18n/locales`，默认按浏览器语言匹配，`zh-TW` 会依次回退到 `zh-CN` 和 `en-US`。新增语言只需添加 locale JSON 并在 `frontend/src/i18n/index.js` 注册。
+
+### 许可证是什么？可以商用吗？
+
+MIT 许可证，允许 fork、修改、闭源分发和商业使用。但命理/占星内容的合规声明、免责声明、数据保护和平台审核责任由部署者自行承担，详见[限制与免责声明](#限制与免责声明--limitations)。
+
+### 为什么要用 `./bazi` 而不是直接 npm script？
+
+`./bazi` 会记录本地栈的进程状态，手动 `node server.js` 起的进程它管不到、之后也停不掉。CLI 还负责生成 `.env`、检查端口/数据库/Prisma Client 就绪状态，并在失败时给出可直接执行的修复命令。全部命令见 `./bazi help --json`。
+
 ## 项目结构 / Repository Structure
 
 ```text
@@ -193,10 +221,13 @@ bazi-master/
 ├── frontend/                # React + Vite web application
 │   ├── src/pages/           # Home, Bazi, Tarot, Iching, Zodiac, Ziwei, Profile
 │   ├── src/components/      # feature components and shared UI
+│   ├── src/i18n/locales/    # en-US, zh-CN, zh-TW, ja, ko
 │   └── tests/               # Playwright E2E tests
 ├── prisma/                  # Prisma schema and migrations
+├── tools/cli/               # ./bazi programmatic CLI (setup/doctor/stack/db/test/verify)
 ├── docs/                    # API, architecture, development, production docs
 ├── docker/                  # PostgreSQL init scripts
+├── bazi                     # CLI entry point
 ├── docker-compose.yml       # local PostgreSQL + Redis
 ├── llms.txt                 # AI-search friendly project summary
 └── PRODUCTION.md            # production deployment notes
@@ -205,6 +236,12 @@ bazi-master/
 ## 测试 / Testing
 
 ```bash
+# 用 CLI 跑快集合（lint + typecheck + unit + backend，隔离临时库，不碰开发库）
+./bazi test
+
+# 包含 Playwright E2E 在内全部跑一遍
+./bazi test --all
+
 # 后端测试；脚本会在未提供 DATABASE_URL 时准备本地测试 PostgreSQL
 npm -C backend test
 
@@ -241,12 +278,17 @@ npm -C frontend run analyze
 
 ## 文档 / Documentation
 
-- [docs/api.md](docs/api.md): HTTP API overview
+- [docs/api.md](docs/api.md): HTTP API overview（全部路由、鉴权要求、请求/响应字段）
 - [docs/architecture.md](docs/architecture.md): system architecture and module map
 - [docs/development.md](docs/development.md): local development guide
 - [docs/faq.md](docs/faq.md): project FAQ for developers and AI search engines
+- [docs/backend-reliability.md](docs/backend-reliability.md): 后端可靠性、超时、重试与降级策略
 - [docs/production-ready.md](docs/production-ready.md): production readiness checklist
+- [docs/production-runbook.md](docs/production-runbook.md): 上线、排障与回滚 runbook
 - [docs/monitoring-guide.md](docs/monitoring-guide.md): monitoring and observability notes
+- [docs/performance-audit.md](docs/performance-audit.md): 前后端性能实测与优化记录
+- [PRODUCTION.md](PRODUCTION.md): 生产部署总览
+- [CHANGELOG.md](CHANGELOG.md): 版本变更记录
 - [llms.txt](llms.txt): structured summary for AI search engines and coding agents
 
 ## GitHub Topics 建议
