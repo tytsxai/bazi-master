@@ -8,15 +8,36 @@ const router = express.Router();
 const fail = (res, error) => res.status(400).json({ error });
 
 router.post('/bazhai', (req, res) => {
-  const { birthYear, birthMonth, birthDay, gender } = req.body || {};
+  const { birthYear, birthMonth, birthDay, birthHour, birthMinute, gender } = req.body || {};
   const year = Number(birthYear);
   if (!Number.isInteger(year) || year < 1 || year > 9999) {
     return fail(res, 'birthYear is required.');
   }
   if (!gender) return fail(res, 'gender is required.');
+  if (birthHour !== undefined && birthHour !== null) {
+    const hour = Number(birthHour);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+      return fail(res, 'birthHour must be an integer between 0 and 23.');
+    }
+  }
+  if (birthMinute !== undefined && birthMinute !== null) {
+    const minute = Number(birthMinute);
+    if (!Number.isInteger(minute) || minute < 0 || minute > 59) {
+      return fail(res, 'birthMinute must be an integer between 0 and 59.');
+    }
+  }
 
   try {
-    const chart = buildBazhaiChart({ birthYear: year, birthMonth, birthDay, gender });
+    // 立春当天要靠时刻定年，给了 birthHour 命卦才是确定的；
+    // 不给时只能按当日零点算，响应里的 lifeTrigram.precision 会标成 day
+    const chart = buildBazhaiChart({
+      birthYear: year,
+      birthMonth,
+      birthDay,
+      birthHour,
+      birthMinute,
+      gender,
+    });
     if (!chart) return fail(res, 'Unable to resolve life trigram.');
     return res.json(chart);
   } catch (error) {

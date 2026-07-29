@@ -775,7 +775,9 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
         summary: '八宅命卦与八方吉凶',
         description:
           '由出生年与性别定本命卦（男 11 减、女加四，得五者男寄坤女寄艮），' +
-          '再以变爻法排八方游年星。给了月日则以**立春**为界定年，不是元旦。',
+          '再以变爻法排八方游年星。给了月日则以**立春**为界定年，不是元旦；' +
+          '交节精确到分，故立春当天出生的要一并给出 birthHour，' +
+          '否则只能按当日零点算，响应里 lifeTrigram.precision 会标成 day。',
         requestBody: {
           required: true,
           content: {
@@ -787,6 +789,13 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
                   birthYear: { type: 'integer' },
                   birthMonth: { type: 'integer', minimum: 1, maximum: 12 },
                   birthDay: { type: 'integer', minimum: 1, maximum: 31 },
+                  birthHour: {
+                    type: 'integer',
+                    minimum: 0,
+                    maximum: 23,
+                    description: '立春当天定年靠它。不给则按当日零点算。',
+                  },
+                  birthMinute: { type: 'integer', minimum: 0, maximum: 59 },
                   gender: { type: 'string', enum: ['male', 'female'] },
                 },
               },
@@ -797,7 +806,11 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
           200: json({
             type: 'object',
             properties: {
-              lifeTrigram: { type: 'object', description: '本命卦、卦数、方位、东西四命' },
+              lifeTrigram: {
+                type: 'object',
+                description:
+                  '本命卦、卦数、方位、东西四命，以及 precision（year/day/minute）与该年立春时刻',
+              },
               younian: { type: 'array', items: { type: 'object' }, description: '八方游年星' },
               auspiciousDirections: { type: 'array', items: { type: 'string' } },
               inauspiciousDirections: { type: 'array', items: { type: 'string' } },
