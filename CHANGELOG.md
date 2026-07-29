@@ -6,29 +6,47 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-### Removed
+### Added
 
-- **Every artifact that documented or operated the deleted storage layer.** Removing the
-  database left a trail of files that still described a system that no longer exists —
-  the most expensive kind of documentation, because it reads as authoritative. Deleted:
-  - `scripts/backup-db.sh`, `restore-db.sh`, `cron-backup.sh`, `install-cron.sh` and
-    `failure-simulation.sh` — all of them drove `pg_dump`/`psql` against a database that
-    is gone.
-  - `docker/postgres-init/`.
-  - `docs/production-ready.md`, `docs/production-runbook.md`,
-    `docs/backend-reliability.md` and `docs/monitoring-guide.md` — roughly a thousand
-    lines whose substance was PostgreSQL backup, restore, migration, connection-pool
-    sizing and capacity planning. What survived (health-probe wiring, drain timing,
-    `/metrics` alerting) is folded into `PRODUCTION.md`.
-  - `./bazi db` and `./bazi verify` command trees, plus `core/prisma.mjs` and
-    `helpers/local-pg.mjs`. `bazi doctor` no longer checks for a Prisma Client or a
-    reachable PostgreSQL, `bazi setup` no longer generates a client, `bazi stack` manages
-    a single `api` component (so `--only` is gone), and `bazi test` drops `--use-dev-db`
-    — there is no dev database to protect any more.
-  - `OAUTH_FETCH_TIMEOUT_MS` in `backend/utils/http.js`, exported but imported nowhere
-    since the OAuth service was deleted.
+- **Six new divination engines, and the shared 干支 foundation they sit on.** The engine
+  previously covered BaZi and Zi Wei only; the traditional Chinese canon is now largely
+  complete. A new `constants/ganzhi.js` + `services/ganzhi.service.js` layer holds what
+  all of them share — 纳音 (sexagenary sound-elements), 藏干 (hidden stems with
+  primary/middle/residual weights), 十二长生, the full set of stem/branch combinations,
+  clashes, punishments, harms and destructions, 五行局 and 旬空. The 60 纳音 entries are
+  verified entry-by-entry against `lunar-javascript`'s independent table, so a
+  transcription slip cannot survive the test suite.
+  - **六爻纳甲 (Liu Yao)** — King Fang stem-branch attachment: hexagram name, palace,
+    world/response lines, 六亲, 六神, hidden spirits, 旬空, month/day influence on each
+    line, moving lines and the resulting hexagram. Palace membership is _derived_ from the
+    seven world-hexagram transformation rules rather than hard-coded as a 64-row table.
+  - **大六壬 (Da Liu Ren)** — month-general-over-hour plate construction, stem lodging,
+    the four courses, all nine gates of 三传 derivation, and the twelve generals.
+  - **奇门遁甲 (Qi Men Dun Jia)** — 拆补法 bureau determination, the earth plate of three
+    marvels and six instruments, 值符/值使, and 转盘法 rotation of the nine stars, eight
+    gates and eight gods.
+  - **八宅 (Ba Zhai)**, **择吉 (almanac)** and **姓名五格 (name grids)**.
+- Endpoints: `POST /api/liuyao/chart`, `POST /api/liuren/chart`, `POST /api/qimen/chart`,
+  `POST /api/fengshui/bazhai`, `GET /api/fengshui/almanac`, `POST /api/fengshui/name`.
+  All are in the OpenAPI contract with their school-of-thought caveats spelled out.
+- CLI: `calc liuyao|liuren|qimen|bazhai|almanac|name`, each with `--dry-run` and the
+  established exit-code contract.
+- BaZi gained an `analysis` layer — hidden-stem-weighted elements, day-master strength,
+  favourable/unfavourable elements by the 扶抑 method, 神煞, 纳音, 十二长生, inter-pillar
+  relations and 旬空 — plus exact luck-cycle start timing and per-year 流年.
 
 ### Changed
+
+- **Established the boundary the whole capability layer follows: structure belongs to the
+  engine, interpretation belongs to the caller.** How a chart is _cast_ — 三传, star
+  placement, bureau layout, 游年 — has one correct answer and must be exact. How a chart is
+  _read_ — 庙旺利陷, Qi Men pattern names, the relative weight of 神煞 — differs sharply
+  between schools, and embedding one school's take would hand callers a judgement with no
+  traceable provenance. The engine therefore emits every ingredient an interpretation
+  needs and stops there. This reframes the long-standing "庙旺 pending a source text" item:
+  it is a deliberate boundary, not an outstanding gap. Where a _casting_ rule genuinely
+  varies (hidden-stem weights, leap-month handling, 拆补法, 转盘法), the choice is annotated
+  in place so switching schools touches one location.
 
 - **The CLI safety boundary now guards `.env` instead of the database.** `exit 7` was
   attached to `db reset` / `db restore`; with those gone the contract would have become
@@ -51,7 +69,57 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   `docs/api.md` documented 60-plus endpoints, more than half of which (auth, records,
   favorites, user settings, media, admin) no longer exist.
 
+- `./bazi stack` manages `db` and `api` only; the `web` component and its vite process
+  management are gone. `./bazi setup` drops `--with-frontend`, `./bazi doctor` drops the
+  `deps:frontend` / `port:frontend` / `e2e:browsers` checks, and `./bazi test` narrows to
+  `cli` / `lint` / `backend` — with `--all` removed, since it no longer selects anything
+  the default run does not already cover.
+- `./bazi verify` discovers `backend/scripts/verify-*.mjs` only.
+- CI drops the frontend install/unit/E2E steps and gains the CLI contract tests, which
+  previously ran nowhere.
+- `FRONTEND_URL`, `WECHAT_FRONTEND_URL` and `CORS_ALLOWED_ORIGINS` are **kept** and keep
+  their behaviour — they are the OAuth callback target, the CORS allow-list, and the
+  origin used in outbound email links. Their meaning is now "the origin of the client
+  application calling this API" rather than "the UI we ship"; documentation reworded
+  accordingly.
+
 ### Fixed
+
+- **Zi Wei Dou Shu was placing every star incorrectly.** This was not a precision gap; the
+  chart was wrong. 紫微 was located by `month branch + (lunar day − 1)`, a formula with no
+  basis — the orthodox method derives the 五行局 from the 纳音 of the life-palace's
+  stem-branch and positions 紫微 from the bureau number. With the anchor star wrong, all
+  fourteen majors followed. Also corrected: 天府 mirrors 紫微 across the 寅–申 axis rather
+  than sitting at `+6`; the 紫微 group runs _counter_-clockwise (天机 −1, 太阳 −3, 武曲 −4,
+  天同 −5, 廉贞 −8); 破军 is `天府 + 10`, not `+7`; and the eight auxiliary stars follow four
+  _different_ rules (昌曲 by hour branch, 辅弼 by lunar month, 魁钺 by year stem) where the
+  old code applied a single shared offset. Added 五行局, the six malefics, 大限, 小限 and 流年.
+- **True solar time was computed and then ignored.** `trueSolarTime.applied: true` meant
+  "the correction was calculated", not "this chart used it" — the pillars were still built
+  from wall-clock time. Documentation said as much, which made it a known-but-unfixed
+  defect rather than a surprise. The correction now feeds the chart; `chartTime.used`
+  reports the instant actually used and `chartTime.trueSolarTime.clockTime` preserves the
+  original. In western China the shift exceeds two hours, which moves the hour pillar.
+- **The BaZi cache key did not cover every input to the chart.** Once true solar time
+  participates, birthplace, minute and timezone are chart inputs; without them in the key,
+  two people born at the same clock time in different cities collide on one cached chart.
+  The key now appends them, and `SKILL.md` — which had predicted exactly this failure —
+  documents the new contract.
+- **The sixty-four hexagrams had no real names.** `data/ichingHexagrams.js` generated
+  `name: "Heaven over Fire"` and a template `summary` for each of the 64 combinations.
+  Chinese names and King Wen sequence numbers are now present, verified by an automated
+  check: every non-doubled hexagram's name begins with its upper and lower trigram images
+  (坎 over 震 = 水雷屯), which catches any mis-pairing without manual review.
+- **`HEAD` could not run `npm test` from a clean checkout.** The earlier
+  front-end/account-system removal committed the code deletions but not `backend/package.json`:
+  its `test` script still pointed at the deleted `scripts/run-tests-with-db.mjs`, and
+  `@prisma/client`, `cookie-parser`, `nodemailer` and `ws` were still listed as
+  dependencies. A local run masked this because the old packages were still installed in
+  `node_modules`; a fresh worktree surfaced it immediately. CI would have failed on its
+  first step.
+- CLI output claimed "the correction is advisory, the pillars above use wall-clock time"
+  long after that stopped being true. Stale output is worse than no output, because it
+  reads as authoritative.
 
 - `scripts/verify-deployment.sh` had three defects that made it structurally incapable of
   passing, on a healthy deployment: its log helpers wrote to stdout, so every
@@ -66,7 +134,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   `checks.db.ok`, and no longer reports an unconfigured Redis as "connected and
   operational". Six checks, all passing against a live engine.
 
-### Removed (earlier in this cycle)
+### Removed
+
+- **Every artifact that documented or operated the deleted storage layer.** Removing the
+  database left a trail of files that still described a system that no longer exists —
+  the most expensive kind of documentation, because it reads as authoritative. Deleted:
+  - `scripts/backup-db.sh`, `restore-db.sh`, `cron-backup.sh`, `install-cron.sh` and
+    `failure-simulation.sh` — all of them drove `pg_dump`/`psql` against a database that
+    is gone.
+  - `docker/postgres-init/`.
+  - `docs/production-ready.md`, `docs/production-runbook.md`,
+    `docs/backend-reliability.md` and `docs/monitoring-guide.md` — roughly a thousand
+    lines whose substance was PostgreSQL backup, restore, migration, connection-pool
+    sizing and capacity planning. What survived (health-probe wiring, drain timing,
+    `/metrics` alerting) is folded into `PRODUCTION.md`.
+  - `./bazi db` and `./bazi verify` command trees, plus `core/prisma.mjs` and
+    `helpers/local-pg.mjs`. `bazi doctor` no longer checks for a Prisma Client or a
+    reachable PostgreSQL, `bazi setup` no longer generates a client, `bazi stack` manages
+    a single `api` component (so `--only` is gone), and `bazi test` drops `--use-dev-db`
+    — there is no dev database to protect any more.
+  - `OAUTH_FETCH_TIMEOUT_MS` in `backend/utils/http.js`, exported but imported nowhere
+    since the OAuth service was deleted.
+
+> earlier in this cycle
 
 - **BREAKING — the bundled React frontend is gone.** The project is a professional
   calculation engine, delivered as a documented HTTP API for applications and AI agents;
@@ -83,22 +173,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   still bounds the process as a whole, but nothing now stops one client from holding
   every slot — configure `limit_conn` at your own edge if that matters to you.
 - `docs/performance-audit.md`, which measured frontend bundles and Playwright runs.
-
-### Changed
-
-- `./bazi stack` manages `db` and `api` only; the `web` component and its vite process
-  management are gone. `./bazi setup` drops `--with-frontend`, `./bazi doctor` drops the
-  `deps:frontend` / `port:frontend` / `e2e:browsers` checks, and `./bazi test` narrows to
-  `cli` / `lint` / `backend` — with `--all` removed, since it no longer selects anything
-  the default run does not already cover.
-- `./bazi verify` discovers `backend/scripts/verify-*.mjs` only.
-- CI drops the frontend install/unit/E2E steps and gains the CLI contract tests, which
-  previously ran nowhere.
-- `FRONTEND_URL`, `WECHAT_FRONTEND_URL` and `CORS_ALLOWED_ORIGINS` are **kept** and keep
-  their behaviour — they are the OAuth callback target, the CORS allow-list, and the
-  origin used in outbound email links. Their meaning is now "the origin of the client
-  application calling this API" rather than "the UI we ship"; documentation reworded
-  accordingly.
 
 ## [0.2.0] - 2026-07-28
 

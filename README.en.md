@@ -3,8 +3,10 @@
 [![Release](https://img.shields.io/github/v/release/tytsxai/bazi-master)](https://github.com/tytsxai/bazi-master/releases) · [简体中文 README](README.md) · [llms.txt](llms.txt) · [API Docs](docs/api.md) · [Architecture](docs/architecture.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/tytsxai/bazi-master/issues)
 
 **BaZi Master is an open-source, self-hostable calculation engine for Chinese metaphysics and
-astrology**, exposed as a documented HTTP API and an agent-callable CLI. It implements BaZi charting
-(八字排盘), Zi Wei Dou Shu charting (紫微斗数), Tarot draws, I Ching divination (周易起卦),
+astrology**, exposed as a documented HTTP API and an agent-callable CLI. It covers the traditional
+Chinese canon — BaZi (八字排盘), Zi Wei Dou Shu (紫微斗数), Liu Yao stem-branch attachment
+(六爻纳甲), Da Liu Ren (大六壬), Qi Men Dun Jia (奇门遁甲), Ba Zhai feng shui (八宅), almanac
+day-selection (择吉) and name grids (姓名五格) — plus Tarot draws, I Ching divination (周易起卦),
 Zodiac / Ascendant calculations, Synastry analysis (合盘), and AI-assisted interpretation.
 
 It is a **capability layer**, not a web app: no UI, no accounts, no end-user product. The engine is
@@ -53,8 +55,25 @@ client you build, or wire it into an AI agent as a tool.
   stars, auspicious/inauspicious stars, four transformations, decade and annual periods. Star
   placement follows the orthodox chain: bureau from the life-palace nayin → Zi Wei → Tian Fu →
   the rest. Leap months follow the "fold into the base month" school.
+- **Liu Yao (六爻纳甲)** — King Fang stem-branch attachment: palace membership, world/response
+  lines, stem-branch pairs, six relatives, six gods, hidden spirits, void branches, month/day
+  influence on each line, moving lines and the resulting hexagram. Palace membership is derived
+  from the seven world-hexagram transformation rules, not a hard-coded 64-row table.
+- **Da Liu Ren (大六壬)** — month general over hour to build the heaven/earth plates, stem
+  lodging, the four courses, all nine gates of three-transmission derivation, twelve generals.
+  The month general is the six-combination of the month branch, switching on the mid-qi.
+- **Qi Men Dun Jia (奇门遁甲)** — bureau by the 拆补 (chai-bu) method, earth plate of three marvels and
+  six instruments, duty-chief and duty-envoy, rotating-plate placement of the nine stars,
+  eight gates and eight gods.
+- **Ba Zhai feng shui (八宅)** — life trigram (bounded by 立春) and the eight directional
+  wandering stars, derived by line transformation rather than table lookup.
+- **Almanac (择吉)** — the twelve day-officers, the twenty-eight mansions and their luck,
+  auspicious/inauspicious spirits, Peng Zu taboos.
+- **Name grids (姓名五格)** — heaven/human/earth/outer/total grids and the three-talent
+  configuration. Stroke counts are supplied by the caller.
 - **Tarot** — full deck, SingleCard / ThreeCard / CelticCross spreads.
-- **I Ching** — all 64 hexagrams, number-based (deterministic) and time-based divination.
+- **I Ching** — all 64 hexagrams with their Chinese names and King Wen numbers, number-based
+  (deterministic) and time-based divination.
 - **Zodiac** — sign profiles, horoscopes, ascendant calculation, compatibility.
 - **Synastry** — chart-pair analysis for two sets of birth data.
 - **AI interpretation** — for BaZi, Tarot, and I Ching, via mock / OpenAI / Anthropic, with a
@@ -63,6 +82,20 @@ client you build, or wire it into an AI agent as a tool.
   OpenAPI / Swagger UI, graceful shutdown with a drain window.
 - **Programmatic CLI** — `./bazi` wraps both the algorithms and repo operations; every command
   supports `--json` and a documented exit-code contract, which makes it directly agent-callable.
+
+### One boundary running through every capability: casting belongs to the engine, interpretation to the caller
+
+How a chart is _cast_ — three transmissions, star placement, bureau layout, wandering stars —
+has exactly one correct answer, and the engine must get it right. How a chart is _read_ —
+Zi Wei's temple/fall gradings, Qi Men pattern names, the relative weight of a given shensha —
+varies sharply between schools; embedding one school's take would hand callers a judgement
+with no traceable provenance.
+
+So the engine emits every ingredient an interpretation needs (each palace's star, gate, god and
+stem; each line's relatives and gods; each pillar's hidden stems and ten gods) and stops there.
+Where a _casting_ rule genuinely varies (hidden-stem weights, leap-month handling, the chai-bu
+bureau method, rotating-plate placement), the choice is annotated in place, so switching schools
+touches one location.
 
 ## Quick start
 

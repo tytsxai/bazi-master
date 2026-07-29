@@ -2,13 +2,13 @@
 
 [![Release](https://img.shields.io/github/v/release/tytsxai/bazi-master)](https://github.com/tytsxai/bazi-master/releases) · [English README](README.en.md) · [llms.txt](llms.txt) · [API Docs](docs/api.md) · [Architecture](docs/architecture.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/tytsxai/bazi-master/issues)
 
-BaZi Master 是一个开源的玄学计算引擎，把八字排盘（BaZi chart）、紫微斗数排盘（Zi Wei Dou Shu）、塔罗抽牌（Tarot draw）、周易起卦（I Ching divination）、星座与上升星座（Zodiac / Ascendant）、合盘分析（Synastry）和 AI 解读，收敛成一套文档化的 HTTP API 和一个面向 Agent 的程序化 CLI。
+BaZi Master 是一个开源的命理计算引擎，把中国传统术数的排盘能力——八字（BaZi）、紫微斗数（Zi Wei Dou Shu）、六爻纳甲（Liu Yao）、大六壬（Da Liu Ren）、奇门遁甲（Qi Men Dun Jia）、八宅风水（Ba Zhai）、择吉（almanac）、姓名五格——连同塔罗、周易起卦、星座与上升星座、合盘分析和 AI 解读，收敛成一套文档化的 HTTP API 和一个面向 Agent 的程序化 CLI。
 
 它是**算法能力层**，不是网页应用，也不服务 C 端用户：界面、账号、持久化都属于调用方。引擎本身是无状态纯计算——不存数据、不认用户、没有数据库。
 
-English summary: **BaZi Master is an open-source divination calculation engine** exposed as a documented HTTP API and an agent-callable CLI. It is a stateless pure-calculation service — no database, no accounts, no UI. Node.js / Express, optional Redis cache, pluggable AI providers, OpenAPI contract.
+English summary: **BaZi Master is an open-source divination calculation engine** covering the traditional Chinese canon — BaZi, Zi Wei Dou Shu, Liu Yao (King Fang stem-branch attachment), Da Liu Ren, Qi Men Dun Jia, Ba Zhai feng shui, almanac day-selection and name grids — plus Tarot, I Ching, Zodiac and Synastry. Exposed as a documented HTTP API and an agent-callable CLI. Stateless pure calculation — no database, no accounts, no UI. Node.js / Express, optional Redis cache, pluggable AI providers, OpenAPI contract.
 
-> 关键词 / Keywords: 八字排盘 API, BaZi chart API, 紫微斗数排盘, Zi Wei Dou Shu chart, 塔罗抽牌 API, Tarot draw API, 周易起卦 API, I Ching divination API, 星座配对, astrology compatibility, 合盘分析 Synastry, stateless calculation engine, agent tools, AI divination backend.
+> 关键词 / Keywords: 八字排盘 API, BaZi chart API, 紫微斗数排盘, Zi Wei Dou Shu chart, 六爻纳甲 API, Liu Yao hexagram API, 大六壬起课, Da Liu Ren API, 奇门遁甲排盘, Qi Men Dun Jia API, 八宅风水, feng shui API, 择吉黄历 API, Chinese almanac API, 姓名五格, 塔罗抽牌 API, Tarot draw API, 周易起卦 API, I Ching divination API, 星座配对, astrology compatibility, 合盘分析 Synastry, stateless calculation engine, agent tools, AI divination backend.
 
 **目录**：[项目定位](#项目定位--project-snapshot) · [核心能力](#核心能力--core-capabilities) · [快速开始](#快速开始--quick-start) · [调用示例](#调用示例--usage-examples) · [适用场景](#适用场景--use-cases) · [技术栈](#技术栈--tech-stack) · [环境变量](#环境变量--configuration) · [FAQ](#faq--常见问题) · [项目结构](#项目结构--repository-structure) · [测试](#测试--testing) · [生产部署](#部署与生产注意事项--production-notes) · [限制](#限制与免责声明--limitations)
 
@@ -146,8 +146,15 @@ curl -X POST http://127.0.0.1:4000/api/tarot/draw \
 
 ```bash
 ./bazi calc bazi --birth 1990-05-20T14:30 --gender male --json
+./bazi calc liuyao --lines 111111 --changing 1 --date 2024-05-20 --json
+./bazi calc liuren --date 2024-05-20 --hour 14 --json
+./bazi calc qimen --date 2024-05-20 --hour 14 --json
+./bazi calc bazhai --birth 1990 --gender male --json
 ./bazi cast tarot --spread ThreeCard --json
 ```
+
+起课类命令（`liuren` / `qimen` / `liuyao` / `almanac`）不给 `--date` 就取引擎当日，
+那一次调用**不可复现**，文本输出会标注出来。要可复现就把日期时辰给全。
 
 更多接口见 [docs/api.md](docs/api.md)。启动后也可以访问：
 
@@ -161,7 +168,7 @@ curl -X POST http://127.0.0.1:4000/api/tarot/draw \
 - 给已有产品（Web、小程序、App）接一套命理/占星计算后端，界面完全自己实现。
 - 作为智能体的专业计算工具：让模型去调真实的排盘算法，而不是自己编排盘结果。
 - 参考一个无状态计算服务如何组织接口契约、健康检查、优雅停机和可观测性。
-- 研究八字/紫微算法里那些流派选择与边界条件（节气交接、晚子时、闰月、真太阳时）。
+- 研究各家术数算法里的流派选择与边界条件（节气交接、晚子时、闰月、真太阳时、中气换将、拆补定局）。
 
 ## 技术栈 / Tech Stack
 
