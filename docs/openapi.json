@@ -1384,6 +1384,122 @@
         }
       }
     },
+    "/api/liuren/chart": {
+      "post": {
+        "tags": [
+          "大六壬"
+        ],
+        "summary": "大六壬起课",
+        "description": "月将加时得天地盘，起四课、三传、十二天将。不给日期时辰则取服务器当下。**覆盖范围有限**：三传只实现了贼克法（元首/重审）、比用法（知一）、遥克法（蒿矢/弹射）；涉害、昴星、别责、八专、伏吟、返吟六门未实现，遇到时 threeTransmissions.supported 为 false，并给出所判定的课体与原因 —— 不会返回未经核对的三传。天地盘、四课、天将不受此限制。",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "year": {
+                    "type": "integer"
+                  },
+                  "month": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
+                  },
+                  "day": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 31
+                  },
+                  "hour": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 23,
+                    "description": "占时"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dayGanzhi": {
+                      "type": "string"
+                    },
+                    "hourBranch": {
+                      "type": "string",
+                      "description": "占时地支"
+                    },
+                    "monthGeneral": {
+                      "type": "object",
+                      "description": "月将，含所值中气"
+                    },
+                    "stemLodging": {
+                      "type": "string",
+                      "description": "日干寄宫"
+                    },
+                    "earthPlate": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "地盘，恒定"
+                    },
+                    "heavenPlate": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "天盘，下标为地盘位"
+                    },
+                    "fourCourses": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "threeTransmissions": {
+                      "type": "object",
+                      "description": "supported 为 false 时只给课体与原因，不给三传"
+                    },
+                    "twelveGenerals": {
+                      "type": "object",
+                      "description": "十二天将，含贵人昼夜与顺逆"
+                    },
+                    "xunkong": {
+                      "type": "object",
+                      "nullable": true
+                    },
+                    "isFuyin": {
+                      "type": "boolean"
+                    },
+                    "isFanyin": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "日期或占时非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/iching/ai-interpret": {
       "post": {
         "tags": [
