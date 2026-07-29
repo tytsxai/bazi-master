@@ -85,6 +85,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **Da Liu Ren's 涉害 depth was computed along the wrong path and with the wrong tally.**
+  Source material specifies walking _clockwise_ from the position the heaven-plate branch
+  rides back to its home palace, and — the part most easily missed — the tally depends on
+  the course type: for 下贼上 count how often the upper god is _controlled by_ the earth-plate
+  branches en route, for 上克下 count how many it _controls_. The implementation walked
+  counter-clockwise and always counted "controlled by", which inverts the depth ordering for
+  the 上克下 case and therefore picks the wrong initial transmission. Both are corrected, and
+  the two tallies are exposed as an explicit `mode` so the alternative "直取孟仲季" school —
+  which does not walk home at all — can be layered on without touching this one.
+- Stale comments in `liuren.service.js` still described the six later gates as unimplemented
+  and claimed the module "covers only 贼克/比用/遥克", long after all nine were in place. One
+  of them was an orphaned JSDoc block left sitting above an unrelated function.
+
 - **Two Da Liu Ren three-transmission gates were ordered and gated wrongly**, found by
   verifying the implementation against source material rather than by any failing test.
   八专 (eight-specialists) is defined as "stem and branch share a position, no controlling

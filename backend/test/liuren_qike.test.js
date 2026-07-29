@@ -243,13 +243,26 @@ describe('三传', () => {
     }
   });
 
-  it('涉害深浅：自所乘地盘位逆行归家，沿途受克计数', () => {
-    // 亥将加子时：地盘丑上乘子。子水逆行自丑归子，途经丑（土克水）→ 深度 1
+  it('涉害深浅：自所乘地盘位顺行归家，沿途按课体计克', () => {
+    // 亥将加子时：天盘子乘于地盘丑位。子水自丑顺行归子，途经丑寅卯辰巳午未申酉戌亥，
+    // 其中克水者为丑辰未戌四土 → 受克计法得 4
     const plate = buildHeavenPlate('亥', '子');
-    assert.equal(calculateShehaiDepth('子', plate), 1);
-    // 本家即所乘位时无途可涉，深度 0
+    assert.equal(calculateShehaiDepth('子', plate, { mode: 'received' }), 4);
+    // 同一条路径改按「我所克」计：子水克火，途中巳午两火 → 得 2
+    assert.equal(calculateShehaiDepth('子', plate, { mode: 'inflicted' }), 2);
+    // 本家即所乘位（伏吟）时无途可涉，深度 0
     const same = buildHeavenPlate('子', '子');
     assert.equal(calculateShehaiDepth('子', same), 0);
+  });
+
+  it('涉害深浅恒在 0..11，且两种计法互不干扰', () => {
+    const plate = buildHeavenPlate('辰', '寅');
+    BRANCHES.forEach((branch) => {
+      ['received', 'inflicted'].forEach((mode) => {
+        const depth = calculateShehaiDepth(branch, plate, { mode });
+        assert.ok(depth >= 0 && depth <= 11, `${branch}/${mode} 深度 ${depth} 越界`);
+      });
+    });
   });
 
   it('八专排在遥克之前：八专日的课体不得落到遥克', () => {

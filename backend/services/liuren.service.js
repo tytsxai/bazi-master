@@ -3,10 +3,12 @@
  *
  * 起课链条：定月将 → 月将加时得天地盘 → 日干寄宫 → 四课 → 三传 → 十二天将。
  *
- * **覆盖范围要看清楚**：天地盘、四课、天将、以及三传里的贼克法（元首/重审）、
- * 比用法（知一）、遥克法（蒿矢/弹射）已实现且可验证；涉害、昴星、别责、八专、
- * 伏吟、返吟六门未实现 —— 遇到这些课式时 `threeTransmissions.supported` 为 false，
- * 并给出所判定的课体与未实现的原因，而不是返回一组看似合理实则未经核对的三传。
+ * 三传九宗门全备：贼克（元首/重审）、比用（知一）、涉害（含见机/察微）、遥克（蒿矢/弹射）、
+ * 昴星（虎视/冬蛇掩目）、别责、八专、伏吟（自任/自信）、返吟（无亲）。
+ *
+ * 取传次第不是可以随意调换的：八专「不取遥克」，故它必须排在遥克之前；
+ * 别责与昴星则在遥克之后，按四课是否缺一区分。次第错了，三传照样出得来，
+ * 只是课体判错 —— 而课体是后面所有断语的依据。
  */
 
 import { Solar } from 'lunar-javascript';
@@ -125,31 +127,31 @@ const isSamePolarity = (branch, dayStem) => {
 };
 
 /**
- * 取三传。
+ * 涉害深浅。
  *
- * 依九宗门次第：贼克 → 比用 → 涉害 → 遥克 → 昴星 → 别责 → 八专 → 伏吟 → 返吟，
- * 前门不成立才轮到后门。本实现覆盖贼克、比用、遥克三门，其余明确返回不支持。
+ * 口径（本模块选定，与「直取孟仲季」那一派不同，后者不归家、直接数孟上贼克）：
+ * - 路径：自天盘之支所乘的地盘位起，**顺行**归返本家，沿途所经地盘诸支即为「所涉」
+ * - 计数随课体而变：
+ *   - 下贼上者，数上神**受**地盘之神所克的次数
+ *   - 上克下者，数上神**所克**的地盘之神的个数
+ *   这一条容易被忽略而一律按受克计 —— 那样上克下的一组会算出与本意相反的深浅。
  *
- * 中传取初传之上神，末传取中传之上神 —— 这一条在已实现的几门里是共通的。
+ * 数多者涉害深，取为初传。
  */
-/**
- * 涉害深浅：天盘之支自其所乘的地盘位**逆行**归返本家，沿途所经地盘诸支中，
- * 克它者的个数即涉害之深。数多者受伤重，取为初传。
- */
-export const calculateShehaiDepth = (heavenBranch, heavenPlate) => {
+export const calculateShehaiDepth = (heavenBranch, heavenPlate, { mode = 'received' } = {}) => {
   const ridingIdx = heavenPlate.indexOf(heavenBranch);
   const homeIdx = branchIndex(heavenBranch);
   if (ridingIdx === -1 || homeIdx === -1) return 0;
 
   let depth = 0;
   let cursor = ridingIdx;
-  // 逆行归家，途中每遇一个克我的地盘之支便计一分
   while (cursor !== homeIdx) {
     const earthBranch = BRANCHES[cursor];
-    if (getElementRelation(elementOf(earthBranch), elementOf(heavenBranch)) === 'Controls') {
-      depth += 1;
-    }
-    cursor = normalize12(cursor - 1);
+    const relation = getElementRelation(elementOf(earthBranch), elementOf(heavenBranch));
+    // received：地盘之支克我；inflicted：我克地盘之支
+    const hit = mode === 'received' ? relation === 'Controls' : relation === 'ControlledBy';
+    if (hit) depth += 1;
+    cursor = normalize12(cursor + 1);
   }
   return depth;
 };
@@ -164,10 +166,10 @@ const branchUpper = (courses) => courses[2].upper;
  * 涉害法及其两个分支：深浅相等时先取孟神（见机），无孟取仲神（察微），
  * 仍不能决则阳日取干上神、阴日取支上神。
  */
-const resolveShehai = (candidates, heavenPlate, dayStem, courses) => {
+const resolveShehai = (candidates, heavenPlate, dayStem, courses, mode = 'received') => {
   const scored = candidates.map((branch) => ({
     branch,
-    depth: calculateShehaiDepth(branch, heavenPlate),
+    depth: calculateShehaiDepth(branch, heavenPlate, { mode }),
   }));
   const maxDepth = Math.max(...scored.map((s) => s.depth));
   const deepest = scored.filter((s) => s.depth === maxDepth);
@@ -267,7 +269,8 @@ const resolveFanyin = (courses, heavenPlate, dayStem, dayBranch) => {
             primary.map((c) => c.upper),
             heavenPlate,
             dayStem,
-            courses
+            courses,
+            zei.length ? 'received' : 'inflicted'
           ).initial;
     return buildByUpper(chosen, heavenPlate, COURSE_TYPES.fanyinKe);
   }
@@ -308,9 +311,10 @@ export const deriveThreeTransmissions = (courses, heavenPlate, dayStem, options 
     if (matched.length === 1) {
       return buildByUpper(matched[0].upper, heavenPlate, COURSE_TYPES.zhiyi);
     }
-    // 俱比或俱不比，用涉害法
+    // 俱比或俱不比，用涉害法。计数方式随课体而变：下贼上数受克、上克下数所克。
     const pool = (matched.length ? matched : primary).map((c) => c.upper);
-    const resolved = resolveShehai(pool, heavenPlate, dayStem, courses);
+    const shehaiMode = zei.length ? 'received' : 'inflicted';
+    const resolved = resolveShehai(pool, heavenPlate, dayStem, courses, shehaiMode);
     return buildByUpper(resolved.initial, heavenPlate, resolved.courseType, {
       shehaiDepths: resolved.depths,
     });
@@ -356,7 +360,8 @@ export const deriveThreeTransmissions = (courses, heavenPlate, dayStem, options 
             remote.map((c) => c.upper),
             heavenPlate,
             dayStem,
-            courses
+            courses,
+            shooters.length ? 'received' : 'inflicted'
           ).initial;
     return buildByUpper(chosen, heavenPlate, remoteType);
   }
