@@ -19,7 +19,13 @@ import {
   setBaziCacheEntry,
   primeBaziCalculationCache,
 } from './cache.service.js';
-import { parseTimezoneOffsetMinutes, formatTimezoneOffset } from '../utils/timezone.js';
+import {
+  parseTimezoneOffsetMinutes,
+  formatTimezoneOffset,
+  buildBirthTimeMeta,
+} from '../utils/timezone.js';
+import { analyzeChart, getTenGod } from './bazi.service.js';
+import { getNayin } from './ganzhi.service.js';
 
 // Pinyin and Element mappings for Stems (TianGan)
 export const STEMS_MAP = {
@@ -116,9 +122,85 @@ export function buildPillar(ganChar, zhiChar) {
   };
 }
 
+/**
+ * 定出用于排盘的实际时刻。
+ *
+ * 真太阳时此前只作为响应里的一段 metadata，排盘仍吃原始 birthHour —— 等于算了不用。
+ * 现在只要能解析出出生地经度且知道时区偏移，就用校正后的时刻排盘：经度每偏离标准经线
+ * 1 度差 4 分钟，跨时区大国里足以把时柱推到隔壁一柱去。
+ *
+ * 传 trueSolarTime: false 可显式关闭，退回按钟表时间排盘。
+ */
+export const resolveChartTime = (data) => {
+  const minute = coerceInt(data.birthMinute) ?? 0;
+  const base = {
+    year: data.birthYear,
+    month: data.birthMonth,
+    day: data.birthDay,
+    hour: data.birthHour || 0,
+    minute,
+    trueSolarTime: null,
+  };
+
+  if (data.trueSolarTime === false) return base;
+
+  const location = resolveLocationCoordinates(data.birthLocation);
+  if (!location) return base;
+
+  const meta = buildBirthTimeMeta({
+    birthYear: data.birthYear,
+    birthMonth: data.birthMonth,
+    birthDay: data.birthDay,
+    birthHour: data.birthHour,
+    birthMinute: minute,
+    timezone: data.timezone,
+    timezoneOffsetMinutes: data.timezoneOffsetMinutes,
+  });
+  if (!Number.isFinite(meta?.timezoneOffsetMinutes)) return base;
+
+  const corrected = computeTrueSolarTime({
+    birthYear: data.birthYear,
+    birthMonth: data.birthMonth,
+    birthDay: data.birthDay,
+    birthHour: data.birthHour,
+    birthMinute: minute,
+    timezoneOffsetMinutes: meta.timezoneOffsetMinutes,
+    longitude: location.longitude,
+  });
+  if (!corrected?.corrected) return base;
+
+  return {
+    year: corrected.corrected.year,
+    month: corrected.corrected.month,
+    day: corrected.corrected.day,
+    hour: corrected.corrected.hour,
+    minute: corrected.corrected.minute,
+    trueSolarTime: {
+      applied: true,
+      correctionMinutes: corrected.correctionMinutes,
+      longitudeCorrection: corrected.longitudeCorrection,
+      eotCorrection: corrected.eotCorrection,
+      clockTime: { ...base, trueSolarTime: undefined },
+      location: {
+        name: location.name || null,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      },
+    },
+  };
+};
+
 export const performCalculation = (data) => {
-  const { birthYear, birthMonth, birthDay, birthHour, gender } = data;
-  const solar = Solar.fromYmdHms(birthYear, birthMonth, birthDay, birthHour || 0, 0, 0);
+  const { gender } = data;
+  const chartTime = resolveChartTime(data);
+  const solar = Solar.fromYmdHms(
+    chartTime.year,
+    chartTime.month,
+    chartTime.day,
+    chartTime.hour,
+    chartTime.minute,
+    0
+  );
   const lunar = solar.getLunar();
   const eightChar = lunar.getEightChar();
 
@@ -200,6 +282,8 @@ export const performCalculation = (data) => {
   const genderInt = gender === 'male' ? 1 : 0;
   const yun = eightChar.getYun(genderInt);
   const daYunArr = yun.getDaYun();
+  const dayMasterForLuck = eightChar.getDayGan();
+  // daYunArr[0] 是起运之前的那段（只行小运，无大运干支），故自 1 起取八步。
   const luckCycles = daYunArr.slice(1, 9).map((dy) => {
     const startAge = dy.getStartAge();
     const endAge = dy.getEndAge();
@@ -214,10 +298,59 @@ export const performCalculation = (data) => {
       branch: BRANCHES_MAP[zhi]?.name || zhi,
       startYear,
       endYear,
+      ganZhi,
+      charStem: gan,
+      charBranch: zhi,
+      stemTenGod: getTenGod(dayMasterForLuck, gan),
+      nayin: getNayin(gan, zhi),
+      liuNian:
+        typeof dy.getLiuNian === 'function'
+          ? dy.getLiuNian().map((ln) => {
+              const lnGanZhi = ln.getGanZhi();
+              return {
+                year: ln.getYear(),
+                age: ln.getAge(),
+                ganZhi: lnGanZhi,
+                charStem: lnGanZhi.substring(0, 1),
+                charBranch: lnGanZhi.substring(1, 2),
+                stemTenGod: getTenGod(dayMasterForLuck, lnGanZhi.substring(0, 1)),
+              };
+            })
+          : [],
     };
   });
 
-  return { pillars, fiveElements: counts, fiveElementsPercent, tenGods, luckCycles };
+  // 起运：还需几年几月几天，以及交运的公历日期。旧实现只给年龄区间，
+  // 交运具体落在哪一天看不出来，跨年出生的人差一天就差一步运。
+  const startSolar = typeof yun.getStartSolar === 'function' ? yun.getStartSolar() : null;
+  const luckStart = {
+    years: yun.getStartYear(),
+    months: yun.getStartMonth(),
+    days: yun.getStartDay(),
+    solarDate: startSolar ? startSolar.toYmd() : null,
+  };
+
+  // fiveElements/tenGods 保留原义（干支个数统计），供既有调用方使用；
+  // 真正用于断命的藏干加权、旺衰、用神、神煞在 analysis 里，见 bazi.service.js。
+  return {
+    pillars,
+    fiveElements: counts,
+    fiveElementsPercent,
+    tenGods,
+    luckCycles,
+    luckStart,
+    analysis: analyzeChart(pillars),
+    chartTime: {
+      used: {
+        year: chartTime.year,
+        month: chartTime.month,
+        day: chartTime.day,
+        hour: chartTime.hour,
+        minute: chartTime.minute,
+      },
+      trueSolarTime: chartTime.trueSolarTime,
+    },
+  };
 };
 
 export const hasFullBaziResult = (result) => {
@@ -229,7 +362,10 @@ export const getBaziCalculation = async (data, { bypassCache = false } = {}) => 
   const cacheKey = buildBaziCacheKey(data);
   if (!bypassCache && cacheKey) {
     const cached = await getCachedBaziCalculationAsync(cacheKey);
-    if (cached && hasFullBaziResult(cached)) return cached;
+    if (cached && hasFullBaziResult(cached)) {
+      // 引入 analysis 之前写入的缓存条目缺这一段，就地补算而不是整条丢弃重排四柱。
+      return cached.analysis ? cached : { ...cached, analysis: analyzeChart(cached.pillars) };
+    }
   }
   const result = performCalculation(data);
   if (cacheKey) setBaziCacheEntry(cacheKey, result);

@@ -37,7 +37,25 @@ export const buildBaziCacheKey = (data) => {
     return null;
   }
 
-  return `${birthYear}-${birthMonth}-${birthDay}-${birthHour}-${gender}`;
+  const base = `${birthYear}-${birthMonth}-${birthDay}-${birthHour}-${gender}`;
+
+  // 真太阳时会按出生地经度与分钟改写时柱，这些因子必须进键，否则「同年月日时不同出生地」
+  // 会互相命中对方的盘。只有在因子确实存在时才追加后缀，保持无地点请求的键与历史一致。
+  const birthMinute = coerceInt(data.birthMinute);
+  const timezoneOffsetMinutes = coerceInt(data.timezoneOffsetMinutes);
+  const birthLocation =
+    typeof data.birthLocation === 'string' ? data.birthLocation.trim().toLowerCase() : '';
+
+  const suffix = [];
+  if (birthMinute) suffix.push(`m${birthMinute}`);
+  if (birthLocation) suffix.push(`loc:${birthLocation}`);
+  if (timezoneOffsetMinutes !== null) suffix.push(`tz${timezoneOffsetMinutes}`);
+  if (typeof data.timezone === 'string' && data.timezone.trim()) {
+    suffix.push(`tzn:${data.timezone.trim()}`);
+  }
+  if (data.trueSolarTime === false) suffix.push('nots');
+
+  return suffix.length ? `${base}|${suffix.join('|')}` : base;
 };
 
 export const buildFiveElementsPercent = (fiveElements) => {
