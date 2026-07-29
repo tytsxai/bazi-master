@@ -1,354 +1,229 @@
 # BaZi Master API 文档
 
-> 版本: v0.2.0 | 更新: 2026-07-28
+> 版本: v0.2.0 | 更新: 2026-07-29
 
-本文件概述当前代码中实际实现的 HTTP API。所有响应均为 JSON；时间戳采用 ISO 8601。
+引擎是**无状态的纯计算服务**：不存数据、不认用户、没有数据库。
+所有业务接口都是公开的 —— 没有注册、登录、会话、token，也没有历史记录、收藏、用户设置这些概念。
+调用方（你的后端、你的客户端、或者一个 AI Agent）自己决定要不要保存结果。
 
-English summary: BaZi Master exposes an Express + Prisma HTTP API for BaZi chart calculation, Tarot draw, I Ching divination, Zodiac data, Zi Wei Dou Shu charts, Synastry analysis, AI interpretation, user records, favorites, health checks, OpenAPI JSON and Swagger UI. It ships no UI — this document is the contract your client or agent codes against.
+唯一带鉴权的是 `/api-docs`（Basic Auth）和 `/metrics`（Bearer token），它们是运维面，不是业务面。
 
-核心关键词 / Keywords: BaZi API, 八字排盘 API, Tarot draw API, I Ching divination API, Zi Wei Dou Shu API, Zodiac compatibility API, Synastry API, AI divination API, Express Prisma PostgreSQL API.
+**机器可读的契约是 [openapi.json](openapi.json)**，运行时挂在 `/api-docs`。
+这份文档是给人读的导览；两边不一致时以 `openapi.json` 为准 —— 它由
+`backend/services/apiSchema.service.js` 生成，CI 会比对快照，不会腐化。
+
+- Base URL（本地）：`http://127.0.0.1:4000`
+- Swagger UI：`/api-docs`
+- OpenAPI JSON：`/api-docs.json`
+- 所有响应都是 JSON；时间戳用 ISO 8601
 
 ## 目录
 
-- [认证](#认证)
-- [AI 提供商](#ai-提供商)
-- [八字 (BaZi)](#八字-bazi)
-- [塔罗 (Tarot)](#塔罗-tarot)
-- [周易 (I Ching)](#周易-i-ching)
-- [星座 (Zodiac)](#星座-zodiac)
-- [紫微 (Zi Wei)](#紫微-zi-wei-需认证)
-- [收藏 (Favorites)](#收藏-favorites-需认证)
-- [用户设置 (User)](#用户设置-user-需认证)
-- [日历 (Calendar)](#日历-calendar-需认证)
-- [媒体 (Media)](#媒体-media-需认证)
-- [位置搜索 (Locations)](#位置搜索-locations)
-- [合盘 (Synastry)](#合盘-synastry)
-- [系统诊断 (System)](#系统诊断-system-需认证)
-- [管理端 (Admin)](#管理端-admin-需认证--管理员)
-- [健康检查](#健康检查)
+- [约定](#约定)
+- [八字 BaZi](#八字-bazi)
+- [紫微斗数 Zi Wei](#紫微斗数-zi-wei)
+- [塔罗 Tarot](#塔罗-tarot)
+- [周易 I Ching](#周易-i-ching)
+- [星座 Zodiac](#星座-zodiac)
+- [合盘 Synastry](#合盘-synastry)
+- [日历 Calendar](#日历-calendar)
+- [地点 Locations](#地点-locations)
+- [AI 供应商](#ai-供应商)
+- [健康检查与运维](#健康检查与运维)
 - [错误格式](#错误格式)
 
-## 认证
+## 约定
 
-- 登录/注册返回 `token`，同时写入 `bazi_session` cookie；后续请求可用 Bearer 或 cookie 认证。
-- 提供密码重置与 OAuth（Google/WeChat）入口；自助删除账号通过 `DELETE /api/auth/me`。
+出生信息在所有排盘类接口里是同一组字段：
 
-### POST /api/auth/register
+| 字段                    | 必填 | 说明                                                                   |
+| ----------------------- | ---- | ---------------------------------------------------------------------- |
+| `birthYear`             | ✓    | 1–9999                                                                 |
+| `birthMonth`            | ✓    | 1–12                                                                   |
+| `birthDay`              | ✓    | 1–31                                                                   |
+| `birthHour`             | ✓    | 0–23                                                                   |
+| `birthMinute`           |      | 0–59，默认 0                                                           |
+| `gender`                | ✓    | `male` / `female`                                                      |
+| `birthLocation`         |      | 地名或 `"纬度,经度"`。只用于真太阳时，认得的地名见 `GET /api/locations` |
+| `timezone`              |      | IANA 时区名，如 `Asia/Shanghai`                                        |
+| `timezoneOffsetMinutes` |      | 给了就优先于 `timezone`，供无法解析 IANA 名的调用方使用                 |
 
-请求：`{ email, password, name? }`
-响应：`{ token, user: { id, email, name, isAdmin } }`
+关于时刻，有两点要清楚（都不会报错，只会给出另一张盘）：
 
-### POST /api/auth/login
+- **真太阳时参与排盘。** 只要 `birthLocation` 能解析出经度、且时区已知，四柱就按校正后的
+  时刻排。经度每偏离标准经线 1 度差 4 分钟，中国西部足以把时柱推到隔壁一柱。
+  响应的 `chartTime.used` 是实际用于排盘的时刻，`chartTime.trueSolarTime.clockTime`
+  保留原始钟表时间，两者可直接对照。传 `trueSolarTime: false` 可关掉，退回按钟表时间排。
+- **`birthMinute` 参与真太阳时，进而影响四柱。** 校正量按分钟计算，落在时辰交界上时，
+  分钟会决定落在哪一柱。不给则按 0 分处理。
 
-请求：`{ email, password }`
-响应同上。
+更多这类边界见 [.claude/skills/bazi-cli/SKILL.md](../.claude/skills/bazi-cli/SKILL.md)。
 
-### POST /api/auth/logout _(需认证)_
+AI 解读类接口（`*/ai-interpret`、`full-analysis`）都接受一个可选的 `provider` 字段
+（`openai` / `anthropic` / `mock`），覆盖服务端默认值；填了不可用的供应商返回 400。
 
-可在 Header 携带 Bearer Token，或 Body `token`。
-
-### POST /api/auth/password/request
-
-请求：`{ email }`
-响应：`{ message }`（始终返回统一提示，避免泄露用户是否存在；若密码重置被禁用或邮件未配置，返回 503）
-
-### POST /api/auth/password/reset
-
-请求：`{ token, password }`
-响应：`{ status: "ok" }`
-
-### GET /api/auth/google
-
-OAuth 入口（302 重定向）。
-
-### GET /api/auth/google/callback
-
-OAuth 回调（设置 session cookie 并重定向到 `FRONTEND_URL` 指向的客户端）。
-
-### GET /api/auth/wechat/redirect
-
-WeChat OAuth 入口（302 重定向）。
-
-### GET /api/auth/wechat/callback
-
-WeChat OAuth 回调（设置 session cookie 并重定向到 `WECHAT_FRONTEND_URL` 指向的客户端；未配置时回落到 `FRONTEND_URL`）。
-
-### GET /api/auth/me _(需认证)_
-
-返回当前用户信息。
-
-### DELETE /api/auth/me _(需认证)_
-
-自助删除账号及关联数据。
-
-## AI 提供商
-
-### GET /api/ai/providers
-
-返回当前 active provider 与可用 provider 列表；无密钥时 `activeProvider` 通常为 `mock`。
-
-## 八字 (BaZi)
-
-- 公开：计算
-- 需认证：AI 解读与记录 CRUD
+## 八字 BaZi
 
 ### POST /api/bazi/calculate
 
-请求：`{ birthYear, birthMonth, birthDay, birthHour, gender, birthLocation?, timezone?, birthMinute?, timezoneOffsetMinutes? }`
-响应：排盘结果（pillars、fiveElements、tenGods、luckCycles、trueSolarTime 等）。
+排盘。请求体见[约定](#约定)。响应分两层：
 
-### POST /api/bazi/ai-interpret _(需认证)_
+- 顶层的 `pillars` / `fiveElements` / `tenGods` / `luckCycles` 是原有字段，语义未变
+  （`fiveElements` 仍是天干与地支本气的**个数**统计）。
+- `analysis` 是断命层，也是该拿去做判断的那一份：
+  - `weightedElements` — 藏干加权五行。天干各 1 分，地支按本气/中气/余气权重分配，
+    月支当令 ×2。与 `fiveElements` 的个数统计不是一回事。
+  - `strength` — 身强/身弱/中和，含同党占比、是否得令、在哪几柱有根。
+  - `usefulGod` — 扶抑法用神喜忌。中和局不硬凑用神，会说明改用调候或病药法。
+  - `pillarDetails` — 逐柱的藏干全展开（含中气余气）、各自十神、纳音、日主在该支的十二长生。
+  - `shensha` — 神煞，标注 `basis` 说明是按日干还是年支/日支起的。
+  - `relations` — 四柱之间的刑冲合会害破，三合区分全合与半合。
+  - `xunkong` — 日柱所在旬的空亡。
+- `luckStart` 给出起运还需几年几月几天与交运公历日期；`luckCycles` 每步带 `liuNian` 逐年流年。
 
-请求：`{ pillars, fiveElements, tenGods?, luckCycles?, strength?, provider? }`
-响应：`{ content }`
+```bash
+curl -X POST http://127.0.0.1:4000/api/bazi/calculate \
+  -H "Content-Type: application/json" \
+  -d '{"birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour":14,"gender":"male",
+       "birthLocation":"Beijing","timezone":"Asia/Shanghai"}'
+```
 
-### POST /api/bazi/full-analysis _(需认证)_
+响应头 `x-bazi-cache: hit|miss` 告诉你这次是否命中缓存。缓存键以
+`年-月-日-时-性别` 为基础；因为真太阳时会改写时柱，出生地、分钟、时区与
+`trueSolarTime: false` 也会进键（以后缀形式追加），否则不同出生地会互相命中对方的盘。
 
-请求：同 calculate 输入，可选 `provider`。
-响应：`{ calculation, interpretation, ...timeMeta }`
+### POST /api/bazi/ai-interpret
 
-### GET /api/bazi/records _(需认证)_
+对一张已经排好的盘做 AI 解读。必填 `pillars`，可选 `fiveElements` / `tenGods` /
+`luckCycles` / `strength` / `provider`。
 
-查询参数：`page`, `limit`, `status` (active/deleted/all), `gender`, `q` (搜索), `sort` (created-desc/created-asc/birth-desc/birth-asc)
-响应：`{ records: [...], totalCount, filteredCount }`
+### POST /api/bazi/full-analysis
 
-### POST /api/bazi/records _(需认证)_
+排盘 + 解读一次完成。请求体 = 排盘字段 + 可选 `provider`。
 
-保存计算并返回记录。自动检测 60 秒内的重复记录。
-响应：`{ record }`
-
-### GET /api/bazi/records/export _(需认证)_
-
-导出记录（最多 2000 条）。
-查询参数：同 GET /api/bazi/records，额外支持 `includeDeletedStatus=1`
-响应：`[{ ...record, softDeleted? }, ...]`
-
-### POST /api/bazi/records/import _(需认证)_
-
-批量导入记录。
-请求：`{ records: [{ birthYear, birthMonth, birthDay, birthHour, gender, softDeleted? }, ...] }`
-响应：`{ created: number }`
-
-### POST /api/bazi/records/bulk-delete _(需认证)_
-
-批量软删除记录。
-请求：`{ ids: [number, ...] }`
-响应：`{ status: "ok" }`
-
-### GET /api/bazi/records/:id _(需认证)_
-
-获取单条记录详情。
-响应：`{ record }`
-
-### DELETE /api/bazi/records/:id _(需认证)_
-
-软删除记录（移入回收站）。
-响应：`{ status: "ok" }`
-
-### POST /api/bazi/records/:id/restore _(需认证)_
-
-恢复已删除的记录。
-响应：`{ status: "ok" }`
-
-### DELETE /api/bazi/records/:id/hard-delete _(需认证)_
-
-永久删除记录（不可恢复）。
-响应：`{ status: "ok" }`
-
-## 塔罗 (Tarot)
-
-- 公开：抽牌、牌组数据
-- 需认证：AI 解读与历史
-
-### GET /api/tarot/cards
-
-返回 78 张塔罗牌完整数据。
-响应：`{ cards: [...] }`
-
-### POST /api/tarot/draw
-
-请求：`{ spreadType?: "SingleCard" | "ThreeCard" | "CelticCross" }`
-响应：抽取的牌阵。
-
-### POST /api/tarot/ai-interpret _(需认证, 严格 auth)_
-
-请求：`{ spreadType?, cards, userQuestion?, provider? }`
-响应：`{ content }`（并自动写入历史）。
-
-### GET /api/tarot/history _(需认证)_
-
-响应：`{ records: [{ id, spreadType, userQuestion, aiInterpretation, cards, createdAt }, ...] }`
-
-### DELETE /api/tarot/history/:id _(需认证)_
-
-响应：`{ success: true }`
-
-## 周易 (I Ching)
-
-- 公开：卦象数据、起卦
-- 需认证：AI 解读与历史
-
-### GET /api/iching/hexagrams
-
-返回 64 卦数据。
-响应：`{ hexagrams: [...] }`
-
-### POST /api/iching/divine
-
-请求：`{ method?: "number" | "time", numbers?: [a,b,c] }`
-响应：`{ hexagram, changingLines, timeContext?, method }`
-
-### POST /api/iching/ai-interpret _(需认证)_
-
-请求：`{ hexagram, userQuestion?, method?, changingLines?, timeContext?, provider? }`
-响应：`{ content }`（并自动写入历史）
-
-### POST /api/iching/history _(需认证)_
-
-手动保存起卦记录。
-请求：`{ method, numbers?, hexagram, resultingHexagram?, changingLines?, timeContext?, userQuestion?, aiInterpretation? }`
-响应：`{ record }`
-
-### GET /api/iching/history _(需认证)_
-
-响应：`{ records: [...] }`
-
-### DELETE /api/iching/history/:id _(需认证)_
-
-响应：`{ status: "ok" }`
-
-## 星座 (Zodiac)
-
-全部公开。
-
-- `GET /api/zodiac/:sign` — 基本信息
-- `GET /api/zodiac/:sign/horoscope?period=daily|weekly|monthly`
-- `GET /api/zodiac/compatibility?primary=&secondary=`
-- `POST /api/zodiac/rising` — 输入生日、时间、经纬度、时区计算上升星座
-
-## 紫微 (Zi Wei) _(需认证)_
+## 紫微斗数 Zi Wei
 
 ### POST /api/ziwei/calculate
 
-请求：`{ birthYear, birthMonth, birthDay, birthHour, gender }`
-响应：紫微斗数排盘结果（含 timeMeta）
+排盘，返回十二宫、十四主星、六吉六煞、四化、大限。必填 `birthYear` / `birthMonth` /
+`birthDay` / `birthHour` / `gender`，可选 `birthMinute`。
 
-### POST /api/ziwei/history
+安星链条是「命宫 → 命宫干支 → 纳音 → 五行局 → 紫微 → 天府 → 十四主星 → 六吉六煞」，
+五行局是整条链的根。响应里 `fiveElementBureau` 给出局别、局数与所据纳音，
+`starPositions` 给出紫微天府落宫，出错时可以顺着这两个字段回溯。
 
-保存排盘记录。
-请求：`{ birthYear, birthMonth, birthDay, birthHour, gender }`
-响应：`{ record }`
+各宫的 `stars` 分 `major`（十四主星）/ `minor`（文昌文曲左辅右弼天魁天钺禄存天马）/
+`malefic`（擎羊陀罗火星铃星地空地劫）三组。`majorPeriods` 是十二步大限，
+起限岁数即局数，顺逆按阳男阴女顺行、阴男阳女逆行 —— 所以 `gender` 会影响大限方向。
 
-### GET /api/ziwei/history
+闰月按「归本月」处理：闰二月与二月落同一个月支。响应里 `lunar.month` 给的是正数，
+是否闰月看 `lunar.isLeap` —— 两个字段要合起来读。
 
-查询参数：`limit` (默认 30，最大 100)
-响应：`{ records: [...] }`
+星曜庙旺利陷暂未实现（各家分歧大，需先定底本），响应里不会有该字段。
 
-### DELETE /api/ziwei/history/:id
+## 塔罗 Tarot
 
-响应：`{ status: "ok" }`
+### GET /api/tarot/cards
 
-## 收藏 (Favorites) _(需认证)_
+完整牌库。
 
-### GET /api/favorites
+### POST /api/tarot/draw
 
-响应：`{ favorites: [{ id, userId, recordId, record, createdAt }, ...] }`
+抽牌。可选 `spreadType`：`SingleCard` / `ThreeCard` / `CelticCross`。
 
-### POST /api/favorites
+**同样输入不保证同样输出** —— 每次重新随机，不要拿它做幂等重试或断言。
 
-请求：`{ recordId }`
-响应：`{ favorite: { id, userId, recordId, record, createdAt } }`
-错误：409 已收藏
+### POST /api/tarot/ai-interpret
 
-### DELETE /api/favorites/:id
+必填 `cards`（至少一张），可选 `spreadType` / `userQuestion` / `provider`。
 
-响应：`{ status: "ok" }`
+## 周易 I Ching
 
-## 用户设置 (User) _(需认证)_
+### GET /api/iching/hexagrams
 
-### GET /api/user/settings
+六十四卦全表。
 
-响应：`{ settings: { locale?, preferences? } }`
+### POST /api/iching/divine
 
-### PUT /api/user/settings
+起卦。给 `numbers` 时是确定性的；`method: time` 由调用时刻决定卦象，不可复现。
 
-请求：`{ locale?, preferences? }`
-响应：`{ settings }`
+### POST /api/iching/ai-interpret
 
-## 日历 (Calendar) _(需认证)_
+必填 `hexagram`（卦名字符串或完整卦象对象都接受），可选 `userQuestion` / `method` / `provider`。
 
-### GET /api/calendar/daily
+## 星座 Zodiac
 
-获取每日运势。
-查询参数：`birthYear`, `birthMonth`, `birthDay`, `birthHour`, `gender`（提供任意出生参数时需全部提供，否则返回 400）
-响应：每日运势数据
+| 方法 | 路径                           | 参数                                  |
+| ---- | ------------------------------ | ------------------------------------- |
+| GET  | `/api/zodiac/{sign}`           | `sign` 路径参数                       |
+| GET  | `/api/zodiac/{sign}/horoscope` | `sign` 路径参数，`period` 查询参数    |
+| GET  | `/api/zodiac/compatibility`    | `primary`、`secondary` 查询参数，必填 |
+| POST | `/api/zodiac/rising`           | 见下                                  |
 
-## 媒体 (Media) _(需认证)_
+`POST /api/zodiac/rising` 计算上升星座，必填 `birthDate`、`birthTime`、
+`timezoneOffsetMinutes`、`latitude`、`longitude`。
 
-### POST /api/media/soul-portrait
-
-生成灵魂画像（AI 图片）。
-请求：`{ baziData: { dayMasterElement, strongestElement, dominantTenGod? } }`
-响应：`{ imageUrl }` 或 mock 数据
-
-## 位置搜索 (Locations)
-
-### GET /api/locations
-
-查询参数：`search`
-响应：地点列表（当前为占位数据）
-
-## 合盘 (Synastry)
+## 合盘 Synastry
 
 ### POST /api/synastry/analyze
 
-八字合盘分析。
-请求：`{ personA, personB }`（两人八字输入）
-响应：合盘分析结果
+两组出生信息的相性分析。必填 `personA` 和 `personB`，各自是一组[约定](#约定)里的出生字段。
 
-## 系统诊断 (System) _(需认证)_
+## 日历 Calendar
 
-### GET /api/system/cache-status
+### GET /api/calendar/daily
 
-获取缓存状态。
-响应：`{ redis, sessionCache: { mirror }, baziCache: { mirror } }`
+当日日柱与流日运势。全部查询参数可选：`birthYear`、`birthMonth`、`birthDay`、
+`birthHour`、`gender` —— 给了就结合本命盘，不给就只返回当日信息。
 
-## 管理端 (Admin) _(需认证 + 管理员)_
+## 地点 Locations
 
-### GET /api/admin/health
+### GET /api/locations
 
-管理员健康检查（含 WebSocket 指标）。
-响应：健康状态与 WebSocket 连接统计
+真太阳时校正认得的地点表（33 个城市）。可选 `search` 查询参数做过滤。
 
-## 健康检查
+表里没有的地名**不报错**，只是不做校正（`trueSolarTime.applied: false`）。
+要绕开这张表，直接给坐标串 `"30.27,120.15"`，这条路径永远可靠。
 
-### GET /live
+## AI 供应商
 
-存活检查（仅进程存活，不依赖数据库/Redis）。
-响应：`{ service, status: "alive", timestamp, uptime }`
+### GET /api/ai/providers
 
-### GET /health
+当前生效的供应商和可用列表。未配置任何密钥时是 `mock`。
 
-深度健康检查（数据库/Redis）。
-响应：`{ service, status: "ok"|"degraded", checks: { db, redis }, timestamp, uptime }`
+## 健康检查与运维
 
-### GET /api/live
+| 方法 | 路径                       | 说明                                                  |
+| ---- | -------------------------- | ----------------------------------------------------- |
+| GET  | `/live`                    | 存活探针，只看进程，不查依赖                          |
+| GET  | `/health`                  | 深度健康检查（含 Redis），排水期间返回 503            |
+| GET  | `/api/live`                | `/live` 的 `/api` 前缀别名                            |
+| GET  | `/api/health`              | `/health` 的 `/api` 前缀别名                          |
+| GET  | `/api/ready`               | 就绪探针，给负载均衡用；排水期间立即 503              |
+| GET  | `/api/system/cache-status` | Redis 连通性与八字缓存镜像状态                        |
+| GET  | `/metrics`                 | Prometheus 文本格式；需要 `METRICS_TOKEN` Bearer 鉴权 |
 
-同 `/live`，用于客户端/编排器探测。
+`/metrics` 在没配 `METRICS_TOKEN` 时，生产环境返回 404 —— 视为未暴露，这是刻意的默认值。
 
-### GET /api/health
-
-同 `/health`，用于客户端/编排器探测。
-
-### GET /api/ready
-
-依赖就绪检查。
-响应：`{ service, status: "ready"|"not_ready", checks: { db, redis }, timestamp, uptime }`
+健康检查结果带缓存（`HEALTH_CACHE_TTL_MS`，默认 1000ms）：`/health` 注册在限流之前，
+探针永远不会被限流，这也意味着没有缓存的话一个无鉴权请求循环会变成无上限的检查负载。
 
 ## 错误格式
 
-```
-{ "error": "message" }
+所有错误都是同一个形状：
+
+```json
+{ "error": "错误信息" }
 ```
 
-HTTP 状态码：400 参数错误；401 未认证；403 禁止；404 未找到；409 冲突；429 频率限制；500/503 服务器错误。
+| 状态码 | 含义                                   |
+| ------ | -------------------------------------- |
+| 400    | 参数校验失败（含不可用的 AI provider） |
+| 404    | 路径不存在                             |
+| 429    | 命中限流                               |
+| 500    | 引擎内部错误                           |
+| 503    | 依赖不可用，或进程正在排水             |
+
+用 `./bazi` CLI 调用时，这些状态码已经被翻译成退出码（3 = 没就绪 / 4 = 请求被拒 /
+5 = 可重试 / 1 = 引擎内部错），不需要自己判断。
+见 [.claude/skills/bazi-cli/SKILL.md](../.claude/skills/bazi-cli/SKILL.md)。

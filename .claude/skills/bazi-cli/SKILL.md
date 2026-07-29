@@ -1,12 +1,22 @@
 ---
 name: bazi-cli
-description: bazi-master 仓库的操作入口。当需要在这个项目里准备环境、起停本地开发栈（db/api）、跑数据库迁移或重置、跑测试、跑 verify-*.mjs 端到端校验、排查 API 起不来或 /health 503 时使用。所有操作都通过仓库根的 ./bazi CLI 完成，不要直接调 npm script 或手动起进程。
+description: bazi-master 算法能力层的操作入口。当需要调用八字/紫微/合盘/起卦这些算法能力，或者准备环境、起停引擎、跑测试、排查引擎起不来与 /health 503 时使用。所有操作都通过仓库根的 ./bazi CLI 完成，不要自己拼 curl，也不要绕过 CLI 手动起进程。
 ---
 
 # bazi-master 操作手册
 
-仓库根有一个程序化 CLI：`./bazi`。**能做什么以 `./bazi help --json` 为准**，这里不重复命令列表——
-重复的清单一定会腐化。这份文档只讲 `--help` 讲不了的东西：顺序、坑、约定、边界。
+这个项目是**算法能力层**，不是网页应用。它的形态是：引擎作为常驻进程跑着，对外暴露
+HTTP 接口；`./bazi` 是引擎的薄客户端，把能力包成命令给 Agent 调用。
+
+命令分两类，`bazi help --json` 里一眼能分出来：
+
+| 类别     | 命令                                              | 是什么                     |
+| -------- | ------------------------------------------------- | -------------------------- |
+| **能力** | `calc` / `cast`                                   | 这个项目对外输出的算法能力 |
+| **运维** | `setup` `doctor` `env` `stack` `test`             | 维护这个仓库本身           |
+
+**能做什么以 `bazi help --json` 为准**，这里不重复命令清单——重复的清单一定会腐化。
+这份文档只讲 `--help` 讲不了的：算法侧的语义边界、顺序、坑。
 
 带 `--json` 跑。stdout 保证只有一个 JSON 文档，进度和子进程噪音全在 stderr。
 
@@ -14,162 +24,265 @@ description: bazi-master 仓库的操作入口。当需要在这个项目里准�
 
 不要去读人类可读的错误文本猜意图，看退出码：
 
-| 码  | 含义                                       | 你该做什么                            |
-| --- | ------------------------------------------ | ------------------------------------- |
-| 0   | 成功                                       | 继续                                  |
-| 1   | 命令跑通了但结果失败（测试挂了、校验没过） | 去看结果本身，不是修环境              |
-| 2   | 用法错                                     | 读 `--help`，别瞎试参数               |
-| 3   | 环境未就绪                                 | 照 `next` 字段修，修完原样重试        |
-| 4   | 远端拒绝                                   | 改请求内容，不是改环境                |
-| 5   | 瞬时失败                                   | 原样重试                              |
-| 7   | 命中安全边界                               | **停下来问人。见下面「关于 exit 7」** |
+| 码  | 含义                                         | 你该做什么                     |
+| --- | -------------------------------------------- | ------------------------------ |
+| 0   | 成功                                         | 继续                           |
+| 1   | 命令跑通了但结果失败（测试挂了、引擎内部错） | 去看结果本身，不是修环境       |
+| 2   | 用法错                                       | 读 `--help`，别瞎试参数        |
+| 3   | 环境未就绪                                   | 照 `next` 字段修，修完原样重试 |
+| 4   | 引擎拒绝了这个请求                           | 改请求内容，不是改环境         |
+| 5   | 瞬时失败                                     | 原样重试                       |
+| 7   | 命中安全边界                                 | **停下来问人，不要自己绕过**   |
 
 失败的 JSON 里 `next` 一定是一条可以直接复制执行的命令。优先照它做。
 
-## 关于 exit 7：不要自动绕过
+调用能力命令时，HTTP 语义已经替你翻译成退出码了，**不需要自己判断状态码**：
 
-破坏性命令（`db reset` / `db restore`）在没有 `--yes` 时会返回 7。**不要自己补一个 `--yes` 重跑**——
-那等于这道闸从来没存在过。
+| 引擎那边发生了什么 | 你拿到 | 意味着                                         |
+| ------------------ | ------ | ---------------------------------------------- |
+| 连不上             | 3      | 引擎没起，`bazi stack up`                      |
+| 503                | 3      | 引擎在跑但没就绪，看 `bazi stack status`       |
+| 400 / 422          | 4      | 参数没过服务端校验，改参数                     |
+| 429                | 5      | 限流或 AI 并发闸，等几秒原样重试，别动参数     |
+| 500                | 1      | 请求没问题，引擎内部炸了，看 `stack logs`      |
+| 404                | 1      | `code: endpoint_missing`，**不是你参数写错了** |
 
-拿到 exit 7 的正确流程是：
+最后一条特别容易误判：404 说明 CLI 和引擎版本对不上（或该能力已下线），
+**再怎么改参数都不会好**。看到 `endpoint_missing` 就去重启/升级引擎，不要在参数上打转。
+
+---
+
+# 算法语义：这一节的坑，错了不会报错
+
+下面每一条都不会让命令失败。命令照样退 0，照样返回一张结构完整的盘——只是那张盘
+不是你以为的那张。这是这份文档存在的主要理由。
+
+## 四柱只吃到「小时」这一粒度，分钟被丢掉
+
+排盘走 `Solar.fromYmdHms(y, m, d, hour, 0, 0)`，**分钟位硬编码为 0**。实测：
 
 ```
-./bazi db reset --dry-run --json    # 安全：只说明会动哪个库，不执行，不需要 --yes
+1990-05-20 14:00 -> 庚午 辛巳 乙酉 癸未
+1990-05-20 14:30 -> 庚午 辛巳 乙酉 癸未
+1990-05-20 14:59 -> 庚午 辛巳 乙酉 癸未
 ```
 
-把 dry-run 的结论告诉用户，等一个明确的"是"，然后才加 `--yes`。
+上面那组例子是**不给出生地**时的情况：没有地点就没有真太阳时校正，四柱按钟表小时排，
+分钟只影响 `birthIso`。一旦给了 `--location`，分钟会通过真太阳时反过来影响时柱，见下节。
 
-`--dry-run` 只能越过"确认"这一道闸。另外两道它一样拦：`NODE_ENV=production` 直接硬拒绝，
-非本地 `DATABASE_URL` 必须显式 `--allow-remote`。加什么参数都绕不过——那是代码里的边界，不是约定。
+## 真太阳时会改写时柱
 
-## --dry-run：动手之前先问它
+给了 `--location` 和时区之后，响应里会出现：
 
-几乎所有会改东西的命令都支持 `--dry-run`：`setup` / `db reset` / `db restore` / `db backup` /
-`db migrate` / `env init` / `env set` / `stack up` / `stack down` / `stack restart` / `test` /
-`verify` / `doctor --fix`。它打印"会做什么"然后返回 0，不执行。
+```json
+"trueSolarTime": { "applied": true, "correctionMinutes": -14.37, ... }
+```
 
-它是全局标志，`bazi help --json` 的 `tree.globalFlags` 里能查到（`--json` / `--quiet` /
-`--dry-run` / `--yes` / `--help` 都在那里，不在每条命令自己的 `flags` 里）。
+`applied: true` 意味着**这张盘用的就是校正后的时刻**。实际排盘所用的时刻在
+`chartTime.used`，原始钟表时间保留在 `chartTime.trueSolarTime.clockTime`，
+两者可以直接对照。
+
+校正量不小：北京（116.4°E）相对东八区标准经线约 −14 分钟，叠加均时差可到 ±30 分钟；
+新疆一带用北京时间，回拨能超过两小时。**一个 15:05 出生在北京的人，真太阳时是 14:51，
+跨过申时/未时边界，时柱与钟表时间那张盘不同** —— 这正是应有的行为。
+
+要按钟表时间排盘（比如复现历史结果），传 `trueSolarTime: false` 显式关掉。
+
+`applied` 为真需要**两个条件同时满足**：地名能解析出经度，且时区能解析出偏移。
+只给 `--location` 不给 `--timezone`，多半静默不校正 —— 此时得到的是钟表时间那张盘，
+两张盘可能差一柱，排查结果不符预期时先看 `chartTime.used` 到底用了几点。
+
+## 地名表只有 33 个城市，认不出就静默跳过
+
+`--location` 走的是硬编码表（`solarTime.service.js` 的 `KNOWN_LOCATIONS`），
+只有北上广深港台、东京首尔新加坡、伦敦巴黎纽约等 33 个。**表里没有的地名不报错，
+直接不做校正**——比如 `--location Hangzhou`，响应里就是 `applied: false`，
+其余一切正常。
+
+绕开这张表的方法是**直接传坐标**，这条路径永远可靠：
+
+```
+./bazi calc bazi --birth 1990-05-20T14:30 --gender male \
+  --location "30.27,120.15" --timezone Asia/Shanghai --json
+```
+
+匹配还带子串兜底（`key.includes(knownKey)`），所以 `"West London"` 能命中 `london`。
+但这也意味着含有城市名的长地址可能命中意料之外的条目，且命中哪个**取决于表的插入顺序**。
+拿不准就用坐标。
+
+## 节气交接当天，小时直接决定年柱和月柱
+
+年柱按**立春**换，不按元旦；月柱按节气换，不按农历月。而且精确到时刻。
+2024 年立春在 2/4 16:27，实测：
+
+```
+2024-02-04 10:00 -> 癸卯 乙丑 ...   ← 还是上一年、上一月
+2024-02-04 17:00 -> 甲辰 丙寅 ...   ← 年、月柱同时翻篇
+```
+
+**同一天，差 7 小时，年月柱全变。** 所以节气交接日附近，`--birth` 的小时位
+绝不能凑整或猜。同理：
+
+```
+2024-01-15 -> 癸卯年     2024-03-15 -> 甲辰年
+```
+
+一月出生的人年柱属于上一个干支年，这不是 bug。
+
+## 晚子时：23 点这一小时，日柱和时柱分属不同的日
+
+lunar-javascript 采用「晚子时不换日」：
+
+```
+5/20 22:00 -> 日柱 乙酉  时柱 丁亥
+5/20 23:00 -> 日柱 乙酉  时柱 戊子   ← 日柱还是 20 日，时柱已经是子时
+5/21 00:00 -> 日柱 丙戌  时柱 戊子   ← 日柱翻篇
+```
+
+注意 5/20 23:00 那行：日柱是乙酉（乙日），但时柱是**戊子**——戊子是丙日的子时。
+也就是说这一小时里，**日柱按当日算，时柱按次日的日干推**。这是晚子时流派的标准处理，
+不是错误。
+
+但要知道：**另一个流派（子正换日）会给出完全不同的日柱**，而这里没有开关可切。
+用户如果按早子时流派预期结果，你们对不上，原因在这里。
+
+## 闰月：本项目按「归本月」算
+
+lunar-javascript 用**负数月份**表示闰月（闰二月 = `-2`）：
+
+```
+2023-03-05 -> getMonth() =  2   （二月）
+2023-03-25 -> getMonth() = -2   （闰二月）
+2023-04-25 -> getMonth() =  3   （三月）
+```
+
+**选定流派：闰月归本月**——闰二月与二月落同一个月支。所以 2023 年闰二月初四的盘，
+和二月初四的盘，命宫身宫完全一致。用户如果按「闰月后半月归下月」那一派预期结果，
+对不上的原因在这里。
+
+响应里 `lunar.month` 给的是**正数**（闰二月是 `2` 不是 `-2`），闰月与否看 `lunar.isLeap`。
+两个字段要合起来读才能还原出「闰二月」。
+
+八字完全不受影响——它走节气，不走农历月。
+
+> 这里以前有两个静默 bug（负数月份直接进索引导致月支错位、`isLeap` 恒为 false），
+> 已修复，`backend/test/ziwei_leap_month.test.js` 守着。要换流派就改
+> `ziwei.service.js` 里 `Math.abs(rawLunarMonth)` 那行，并同步改那个测试的断言。
+
+## 缓存键必须覆盖全部排盘输入
+
+`buildBaziCacheKey` 以 `年-月-日-时-性别` 为基础，另把**会影响排盘的因子**以后缀形式
+追加：出生地、分钟、时区、以及 `trueSolarTime: false` 开关。真太阳时接进排盘之后
+这些因子就是排盘输入的一部分，不进键会让同一生辰不同出生地互相命中对方的盘。
+
+无地点无时区的请求键形如 `1990-5-12-10-male`，与历史格式一致；带地点的会变成
+`1990-5-12-10-male|loc:beijing|tzn:Asia/Shanghai`。
+
+**以后再往排盘输入里加任何因子（流派开关、节气口径等），必须同步加进这个键。**
+
+`x-bazi-cache` 响应头会告诉你这次是 `hit` 还是 `miss`，排查结果不符预期时先看它。
+
+## calc 和 cast 的区别是「可不可复现」
+
+- `calc`（八字/紫微/合盘/星座）：同样输入必然同样输出，可以拿来做回归测试和结果比对。
+- `cast`（塔罗/易经）：**同样输入不保证同样输出**。塔罗每次重新随机；
+  `cast iching --method time` 由调用时刻决定卦象。
+
+不要拿 `cast` 的结果做幂等重试或断言。要可复现的卦，用 `cast iching --numbers 7,8,9`
+——给定数字起卦是确定性的。
+
+---
+
+# 操作
 
 ## 起手式
 
 ```
-./bazi doctor --json        # 退 3 就照每一项的 fix 修，或者 ./bazi doctor --fix 让它自己修
-./bazi stack up --json      # 起 db -> api，幂等，已经在跑的会跳过
+./bazi doctor --json        # 退 3 就照每一项的 fix 修，或者 ./bazi doctor --fix
+./bazi stack up --json      # 起引擎，幂等，已经在跑的会跳过
 ./bazi stack status --json  # 任何时候先看这个再动手
 ```
 
-Agent 在动手改代码前，用 `./bazi stack status --require-ready --json` 做前置断言：未就绪直接退 3，
-比跑到一半发现服务没起要省事得多。
+Agent 在调用能力命令前，可以用 `./bazi stack status --require-ready --json` 做前置断言：
+未就绪直接退 3。不过能力命令自己也会在连不上时退 3 并给出 `next`，所以通常不必先探。
 
-## 依赖顺序（最容易踩的坑）
+## --dry-run：动手之前先问它
 
-**db → 迁移 → api**，中间那步最容易漏。
+会改东西的命令都支持 `--dry-run`，打印"会做什么"然后返回 0，不执行。
 
-迁移没跑时，后端进程起得来、端口也通，但 `/health` 会一直返回 503，日志里刷的是
-`The table public.User does not exist`。CLI 已经在启动 api 前替你查了迁移状态并直接报
-`bazi db migrate`，所以你正常不会撞上。但如果你绕过 CLI 手动 `node server.js`，就会撞上，
-而且现象非常像"后端坏了"。
+能力命令也支持，用途不同：它把**参数被解析成了什么**原样回显（尤其 `--birth` 拆成了
+哪年哪月哪日哪时哪分），一个请求都不会发出去。参数拿不准时先 dry-run 一次比较省事。
 
-改完 `prisma/schema.prisma` 的完整链路：
+它是全局标志，`bazi help --json` 的 `tree.globalFlags` 里能查到（`--json` / `--quiet` /
+`--dry-run` / `--yes` / `--help` 都在那里，不在每条命令自己的 `flags` 里）。
 
-```
-./bazi db migrate --new <名字>     # 只生成迁移文件，不应用，也不会触发交互式重置
-./bazi db migrate                  # 应用
-./bazi db generate                 # 重新生成 Prisma Client
-./bazi stack restart --only api    # 不重启的话后端还在用旧 Client
-```
+## 关于 exit 7：不要自动绕过
 
-## 两套数据库，别搞混
+破坏性命令在没有 `--yes` 时会返回 7。**不要自己补一个 `--yes` 重跑**——那等于这道闸
+从来没存在过。正确流程是先 `--dry-run` 看清楚会动什么，把结论告诉用户，
+拿到明确的"是"之后再加 `--yes`。
 
-| 谁                    | 库                         | 数据目录        |
-| --------------------- | -------------------------- | --------------- |
-| `./bazi stack` 开发栈 | `.env` 里的 `DATABASE_URL` | `.tmp/cli/pg/`  |
-| `./bazi test` 测试    | 脚本自建的临时库           | `.tmp/pg-test/` |
+`--dry-run` 只能越过"确认"这一道闸。`NODE_ENV=production` 是硬拒绝，加什么参数都绕不过
+——那是代码里的边界，不是约定。
 
-`./bazi test` **刻意不把 `.env` 注入子进程**。因为 `backend/scripts/run-tests-with-db.mjs` 的逻辑是
-"`DATABASE_URL` 没设就自己起一个临时库"——一旦把开发库的 URL 灌进去，测试会直接在开发库上执行迁移和重置。
-那是数据事故。`--use-dev-db` 能强行打开这个行为，除非用户明确要求，否则不要用。
+哪些命令是破坏性的不要靠命令名猜，看 `help --json` 里的 `destructive` 标记。
 
 ## 测试：skipped 不等于 passed
 
-`bazi test` 的目标未就绪时会记 `skipped` 并**照样返回 0**。未就绪有两种：依赖没装，或者
-对应的 npm script 不存在。这是给本地开发用的，但它意味着一次"什么都没跑"也会报成功：
+`bazi test` 的目标未就绪时会记 `skipped` 并**照样返回 0**。这意味着一次"什么都没跑"
+也会报成功：
 
 ```
 summary: {"passed": 1, "failed": 0, "skipped": 2}   # exit 0，但 lint/backend 根本没跑
 ```
 
-**永远读 `summary.skipped`，别只看退出码。** 要让"什么都没跑"变成硬失败（CI、或者你需要一次
-可信的全量），加 `--fail-on-skip`：有跳过就退 3（环境未就绪，去装依赖，不是去查代码）。
+**永远读 `summary.skipped`，别只看退出码。** 要让"什么都没跑"变成硬失败（CI、或者你需要
+一次可信的全量），加 `--fail-on-skip`：有跳过就退 3。
 
 ```
 ./bazi test --fail-on-skip --json
 ```
 
-三个目标是 `cli` / `lint` / `backend`，不带参数就全跑。`cli` 排在最前面是它自己的契约测试
-（退出码语义、`--json` 单文档、安全闸不可绕），两秒跑完：它挂了说明你正在用的这个工具本身
-坏了，后面两个目标的结论都不再可信。
+`cli` 目标排在最前面是它自己的契约测试（退出码语义、`--json` 单文档、能力命令的
+HTTP→退出码映射、安全闸不可绕），两秒跑完：它挂了说明你正在用的这个工具本身坏了，
+后面目标的结论都不再可信。
 
 ## foreign：CLI 不碰不是自己起的进程
 
-`stack status` 里每个组件都有 `managedBy`，**api 和 db 的取值不是一套**：
+`stack status` 里引擎带 `managedBy`，取值：`bazi`（CLI 起的，能停）/
+`foreign`（端口被别的进程占了，CLI 不碰）/ `null`（没在跑）。
 
-| 组件 | 取值                                   | 含义                         |
-| ---- | -------------------------------------- | ---------------------------- |
-| api  | `bazi`                                 | CLI 起的，能停               |
-|      | `foreign`                              | 端口被别的进程占了，CLI 不碰 |
-|      | `null`                                 | 没在跑                       |
-| db   | `pg_ctl` / `docker-compose` / `remote` | CLI 起的（值就是启动方式）   |
-|      | `external`                             | 库是活的，但不是 CLI 起的    |
-|      | `null`                                 | 连不上                       |
+看到 `foreign` 时 CLI 会拒绝接管，也拒绝 kill。这是故意的：按端口去杀进程会误伤用户
+自己开的终端、另一个 worktree、或者同事的服务。
 
-所以**不要用 `managedBy === 'bazi'` 判断归属**——db 永远不会是 `bazi`。要判断"这个组件是不是我们管的"，
-看它是不是 `foreign` / `external` / `null` 更可靠。
+正确处理：告诉用户 `4000 端口上有不是 bazi 起的进程`，让他们决定。
+**不要自己去 `kill $(lsof -ti:4000)`。**
 
-看到 `foreign` 时 CLI 会拒绝接管，也拒绝 kill。这是故意的：按端口去杀进程会误伤用户自己开的终端、
-另一个 worktree、或者同事的服务。
-
-正确处理：告诉用户 `4000 端口上有不是 bazi 起的进程`，让他们决定。不要自己去 `kill $(lsof -ti:4000)`。
-
-推论：**不要绕过 CLI 手动起服务**（`npm run dev`、`node server.js`）。那样起的进程 CLI 管不到，
+推论：**不要绕过 CLI 手动起服务**（`node server.js`）。那样起的进程 CLI 管不到，
 后面 `stack down` 停不掉，`stack status` 只会显示 foreign。
 
-## verify：跑之前栈必须就绪
+## 把 CLI 指向别的引擎
 
-`backend/scripts/verify-*.mjs` 直连数据库做真实的删除/级联校验，它们**自己不会把栈拉起来**。
-栈没起时的原始表现是一屏连接超时的无关报错，很容易被误读成"功能坏了"。
+`BAZI_API_URL` 环境变量可以让能力命令打到任意实例（容器、staging、同事的机器），
+不改任何代码：
 
-CLI 已经加了前置断言（退 3，`next: bazi stack up`），所以走 `./bazi verify` 就不会误判。
-清单是扫目录来的，新增一个 `backend/scripts/verify-xxx.mjs` 立刻可用，不需要改 CLI 也不需要
-改这份文档。
+```
+BAZI_API_URL=https://engine.example.com ./bazi calc bazi --birth ... --json
+```
 
-**校验脚本不要自己写建表 DDL**。`prisma/schema.prisma` 的 provider 是 postgresql，而手写的
-`CREATE TABLE` 很容易顺手写成 SQLite 方言（`AUTOINCREMENT` / `DATETIME` / `INSERT OR IGNORE`），
-一跑就是 `42601 语法错误`。另外 PostgreSQL 里不加引号的 `BaziRecordTrash` 会被折成小写而找不到表——
-这种错误常常被 `try/catch` 吞成一条 warn，看起来"跑过了"，其实什么都没删。
-
-正确做法：建表复用 `backend/services/schema.service.js` 的 `ensureSoftDeleteTables` /
-`ensureBaziRecordTrashTable`（它们已经按 provider 分好方言），增删查一律走 Prisma Client
-（`prisma.baziRecordTrash.upsert/count/deleteMany`）而不是 `$queryRaw`。绕不开裸 SQL 时，
-表名和驼峰列名必须加双引号。
+没配就用 `.env` 的 `BACKEND_BASE_URL`，再没有就是本地 `PORT`（默认 4000）。
+注意 `stack` 那组命令管的始终是本地进程，跟这个变量无关。
 
 ## 排查
 
 ```
-./bazi stack logs api --tail 60     # 后端日志（pino JSON）
-./bazi stack logs db                # PostgreSQL 日志
+./bazi stack logs --tail 60         # 引擎日志（pino JSON）
 ```
 
 启动失败时 CLI 会把日志压成一条诊断再返回，不会把几十 KB 原始日志塞进 `hint`。
-认得出的失败特征（缺表、连不上库、端口占用、必填环境变量缺失）会直接翻译成下一步命令。
+认得出的失败特征（端口占用、必填环境变量缺失）会直接翻译成下一步命令。
 
-运行态都在 `.tmp/cli/` 下（pidfile、日志、备份、pg 数据目录），已被 `.gitignore` 覆盖，可以整个删掉重来。
-
-## 端口
-
-api `4000`（`.env` 的 `PORT`）、db `5433`（本地 pg_ctl）或 `5432`（docker compose）。
-装了 Docker 时 `env init` 默认给 5432 走 compose，没装就给 5433 走 pg_ctl。
+运行态都在 `.tmp/cli/` 下（pidfile、日志），已被 `.gitignore` 覆盖，可以整个删掉重来。
 
 ## 要改 CLI 本身的时候
 
@@ -177,15 +290,28 @@ api `4000`（`.env` 的 `PORT`）、db `5433`（本地 pg_ctl）或 `5432`（doc
 
 下面这些不是风格建议，是测试会当场拦下来的硬约束：
 
-- **失败一律抛 `CliError`**，带 `exit` / `hint` / `next`。`next` 必须是一条真能跑的 `bazi` 命令——
-  测试会拿 `help --json` 的命令树去验证它解析得出来。
-- **`--json` 模式下 stdout 只能有一个 JSON 文档。** 想给人打东西用 `out.render`（json 模式自动跳过），
-  想说进度用 `out.step` / `out.warn`（走 stderr，同时进 `payload.notes`）。子进程一律用 `out.childStdio`。
+- **失败一律抛 `CliError`**，带 `exit` / `hint` / `next`。`next` 必须是一条真能跑的
+  `bazi` 命令——测试会拿 `help --json` 的命令树去验证它解析得出来。
+- **`--json` 模式下 stdout 只能有一个 JSON 文档。** 想给人打东西用 `out.render`
+  （json 模式自动跳过），想说进度用 `out.step` / `out.warn`（走 stderr，同时进
+  `payload.notes`）。子进程一律用 `out.childStdio`。
 - **命令自己的 flag 不能和全局 flag 重名**，否则会被 `flagSpecFor` 的查找顺序静默吃掉。
 - **`examples` 里的命令和选项必须真实存在**，测试会逐条解析。
-- **破坏性命令要 `destructive: true`**，并且过 `assertDestructiveAllowed`。Agent 靠这个标记
-  在动手前识别"这条得先问人"。
+- **破坏性命令要 `destructive: true`**，并且过 `assertDestructiveAllowed`。
 - json 和文本两种模式的**退出码必须一致**。
 
 新增一条命令：在 `src/commands/` 下写好，挂进 `src/main.mjs` 的 `rootCommand.commands`。
-`help --json` 会自动带上它，SKILL.md 和 README 都不需要改——这是刻意的，抄命令清单一定会腐化。
+`help --json` 会自动带上它，这份文档和 README 都不需要改——这是刻意的，抄命令清单一定会腐化。
+
+新增**能力**命令时额外注意两点：
+
+- 走 `core/apiClient.mjs` 的 `callApi`，不要自己 `fetch`。那里集中着 HTTP→退出码的映射，
+  绕过它就等于这条命令没有契约。
+- 请求必须带 `connection: close`。`bin/bazi.mjs` 靠自然退出（不调 `process.exit`，
+  否则可能截断没 flush 的 stdout），而 Node 的 fetch 默认把连接留在 keep-alive 池里，
+  那是个活跃 handle，会让每条命令算完之后**凭空多挂几秒**才退出。
+
+写 CLI 的测试时还有一个坑：`test/helpers.mjs` 的 `bazi()` 用 `spawnSync`，
+它会把测试进程的 event loop 整个堵死。如果你的测试要在同进程里起一个 stub HTTP 服务，
+子进程的请求永远等不到应答，所有用例都会以"超时"收场，把真正要测的东西全盖掉。
+参照 `test/api_client.test.mjs` 里的异步 `runBazi`。
