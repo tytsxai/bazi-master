@@ -16,6 +16,7 @@ import {
   NUMBER_ELEMENTS,
 } from '../constants/bazhai.js';
 import { getElementRelation } from './bazi.service.js';
+import { resolveLiChun, resolveLiChunYear } from './jieqi.service.js';
 
 const linesKey = (lines) => lines.join('');
 
@@ -125,8 +126,20 @@ export const buildYounianMap = (trigramCn) => {
 };
 
 /** 八宅盘：命卦 + 八方吉凶。 */
-export const buildBazhaiChart = ({ birthYear, birthMonth, birthDay, gender }) => {
-  const life = resolveLifeTrigram(birthYear, gender, { birthMonth, birthDay });
+export const buildBazhaiChart = ({
+  birthYear,
+  birthMonth,
+  birthDay,
+  birthHour,
+  birthMinute,
+  gender,
+}) => {
+  const life = resolveLifeTrigram(birthYear, gender, {
+    birthMonth,
+    birthDay,
+    birthHour,
+    birthMinute,
+  });
   if (!life) return null;
   const younian = buildYounianMap(life.cn);
   return {

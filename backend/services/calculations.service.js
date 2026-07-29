@@ -459,7 +459,11 @@ export const calculateDailyPillars = (date = new Date()) => {
   const dayPillar = buildPillar(eightChar.getDayGan(), eightChar.getDayZhi());
 
   return {
-    date: date.toISOString().split('T')[0],
+    // 干支按 date 的本地年月日算出，date 字段就必须同样用本地日期。
+    // 走 toISOString 会在 UTC 之东的时区把日期整体退一天，与干支自相矛盾。
+    date: `${solar.getYear()}-${String(solar.getMonth()).padStart(2, '0')}-${String(
+      solar.getDay()
+    ).padStart(2, '0')}`,
     stem: dayPillar.stem,
     branch: dayPillar.branch,
     elementStem: dayPillar.elementStem,
