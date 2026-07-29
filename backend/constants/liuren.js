@@ -96,29 +96,37 @@ export const NOBLE_BY_DAY_STEM = {
 /** 昼占的时支范围（卯至申）。 */
 export const DAY_TIME_BRANCHES = ['卯', '辰', '巳', '午', '未', '申'];
 
-/** 课体名目。 */
+/**
+ * 课体名目（九宗门）。
+ *
+ * 取传按九宗门次第逐层排除：贼克 → 比用 → 涉害 → 遥克 → 昴星 → 别责 → 八专，
+ * 另有伏吟、返吟两种因天地盘特殊而先行判定的课式。
+ *
+ * 口径声明：本模块依通行的《六壬大全》一系取法。有分歧处如下，换派只改 liuren.service：
+ * - 涉害深浅：以天盘支自所乘地盘位**逆行**归本家，沿途地盘之支克它者计数，多者为深
+ * - 涉害深浅相等：先取孟神，次取仲神，仍等则阳日取干上神、阴日取支上神（见机、察微）
+ * - 伏吟中末传取刑，遇自刑则改取支上神（阳日）或干上神（阴日）
+ * - 返吟无克取驿马为初传
+ */
 export const COURSE_TYPES = {
   yuanshou: { key: 'yuanshou', cn: '元首课', rule: '贼克法：四课独一上克下' },
   zhongshen: { key: 'zhongshen', cn: '重审课', rule: '贼克法：四课独一下贼上' },
   zhiyi: { key: 'zhiyi', cn: '知一课', rule: '比用法：克贼有二，取与日干同阴阳者' },
+  shehai: { key: 'shehai', cn: '涉害课', rule: '涉害法：比用不决，取涉害深者' },
+  jianji: { key: 'jianji', cn: '见机课', rule: '涉害深浅相等，取孟神' },
+  chawei: { key: 'chawei', cn: '察微课', rule: '涉害深浅相等且无孟，取仲神' },
   haoshi: { key: 'haoshi', cn: '蒿矢课', rule: '遥克法：四课无克，上神遥克日干' },
   tanshe: { key: 'tanshe', cn: '弹射课', rule: '遥克法：四课无克，日干遥克上神' },
+  hushi: { key: 'hushi', cn: '虎视课', rule: '昴星法阳日：取地盘酉上之神' },
+  dongshe: { key: 'dongshe', cn: '冬蛇掩目课', rule: '昴星法阴日：取天盘酉下之神' },
+  bieze: { key: 'bieze', cn: '别责课', rule: '四课不备，阳日取干合寄宫上神、阴日取支三合前一位' },
+  bazhuan: { key: 'bazhuan', cn: '八专课', rule: '干支同位，阳日顺数三位、阴日逆数三位' },
+  ziren: { key: 'ziren', cn: '自任课', rule: '伏吟无克阳日：取干上神' },
+  zixin: { key: 'zixin', cn: '自信课', rule: '伏吟无克阴日：取支上神' },
+  fuyinKe: { key: 'fuyinKe', cn: '伏吟课', rule: '伏吟有克：依贼克法取初传，中末传递取其刑' },
+  wuqin: { key: 'wuqin', cn: '无亲课', rule: '返吟无克：取驿马为初传' },
+  fanyinKe: { key: 'fanyinKe', cn: '返吟课', rule: '返吟有克：依贼克法' },
 };
 
-/**
- * 未实现的课体。
- *
- * 这几门的细则（涉害深浅如何比较、昴星阳日阴日各取何位、伏吟的递刑取法）各家表述不一，
- * 且公开可查的资料多为概述。与其凭印象给出一组看着像模像样的三传，不如明确标记不支持 ——
- * 六壬的三传一错，后面的断语全部失去意义。
- *
- * 补齐需要一本可逐条核对的底本（如《六壬大全》《大六壬指南》）。
- */
-export const UNSUPPORTED_COURSE_TYPES = {
-  shehai: { key: 'shehai', cn: '涉害课', reason: '涉害深浅的比较口径需底本核定' },
-  maoxing: { key: 'maoxing', cn: '昴星课', reason: '阳日阴日取位规则需底本核定' },
-  bieze: { key: 'bieze', cn: '别责课', reason: '四课不全时的取法需底本核定' },
-  bazhuan: { key: 'bazhuan', cn: '八专课', reason: '干支同位时的取法需底本核定' },
-  fuyin: { key: 'fuyin', cn: '伏吟课', reason: '递刑取传规则需底本核定' },
-  fanyin: { key: 'fanyin', cn: '返吟课', reason: '无克时取驿马的细则需底本核定' },
-};
+/** 八专日：日干寄宫与日支同位。 */
+export const BAZHUAN_DAYS = ['甲寅', '乙卯', '丁未', '戊戌', '己未', '庚申', '辛酉', '癸丑'];

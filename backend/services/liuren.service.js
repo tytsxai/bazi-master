@@ -11,7 +11,17 @@
 
 import { Solar } from 'lunar-javascript';
 
-import { BRANCHES, STEMS } from '../constants/ganzhi.js';
+import {
+  BRANCHES,
+  STEMS,
+  BRANCH_PUNISH_TARGET,
+  SELF_PUNISH_BRANCHES,
+  MENG_BRANCHES,
+  ZHONG_BRANCHES,
+  YIMA_BY_GROUP,
+  STEM_COMBINATIONS,
+  BRANCH_TRIPLE_COMBINATIONS,
+} from '../constants/ganzhi.js';
 import { BRANCHES_MAP, STEMS_MAP } from '../constants/stems.js';
 import { getElementRelation } from './bazi.service.js';
 import { getXunkong } from './ganzhi.service.js';
@@ -24,7 +34,7 @@ import {
   NOBLE_BY_DAY_STEM,
   DAY_TIME_BRANCHES,
   COURSE_TYPES,
-  UNSUPPORTED_COURSE_TYPES,
+  BAZHUAN_DAYS,
 } from '../constants/liuren.js';
 
 const normalize12 = (value) => ((value % 12) + 12) % 12;
@@ -122,55 +132,191 @@ const isSamePolarity = (branch, dayStem) => {
  *
  * 中传取初传之上神，末传取中传之上神 —— 这一条在已实现的几门里是共通的。
  */
-export const deriveThreeTransmissions = (courses, heavenPlate, dayStem, options = {}) => {
-  const { isFuyin = false, isFanyin = false } = options;
+/**
+ * 涉害深浅：天盘之支自其所乘的地盘位**逆行**归返本家，沿途所经地盘诸支中，
+ * 克它者的个数即涉害之深。数多者受伤重，取为初传。
+ */
+export const calculateShehaiDepth = (heavenBranch, heavenPlate) => {
+  const ridingIdx = heavenPlate.indexOf(heavenBranch);
+  const homeIdx = branchIndex(heavenBranch);
+  if (ridingIdx === -1 || homeIdx === -1) return 0;
 
-  if (isFuyin) {
-    return { supported: false, ...UNSUPPORTED_COURSE_TYPES.fuyin, detected: 'fuyin' };
+  let depth = 0;
+  let cursor = ridingIdx;
+  // 逆行归家，途中每遇一个克我的地盘之支便计一分
+  while (cursor !== homeIdx) {
+    const earthBranch = BRANCHES[cursor];
+    if (getElementRelation(elementOf(earthBranch), elementOf(heavenBranch)) === 'Controls') {
+      depth += 1;
+    }
+    cursor = normalize12(cursor - 1);
   }
-  if (isFanyin) {
-    return { supported: false, ...UNSUPPORTED_COURSE_TYPES.fanyin, detected: 'fanyin' };
+  return depth;
+};
+
+const isYangDay = (dayStem) => STEMS_MAP[dayStem]?.polarity === '+';
+
+/** 干上神（一课上神）与支上神（三课上神）。 */
+const stemUpper = (courses) => courses[0].upper;
+const branchUpper = (courses) => courses[2].upper;
+
+/**
+ * 涉害法及其两个分支：深浅相等时先取孟神（见机），无孟取仲神（察微），
+ * 仍不能决则阳日取干上神、阴日取支上神。
+ */
+const resolveShehai = (candidates, heavenPlate, dayStem, courses) => {
+  const scored = candidates.map((branch) => ({
+    branch,
+    depth: calculateShehaiDepth(branch, heavenPlate),
+  }));
+  const maxDepth = Math.max(...scored.map((s) => s.depth));
+  const deepest = scored.filter((s) => s.depth === maxDepth);
+  if (deepest.length === 1) {
+    return { initial: deepest[0].branch, courseType: COURSE_TYPES.shehai, depths: scored };
   }
 
-  const build = (initial, courseType) => {
-    const middle = above(heavenPlate, initial);
-    const last = above(heavenPlate, middle);
-    return {
-      supported: true,
-      courseType,
-      initial: { branch: initial, element: elementOf(initial) },
-      middle: { branch: middle, element: elementOf(middle) },
-      last: { branch: last, element: elementOf(last) },
-    };
+  const meng = deepest.filter((s) => MENG_BRANCHES.includes(s.branch));
+  if (meng.length === 1) {
+    return { initial: meng[0].branch, courseType: COURSE_TYPES.jianji, depths: scored };
+  }
+  const zhong = deepest.filter((s) => ZHONG_BRANCHES.includes(s.branch));
+  if (zhong.length === 1) {
+    return { initial: zhong[0].branch, courseType: COURSE_TYPES.chawei, depths: scored };
+  }
+
+  // 孟仲皆不能决：阳日取干上神，阴日取支上神
+  const fallback = isYangDay(dayStem) ? stemUpper(courses) : branchUpper(courses);
+  return {
+    initial: fallback,
+    courseType: isYangDay(dayStem) ? COURSE_TYPES.jianji : COURSE_TYPES.chawei,
+    depths: scored,
   };
+};
+
+/** 伏吟、返吟以外的常规课，中末传皆递取上神。 */
+const buildByUpper = (initial, heavenPlate, courseType, extra = {}) => {
+  const middle = above(heavenPlate, initial);
+  const last = above(heavenPlate, middle);
+  return {
+    supported: true,
+    courseType,
+    initial: { branch: initial, element: elementOf(initial) },
+    middle: { branch: middle, element: elementOf(middle) },
+    last: { branch: last, element: elementOf(last) },
+    ...extra,
+  };
+};
+
+/** 显式指定三传（昴星、别责、八专、伏吟、返吟用）。 */
+const buildExplicit = (initial, middle, last, courseType, extra = {}) => ({
+  supported: true,
+  courseType,
+  initial: { branch: initial, element: elementOf(initial) },
+  middle: { branch: middle, element: elementOf(middle) },
+  last: { branch: last, element: elementOf(last) },
+  ...extra,
+});
+
+/**
+ * 伏吟：天地盘重合。有克依贼克法定初传，无克则阳日取干上神（自任）、阴日取支上神（自信）。
+ * 中末传递取其刑；遇自刑之支则改取支上神（阳日）或干上神（阴日）。
+ */
+const resolveFuyin = (courses, dayStem) => {
+  const zei = courses.filter((c) => classifyCourse(c) === 'zei');
+  const ke = courses.filter((c) => classifyCourse(c) === 'ke');
+  const primary = zei.length ? zei : ke;
+  const yang = isYangDay(dayStem);
+
+  let initial;
+  let courseType;
+  if (primary.length) {
+    initial = primary[0].upper;
+    courseType = COURSE_TYPES.fuyinKe;
+  } else {
+    initial = yang ? stemUpper(courses) : branchUpper(courses);
+    courseType = yang ? COURSE_TYPES.ziren : COURSE_TYPES.zixin;
+  }
+
+  // 中传取初传之刑；初传自刑则改取另一上神
+  let middle = BRANCH_PUNISH_TARGET[initial];
+  if (SELF_PUNISH_BRANCHES.includes(initial)) {
+    middle = yang ? branchUpper(courses) : stemUpper(courses);
+  }
+  // 末传取中传之刑；中传自刑则取其冲
+  let last = BRANCH_PUNISH_TARGET[middle];
+  if (SELF_PUNISH_BRANCHES.includes(middle)) {
+    last = BRANCHES[normalize12(branchIndex(middle) + 6)];
+  }
+
+  return buildExplicit(initial, middle, last, courseType, { note: '伏吟：中末传递取其刑' });
+};
+
+/**
+ * 返吟：天地盘全冲。有克依贼克法；无克为无亲课，取驿马为初传、支上神为中传、干上神为末传。
+ */
+const resolveFanyin = (courses, heavenPlate, dayStem, dayBranch) => {
+  const zei = courses.filter((c) => classifyCourse(c) === 'zei');
+  const ke = courses.filter((c) => classifyCourse(c) === 'ke');
+  const primary = zei.length ? zei : ke;
+
+  if (primary.length) {
+    const chosen =
+      primary.length === 1
+        ? primary[0].upper
+        : resolveShehai(
+            primary.map((c) => c.upper),
+            heavenPlate,
+            dayStem,
+            courses
+          ).initial;
+    return buildByUpper(chosen, heavenPlate, COURSE_TYPES.fanyinKe);
+  }
+
+  const yimaEntry = YIMA_BY_GROUP.find((g) => g.branches.includes(dayBranch));
+  const yima = yimaEntry ? yimaEntry.yima : branchUpper(courses);
+  return buildExplicit(yima, branchUpper(courses), stemUpper(courses), COURSE_TYPES.wuqin, {
+    note: '返吟无克，取驿马为初传',
+  });
+};
+
+/**
+ * 取三传，依九宗门次第。
+ *
+ * 伏吟返吟因天地盘特殊，先行判定；其余按
+ * 贼克 → 比用 → 涉害 → 遥克 → 昴星 → 别责 → 八专 逐层排除。
+ */
+export const deriveThreeTransmissions = (courses, heavenPlate, dayStem, options = {}) => {
+  const { isFuyin = false, isFanyin = false, dayBranch = null } = options;
+
+  if (isFuyin) return resolveFuyin(courses, dayStem);
+  if (isFanyin) return resolveFanyin(courses, heavenPlate, dayStem, dayBranch);
 
   const zei = courses.filter((c) => classifyCourse(c) === 'zei');
   const ke = courses.filter((c) => classifyCourse(c) === 'ke');
 
-  // 贼克法：先取下贼上，无贼则取上克下；各自独一者直接为初传
+  // 贼克法：先取下贼上，无贼则取上克下
   const primary = zei.length ? zei : ke;
   const typeWhenSingle = zei.length ? COURSE_TYPES.zhongshen : COURSE_TYPES.yuanshou;
 
   if (primary.length === 1) {
-    return build(primary[0].upper, typeWhenSingle);
+    return buildByUpper(primary[0].upper, heavenPlate, typeWhenSingle);
   }
 
   if (primary.length > 1) {
-    // 比用法：取与日干同阴阳者
+    // 比用法：取与日干同阴阳者；独一者用之
     const matched = primary.filter((c) => isSamePolarity(c.upper, dayStem));
     if (matched.length === 1) {
-      return build(matched[0].upper, COURSE_TYPES.zhiyi);
+      return buildByUpper(matched[0].upper, heavenPlate, COURSE_TYPES.zhiyi);
     }
-    // 俱比或俱不比，当用涉害法 —— 未实现
-    return {
-      supported: false,
-      ...UNSUPPORTED_COURSE_TYPES.shehai,
-      detected: 'shehai',
-      candidates: primary.map((c) => c.upper),
-    };
+    // 俱比或俱不比，用涉害法
+    const pool = (matched.length ? matched : primary).map((c) => c.upper);
+    const resolved = resolveShehai(pool, heavenPlate, dayStem, courses);
+    return buildByUpper(resolved.initial, heavenPlate, resolved.courseType, {
+      shehaiDepths: resolved.depths,
+    });
   }
 
-  // 四课无克，用遥克法：先取上神克日干（蒿矢），次取日干克上神（弹射）
+  // 遥克法：四课无克，先取上神遥克日干（蒿矢），次取日干遥克上神（弹射）
   const stemElement = STEMS_MAP[dayStem]?.element;
   const shooters = courses.filter(
     (c) => getElementRelation(stemElement, c.upperElement) === 'ControlledBy'
@@ -178,25 +324,74 @@ export const deriveThreeTransmissions = (courses, heavenPlate, dayStem, options 
   const targets = courses.filter(
     (c) => getElementRelation(stemElement, c.upperElement) === 'Controls'
   );
-
   const remote = shooters.length ? shooters : targets;
   const remoteType = shooters.length ? COURSE_TYPES.haoshi : COURSE_TYPES.tanshe;
+
   if (remote.length === 1) {
-    return build(remote[0].upper, remoteType);
+    return buildByUpper(remote[0].upper, heavenPlate, remoteType);
   }
   if (remote.length > 1) {
     const matched = remote.filter((c) => isSamePolarity(c.upper, dayStem));
-    if (matched.length === 1) return build(matched[0].upper, remoteType);
-    return {
-      supported: false,
-      ...UNSUPPORTED_COURSE_TYPES.shehai,
-      detected: 'shehai',
-      candidates: remote.map((c) => c.upper),
-    };
+    const chosen =
+      matched.length === 1
+        ? matched[0].upper
+        : resolveShehai(
+            remote.map((c) => c.upper),
+            heavenPlate,
+            dayStem,
+            courses
+          ).initial;
+    return buildByUpper(chosen, heavenPlate, remoteType);
   }
 
-  // 无克无遥克，当用昴星/别责/八专 —— 未实现
-  return { supported: false, ...UNSUPPORTED_COURSE_TYPES.maoxing, detected: 'maoxing' };
+  // 无克无遥克。四课不备用别责，干支同位用八专，四课俱全用昴星。
+  const distinctUppers = new Set(courses.map((c) => c.upper));
+  const dayGanzhi = `${dayStem}${options.dayBranch || ''}`;
+  const yang = isYangDay(dayStem);
+
+  if (BAZHUAN_DAYS.includes(dayGanzhi)) {
+    // 八专：阳日自干上神顺数三位，阴日自四课上神逆数三位（含本位计一）
+    const base = yang ? stemUpper(courses) : courses[3].upper;
+    const step = yang ? 2 : -2;
+    const initial = BRANCHES[normalize12(branchIndex(base) + step)];
+    return buildExplicit(initial, stemUpper(courses), stemUpper(courses), COURSE_TYPES.bazhuan, {
+      note: '八专：中末传皆取干上神',
+    });
+  }
+
+  if (distinctUppers.size < 4) {
+    // 别责：阳日取日干之合的寄宫上神，阴日取日支三合的前一位
+    let initial;
+    if (yang) {
+      const combo = STEM_COMBINATIONS.find(({ pair }) => pair.includes(dayStem));
+      const partner = combo ? combo.pair.find((s) => s !== dayStem) : null;
+      const lodging = partner ? STEM_LODGING[partner] : null;
+      initial = lodging ? above(heavenPlate, lodging) : stemUpper(courses);
+    } else {
+      const triple = BRANCH_TRIPLE_COMBINATIONS.find((t) => t.branches.includes(options.dayBranch));
+      if (triple) {
+        const idx = triple.branches.indexOf(options.dayBranch);
+        initial = triple.branches[(idx + 1) % 3];
+      } else {
+        initial = branchUpper(courses);
+      }
+    }
+    return buildExplicit(initial, stemUpper(courses), stemUpper(courses), COURSE_TYPES.bieze, {
+      note: '别责：中末传皆取干上神',
+    });
+  }
+
+  // 昴星：阳日取地盘酉上之神（虎视），阴日取天盘酉下之神（冬蛇掩目）
+  if (yang) {
+    const initial = above(heavenPlate, '酉');
+    return buildExplicit(initial, branchUpper(courses), stemUpper(courses), COURSE_TYPES.hushi, {
+      note: '昴星阳日：中传支上神、末传干上神',
+    });
+  }
+  const initial = BRANCHES[heavenPlate.indexOf('酉')];
+  return buildExplicit(initial, stemUpper(courses), branchUpper(courses), COURSE_TYPES.dongshe, {
+    note: '昴星阴日：中传干上神、末传支上神',
+  });
 };
 
 /**
@@ -265,6 +460,7 @@ export const castLiurenChart = ({ year, month, day, hour }) => {
   const transmissions = deriveThreeTransmissions(courses, heavenPlate, dayStem, {
     isFuyin,
     isFanyin,
+    dayBranch,
   });
   const generals = buildTwelveGenerals(dayStem, hourBranch, heavenPlate);
 

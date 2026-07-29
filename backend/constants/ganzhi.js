@@ -10,20 +10,7 @@
 
 export const STEMS = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
 
-export const BRANCHES = [
-  '子',
-  '丑',
-  '寅',
-  '卯',
-  '辰',
-  '巳',
-  '午',
-  '未',
-  '申',
-  '酉',
-  '戌',
-  '亥',
-];
+export const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 
 /**
  * 六十甲子纳音。
@@ -231,6 +218,42 @@ export const BRANCH_PUNISHMENTS = {
   mutual: [{ pair: ['子', '卯'], cn: '子卯相刑（无礼之刑）' }],
   self: ['辰', '午', '酉', '亥'],
 };
+
+/**
+ * 有向的刑：键刑值。六壬伏吟课的中末传要「取初传之刑」，需要方向，
+ * 上面 BRANCH_PUNISHMENTS 的分组形式判定得了成立与否，取不出被刑之支。
+ * 辰午酉亥为自刑，刑其自身。
+ */
+export const BRANCH_PUNISH_TARGET = {
+  子: '卯',
+  卯: '子',
+  寅: '巳',
+  巳: '申',
+  申: '寅',
+  丑: '戌',
+  戌: '未',
+  未: '丑',
+  辰: '辰',
+  午: '午',
+  酉: '酉',
+  亥: '亥',
+};
+
+/** 自刑之支。 */
+export const SELF_PUNISH_BRANCHES = ['辰', '午', '酉', '亥'];
+
+/** 四孟（四生）、四仲（四正）、四季（四墓）。六壬涉害法取舍时按孟仲季分先后。 */
+export const MENG_BRANCHES = ['寅', '申', '巳', '亥'];
+export const ZHONG_BRANCHES = ['子', '午', '卯', '酉'];
+export const JI_BRANCHES = ['辰', '戌', '丑', '未'];
+
+/** 驿马：按三合局取，恒落四孟。 */
+export const YIMA_BY_GROUP = [
+  { branches: ['申', '子', '辰'], yima: '寅' },
+  { branches: ['寅', '午', '戌'], yima: '申' },
+  { branches: ['巳', '酉', '丑'], yima: '亥' },
+  { branches: ['亥', '卯', '未'], yima: '巳' },
+];
 
 /** 地支六害（相穿）。 */
 export const BRANCH_HARMS = [

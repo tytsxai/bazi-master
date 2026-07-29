@@ -695,6 +695,163 @@ export const buildOpenApiSpec = ({ baseUrl } = {}) => ({
         },
       },
     },
+    '/api/qimen/chart': {
+      post: {
+        tags: ['奇门遁甲'],
+        summary: '奇门遁甲排盘',
+        description:
+          '定节气三元 → 阴阳遁与局数 → 地盘三奇六仪 → 值符值使 → 转天盘九星八门八神。' +
+          '口径：定局用**拆补法**（符头定元），天盘用**转盘法**。' +
+          '格局判定（青龙返首、飞鸟跌穴之类）不实现 —— 那属断语层，各家出入极大；' +
+          '每宫已给出宫位、地盘干、天盘干、星、门、神，断语所需原料齐备。',
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  year: { type: 'integer' },
+                  month: { type: 'integer', minimum: 1, maximum: 12 },
+                  day: { type: 'integer', minimum: 1, maximum: 31 },
+                  hour: { type: 'integer', minimum: 0, maximum: 23 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: json({
+            type: 'object',
+            properties: {
+              dayGanzhi: { type: 'string' },
+              hourGanzhi: { type: 'string' },
+              xunshou: { type: 'string', description: '旬首' },
+              dunYi: { type: 'string', description: '旬首所遁之仪' },
+              ju: { type: 'object', description: '节气、三元、阴阳遁、局数' },
+              earthPlate: { type: 'object', description: '地盘三奇六仪，键为宫位' },
+              zhifu: { type: 'object', description: '值符星及其所临之宫' },
+              zhishi: { type: 'object', description: '值使门及其所落之宫' },
+              palaces: {
+                type: 'array',
+                items: { type: 'object' },
+                description: '九宫详情。中五宫无门无神，天禽寄坤二随天芮',
+              },
+            },
+          }),
+          400: errorResponse('日期或时辰非法'),
+        },
+      },
+    },
+    '/api/fengshui/bazhai': {
+      post: {
+        tags: ['风水'],
+        summary: '八宅命卦与八方吉凶',
+        description:
+          '由出生年与性别定本命卦（男 11 减、女加四，得五者男寄坤女寄艮），' +
+          '再以变爻法排八方游年星。给了月日则以**立春**为界定年，不是元旦。',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['birthYear', 'gender'],
+                properties: {
+                  birthYear: { type: 'integer' },
+                  birthMonth: { type: 'integer', minimum: 1, maximum: 12 },
+                  birthDay: { type: 'integer', minimum: 1, maximum: 31 },
+                  gender: { type: 'string', enum: ['male', 'female'] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: json({
+            type: 'object',
+            properties: {
+              lifeTrigram: { type: 'object', description: '本命卦、卦数、方位、东西四命' },
+              younian: { type: 'array', items: { type: 'object' }, description: '八方游年星' },
+              auspiciousDirections: { type: 'array', items: { type: 'string' } },
+              inauspiciousDirections: { type: 'array', items: { type: 'string' } },
+            },
+          }),
+          400: errorResponse('缺出生年或性别'),
+        },
+      },
+    },
+    '/api/fengshui/almanac': {
+      get: {
+        tags: ['择吉'],
+        summary: '当日历注（建除、值宿、吉神凶煞、彭祖百忌）',
+        description: '不给日期则取服务器当日。历注数据来自 lunar-javascript。',
+        parameters: [
+          { name: 'year', in: 'query', schema: { type: 'integer' } },
+          { name: 'month', in: 'query', schema: { type: 'integer' } },
+          { name: 'day', in: 'query', schema: { type: 'integer' } },
+        ],
+        responses: {
+          200: json({
+            type: 'object',
+            properties: {
+              ganzhi: { type: 'object' },
+              lunarDate: { type: 'object' },
+              zhiXing: { type: 'string', description: '建除十二神' },
+              xiu: { type: 'object', description: '二十八宿及其吉凶' },
+              auspiciousGods: { type: 'array', items: { type: 'string' } },
+              inauspiciousGods: { type: 'array', items: { type: 'string' } },
+              pengzu: { type: 'object' },
+            },
+          }),
+          400: errorResponse('日期非法'),
+        },
+      },
+    },
+    '/api/fengshui/name': {
+      post: {
+        tags: ['姓名学'],
+        summary: '姓名五格与三才',
+        description:
+          '**笔画数由调用方提供**，引擎不内置字典 —— 康熙笔画与简体笔画差异很大，' +
+          '部首另有独立算法（如「氵」按「水」计四画），内置一份来路不明的笔画表' +
+          '只会让结果看着精确、实则不可追溯。五格算法本身是确定的。',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['surnameStrokes', 'givenNameStrokes'],
+                properties: {
+                  surnameStrokes: {
+                    type: 'array',
+                    items: { type: 'integer', minimum: 1 },
+                    description: '姓的逐字笔画',
+                  },
+                  givenNameStrokes: {
+                    type: 'array',
+                    items: { type: 'integer', minimum: 1 },
+                    description: '名的逐字笔画',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: json({
+            type: 'object',
+            properties: {
+              grids: { type: 'object', description: '天格、人格、地格、外格、总格' },
+              gridElements: { type: 'object', description: '各格五行（按个位取）' },
+              sancai: { type: 'object', description: '三才配置' },
+              sancaiRelations: { type: 'object', description: '天人、人地的生克关系' },
+            },
+          }),
+          400: errorResponse('笔画数缺失或非法'),
+        },
+      },
+    },
     '/api/iching/ai-interpret': {
       post: {
         tags: ['周易', 'AI'],

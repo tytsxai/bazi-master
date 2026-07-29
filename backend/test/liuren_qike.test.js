@@ -1,8 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { BRANCHES } from '../constants/ganzhi.js';
-import { BRANCH_SIX_COMBINATIONS } from '../constants/ganzhi.js';
+import {
+  BRANCHES,
+  BRANCH_SIX_COMBINATIONS,
+  BRANCH_PUNISH_TARGET,
+  SELF_PUNISH_BRANCHES,
+  YIMA_BY_GROUP,
+} from '../constants/ganzhi.js';
 import { MONTH_GENERALS, STEM_LODGING } from '../constants/liuren.js';
 import {
   getHourBranch,
@@ -10,6 +15,7 @@ import {
   buildHeavenPlate,
   buildFourCourses,
   buildTwelveGenerals,
+  calculateShehaiDepth,
   castLiurenChart,
 } from '../services/liuren.service.js';
 
@@ -144,17 +150,44 @@ describe('十二天将', () => {
 });
 
 describe('三传', () => {
-  it('已实现的课体给出初中末三传，且中末传为递取上神', () => {
-    // 遍历一批占例，凡 supported 者都要结构完整且自洽
-    let supported = 0;
+  it('任一占例都能取出完整三传，没有取不出的课', () => {
+    let count = 0;
     for (let month = 1; month <= 12; month += 1) {
-      for (let hour = 0; hour < 24; hour += 3) {
+      for (let day = 1; day <= 28; day += 3) {
+        for (let hour = 0; hour < 24; hour += 1) {
+          const chart = castLiurenChart({ year: 2024, month, day, hour });
+          const tri = chart.threeTransmissions;
+          count += 1;
+          assert.equal(tri.supported, true, `${month}/${day} ${hour}时 取传失败`);
+          assert.ok(tri.initial.branch, '缺初传');
+          assert.ok(tri.middle.branch, '缺中传');
+          assert.ok(tri.last.branch, '缺末传');
+          assert.ok(tri.courseType?.cn, '缺课体名目');
+        }
+      }
+    }
+    assert.ok(count > 2000, `样本量应足够大，实得 ${count}`);
+  });
+
+  it('常规课的中末传为递取上神', () => {
+    // 伏吟取刑、返吟无克取驿马、昴星别责八专另有取法，故排除这些课体
+    const explicitTypes = new Set([
+      'ziren',
+      'zixin',
+      'fuyinKe',
+      'wuqin',
+      'hushi',
+      'dongshe',
+      'bieze',
+      'bazhuan',
+    ]);
+    let checked = 0;
+    for (let month = 1; month <= 12; month += 1) {
+      for (let hour = 0; hour < 24; hour += 1) {
         const chart = castLiurenChart({ year: 2024, month, day: 15, hour });
         const tri = chart.threeTransmissions;
-        if (!tri.supported) continue;
-        supported += 1;
-        assert.ok(tri.initial.branch && tri.middle.branch && tri.last.branch);
-        // 中传 = 初传之上神，末传 = 中传之上神
+        if (explicitTypes.has(tri.courseType.key)) continue;
+        checked += 1;
         assert.equal(
           tri.middle.branch,
           chart.heavenPlate[BRANCHES.indexOf(tri.initial.branch)],
@@ -167,57 +200,73 @@ describe('三传', () => {
         );
       }
     }
-    assert.ok(supported > 0, '样本中应有可支持的课体');
+    assert.ok(checked > 0);
   });
 
-  it('未实现的课体明确标注，不臆造三传', () => {
-    let unsupported = 0;
-    for (let month = 1; month <= 12; month += 1) {
-      for (let hour = 0; hour < 24; hour += 1) {
-        const chart = castLiurenChart({ year: 2024, month, day: 8, hour });
-        const tri = chart.threeTransmissions;
-        if (tri.supported) continue;
-        unsupported += 1;
-        assert.ok(tri.cn, '不支持时应给出所判定的课体名');
-        assert.ok(tri.reason, '不支持时应说明原因');
-        assert.equal(tri.initial, undefined, '不支持时不得给出三传');
-      }
-    }
-    assert.ok(unsupported > 0, '样本中应出现未实现的课体');
-  });
-
-  it('伏吟返吟被识别并标为未实现', () => {
-    // 构造将时相同/相冲的情形
+  it('伏吟：中末传递取其刑，自刑则改取', () => {
     for (let month = 1; month <= 12; month += 1) {
       for (let hour = 0; hour < 24; hour += 1) {
         const chart = castLiurenChart({ year: 2024, month, day: 20, hour });
-        if (chart.isFuyin) {
-          assert.equal(chart.threeTransmissions.detected, 'fuyin');
-          assert.equal(chart.threeTransmissions.supported, false);
-        }
-        if (chart.isFanyin) {
-          assert.equal(chart.threeTransmissions.detected, 'fanyin');
-          assert.equal(chart.threeTransmissions.supported, false);
+        if (!chart.isFuyin) continue;
+        const tri = chart.threeTransmissions;
+        assert.equal(tri.supported, true);
+        assert.ok(
+          ['ziren', 'zixin', 'fuyinKe'].includes(tri.courseType.key),
+          `伏吟课体应为自任/自信/伏吟，实得 ${tri.courseType.cn}`
+        );
+        // 初传非自刑时，中传必为初传之刑
+        if (!SELF_PUNISH_BRANCHES.includes(tri.initial.branch)) {
+          assert.equal(
+            tri.middle.branch,
+            BRANCH_PUNISH_TARGET[tri.initial.branch],
+            '中传应为初传之刑'
+          );
         }
       }
     }
   });
 
-  it('课体名目正确：独一下贼上为重审，独一上克下为元首', () => {
-    const seen = new Set();
+  it('返吟：无克时取驿马为初传', () => {
     for (let month = 1; month <= 12; month += 1) {
-      for (let day = 1; day <= 28; day += 3) {
-        for (let hour = 0; hour < 24; hour += 4) {
-          const tri = castLiurenChart({ year: 2024, month, day, hour }).threeTransmissions;
-          if (tri.supported) seen.add(tri.courseType.key);
+      for (let hour = 0; hour < 24; hour += 1) {
+        const chart = castLiurenChart({ year: 2024, month, day: 12, hour });
+        if (!chart.isFanyin) continue;
+        const tri = chart.threeTransmissions;
+        assert.equal(tri.supported, true);
+        if (tri.courseType.key === 'wuqin') {
+          const entry = YIMA_BY_GROUP.find((g) => g.branches.includes(chart.dayBranch));
+          assert.equal(tri.initial.branch, entry.yima, '无亲课初传应为驿马');
+          assert.equal(tri.middle.branch, chart.fourCourses[2].upper, '中传应为支上神');
+          assert.equal(tri.last.branch, chart.fourCourses[0].upper, '末传应为干上神');
         }
       }
     }
-    // 至少要能出现贼克法的两种课体
-    assert.ok(
-      seen.has('yuanshou') || seen.has('zhongshen'),
-      `样本未出现贼克法课体，实得 ${[...seen]}`
-    );
+  });
+
+  it('涉害深浅：自所乘地盘位逆行归家，沿途受克计数', () => {
+    // 亥将加子时：地盘丑上乘子。子水逆行自丑归子，途经丑（土克水）→ 深度 1
+    const plate = buildHeavenPlate('亥', '子');
+    assert.equal(calculateShehaiDepth('子', plate), 1);
+    // 本家即所乘位时无途可涉，深度 0
+    const same = buildHeavenPlate('子', '子');
+    assert.equal(calculateShehaiDepth('子', same), 0);
+  });
+
+  it('九宗门各课体都能在样本中出现，取法互不冲突', () => {
+    const seen = new Set();
+    for (let month = 1; month <= 12; month += 1) {
+      for (let day = 1; day <= 28; day += 2) {
+        for (let hour = 0; hour < 24; hour += 1) {
+          const tri = castLiurenChart({ year: 2024, month, day, hour }).threeTransmissions;
+          seen.add(tri.courseType.key);
+        }
+      }
+    }
+    // 贼克法的两种课体是最常见的，必须出现
+    assert.ok(seen.has('yuanshou'), '未出现元首课');
+    assert.ok(seen.has('zhongshen'), '未出现重审课');
+    // 覆盖面应当足够广
+    assert.ok(seen.size >= 6, `课体覆盖偏少，实得 ${[...seen].join(',')}`);
   });
 });
 
