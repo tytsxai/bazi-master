@@ -80,7 +80,9 @@ cd bazi-master
 ./bazi stack up
 ```
 
-也可以手动执行：
+这条路径不强制要求 Docker：装了 Docker 且用默认 5432 端口时走 `docker-compose.yml`，否则回退到本机已安装的 PostgreSQL（`initdb` / `pg_ctl`）。
+
+也可以手动执行（这条路径需要 Docker）：
 
 ```bash
 npm install

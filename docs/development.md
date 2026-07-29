@@ -6,9 +6,13 @@ BaZi Master 是一个 React + Express + Prisma + PostgreSQL 全栈示例项目�
 
 ## 前置要求
 
-- Node.js >= 20
+- Node.js >= 20（CI 覆盖 20.x 和 22.x）
 - npm >= 9
-- 可选：Docker（PostgreSQL/Redis 本地服务）
+- 本地 PostgreSQL：装了 Docker 就走 `docker-compose.yml`；没装 Docker 时 `./bazi stack up` 会回退到本机 PostgreSQL（需要 `initdb` / `pg_ctl`，例如 Homebrew 装的 postgresql）
+- 可选：Redis（本地可不配，生产和多实例必须配）
+- 可选：Playwright 浏览器依赖（只有跑 e2e 时需要，`npm --prefix frontend exec -- playwright install chromium`）
+
+跑 `./bazi doctor` 会逐项检查上面这些，并对每个失败项给出可直接执行的修复命令。
 
 ## 环境变量
 

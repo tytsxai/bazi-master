@@ -136,10 +136,11 @@ Contract details:
 
 ## Quick Start Facts
 
-- Prerequisites: Node.js 20+ (CI covers 20.x and 22.x), npm, Docker for local PostgreSQL / Redis.
+- Prerequisites: Node.js 20+ (CI covers 20.x and 22.x) and npm, plus a local PostgreSQL. Docker is optional when using the CLI.
 - Recommended path: `./bazi setup --with-frontend` → `./bazi doctor` → `./bazi stack up` → `./bazi test`.
-- Recommended local database path: Docker Compose PostgreSQL service from `docker-compose.yml`.
-- Local Redis is available through `docker compose up -d postgres redis`.
+- Database selection is automatic in `./bazi stack up`: `docker-compose.yml` when Docker is present and the port is the default 5432, otherwise a locally installed PostgreSQL through `initdb` / `pg_ctl`.
+- The manual (non-CLI) setup path documented in the README does require Docker.
+- Local Redis is available through `docker compose up -d postgres redis`; Redis is optional for local development.
 - Backend default development URL: `http://127.0.0.1:4000`.
 - Frontend default development URL: `http://localhost:3000`.
 - The backend does not bundle dotenv: `node server.js` reads real environment variables only. The `./bazi` CLI parses the repo-root `.env` and injects it into child processes, with real `process.env` values taking precedence. Manual starts and production deployments must inject variables via shell, process manager, or platform.

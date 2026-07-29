@@ -50,7 +50,7 @@ English summary: **BaZi Master is an open-source full-stack divination web app s
 
 ## 快速开始 / Quick Start
 
-前置要求：Node.js 20+、npm、Docker（用于本地 PostgreSQL / Redis）。
+前置要求：Node.js 20+、npm，以及一个本地 PostgreSQL。数据库有两条路可走，`./bazi stack up` 会自动选：装了 Docker 且用默认 5432 端口时走 `docker-compose.yml`；否则回退到本机已安装的 PostgreSQL（`initdb` / `pg_ctl`）。Redis 本地可选。走下面的「手动步骤」则需要 Docker。
 
 关于环境变量：后端进程本身不引入 dotenv，`node server.js` 只读取真实环境变量。用 `./bazi` 启动时，CLI 会读取仓库根的 `.env` 并注入子进程（真实 `process.env` 优先级更高）。手动启动或生产部署时，需要由 shell、进程管理器或部署平台注入。
 

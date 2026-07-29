@@ -62,7 +62,10 @@ It is meant to be forked, self-hosted, studied, and extended — not consumed as
 
 ## Quick start
 
-Prerequisites: Node.js 20+, npm, and Docker (for local PostgreSQL / Redis).
+Prerequisites: Node.js 20+, npm, and a local PostgreSQL. `./bazi stack up` picks the database path
+automatically: `docker-compose.yml` when Docker is available on the default port 5432, otherwise a
+locally installed PostgreSQL via `initdb` / `pg_ctl`. Redis is optional locally. The manual setup
+path below does require Docker.
 
 About environment variables: the backend does not bundle dotenv — `node server.js` reads real
 environment variables only. When you start through `./bazi`, the CLI parses the repo-root `.env` and
