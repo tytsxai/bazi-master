@@ -25,6 +25,14 @@ export const docsBasicAuth = (req, res, next) => {
     return next();
   }
 
+  // Reject non-HTTPS requests in production to protect Basic Auth credentials in transit.
+  if (process.env.NODE_ENV === 'production') {
+    const proto = req.headers['x-forwarded-proto'] || req.protocol;
+    if (proto !== 'https') {
+      return res.status(403).send('HTTPS required.');
+    }
+  }
+
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith('Basic ')) {
     res.set('WWW-Authenticate', 'Basic realm="API Docs"');
