@@ -4,6 +4,20 @@
   "version": "0.2.0",
   "type": "module",
   "description": "Express + Prisma API for BaZi Master, including BaZi, Tarot, I Ching, Zodiac, Zi Wei Dou Shu, Synastry, auth, OpenAPI, health checks and AI providers.",
+  "license": "MIT",
+  "homepage": "https://github.com/tytsxai/bazi-master#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tytsxai/bazi-master.git",
+    "directory": "backend"
+  },
+  "bugs": {
+    "url": "https://github.com/tytsxai/bazi-master/issues"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=9"
+  },
   "keywords": [
     "bazi",
     "tarot",

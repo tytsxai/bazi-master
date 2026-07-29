@@ -70,7 +70,17 @@ postgresql://postgres:postgres@127.0.0.1:5432/bazi_master?schema=public
 
 ## 最快如何本地启动？
 
-推荐先安装依赖，启动本地数据库，应用迁移，再运行前后端：
+推荐用仓库根的 `./bazi` CLI，它把依赖安装、`.env` 生成、Prisma Client 生成、数据库和前后端进程收敛成一条链路：
+
+```bash
+git clone https://github.com/tytsxai/bazi-master.git
+cd bazi-master
+./bazi setup --with-frontend
+./bazi doctor
+./bazi stack up
+```
+
+也可以手动执行：
 
 ```bash
 npm install
@@ -83,6 +93,38 @@ npm -C frontend run dev
 ```
 
 前端开发脚本会代理 `/api` 和 `/ws`，并在后端未运行时尝试启动后端。详见 [docs/development.md](development.md)。
+
+## 项目会自动读取 `.env` 吗？
+
+后端进程本身不引入 dotenv，`node server.js` 只读取真实环境变量。但用 `./bazi` 启动时，CLI 会解析仓库根的 `.env` 并注入子进程，且真实 `process.env` 优先级高于文件内容。手动启动和生产部署需要由 shell、进程管理器或部署平台注入变量。
+
+## 支持哪些界面语言？
+
+前端基于 react-i18next 内置五套语言：`en-US`、`zh-CN`、`zh-TW`、`ja`、`ko`，文案位于 `frontend/src/i18n/locales`。默认按浏览器语言匹配，`zh-TW` 会依次回退到 `zh-CN` 和 `en-US`。新增语言：添加 locale JSON，并在 `frontend/src/i18n/index.js` 的 `resources` 与 `SUPPORTED_LOCALES` 中注册。
+
+## 如何切换 AI provider？
+
+通过环境变量控制。配置 `OPENAI_API_KEY` 或 `ANTHROPIC_API_KEY` 后会启用对应真实模型，可用 `AI_PROVIDER` 显式指定；都没有配置时为 `mock`。当前生效与可用的 provider 可以直接查询：
+
+```bash
+curl http://127.0.0.1:4000/api/ai/providers
+```
+
+## `./bazi` CLI 能做什么？
+
+`setup`（准备环境）、`doctor`（环境体检并给出修复命令）、`env`（管理 `.env`）、`stack`（起停 db/api/web 并查看状态）、`db`（迁移、重置、备份、恢复、psql）、`test`（lint/typecheck/unit/backend/e2e）、`verify`（跑 `backend/scripts/verify-*.mjs` 和 `frontend/scripts/verify-*.mjs` 端到端校验，脚本清单靠扫目录发现）。
+
+所有命令支持 `--json`：stdout 只有一个 JSON 文档，进度走 stderr。退出码是契约：`0` 成功 / `1` 结果失败 / `2` 用法错 / `3` 环境未就绪 / `4` 远端拒绝 / `5` 可重试 / `7` 命中安全边界。完整能力清单以 `./bazi help --json` 为准。
+
+破坏性数据库操作有硬性安全闸：`NODE_ENV=production` 直接拒绝，非本地库必须 `--allow-remote`，真正执行必须 `--yes`。
+
+## 为什么不建议手动 `node server.js`？
+
+手动起的进程不在 CLI 的状态记录里，`./bazi stack down` 停不掉它，之后容易出现端口占用和"改了代码没生效"的假象。需要单独观察后端日志时，用 `NODE_ENV=development npm -C backend run dev` 并自行管理该进程。
+
+## 许可证是什么？可以商用吗？
+
+MIT 许可证，允许 fork、修改、闭源分发和商业使用。但命理/占星内容的免责声明、隐私与数据保护、应用商店与平台审核、各地法规合规都由部署者自行承担。
 
 ## 可以直接用于生产吗？
 

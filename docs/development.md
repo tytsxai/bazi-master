@@ -14,10 +14,27 @@ BaZi Master 是一个 React + Express + Prisma + PostgreSQL 全栈示例项目�
 
 - 开发模板：`.env.example`（默认指向本地 Docker PostgreSQL）
 - 生产模板：`env.production.template`
-- 项目未自动加载 `.env`，请在 shell 中导出或使用进程管理器注入。
+- 后端进程本身不引入 dotenv：`node server.js` 只读取真实环境变量。
+- 用 `./bazi` 启动时，CLI 会解析仓库根的 `.env` 并注入子进程；真实 `process.env` 优先级高于文件（见 `tools/cli/src/core/context.mjs` 的 `buildEnv`）。
+- 手动启动或生产部署时，请在 shell 中导出，或使用进程管理器/部署平台注入。
 - 当前 Prisma schema 使用 PostgreSQL；生产请使用独立 PostgreSQL 连接串，并设置 `SESSION_TOKEN_SECRET`（32+ 字符）。
 
 ## 安装与运行
+
+### 推荐：用 `./bazi` CLI
+
+```bash
+./bazi setup --with-frontend   # 装依赖 + 生成 .env + 生成 Prisma Client
+./bazi doctor                  # 环境体检，每项失败都带可执行的修复命令
+./bazi stack up                # 起 db + api + web
+./bazi stack status            # 看当前栈状态
+./bazi stack down              # 停掉
+```
+
+所有命令支持 `--json`；`./bazi help --json` 是能力清单的唯一真源。
+注意：手动 `node server.js` 起的进程 CLI 管不到，之后也停不掉。
+
+### 手动步骤
 
 ```bash
 # 根依赖
@@ -40,16 +57,22 @@ npm -C frontend install
 npm -C frontend run dev                      # http://localhost:3000
 ```
 
-`npm -C frontend run dev` 会先执行 AssemblyScript/WASM 构建与同步，然后使用项目内置 dev server 启动或复用后端，并让 Vite 代理 `/api` 与 `/ws`。如果需要分别查看前后端日志，可以先显式执行 `NODE_ENV=development npm -C backend run dev`，再启动前端。
+`npm -C frontend run dev` 使用项目内置 dev server（`frontend/scripts/dev-server.mjs`）启动或复用后端，并让 Vite 代理 `/api` 与 `/ws`。如果需要分别查看前后端日志，可以先显式执行 `NODE_ENV=development npm -C backend run dev`，再启动前端。
 
 ## 测试
 
 ```bash
+./bazi test              # 快集合：lint + typecheck + unit + backend，使用隔离临时库
+./bazi test --all        # 含 Playwright E2E 全跑
+./bazi test backend      # 只跑后端
+
 npm -C backend test       # 后端 Node.js test
 npm -C frontend run test:unit:run # 前端 Vitest 单元测试（一次性；test:unit 是 watch 模式）
 npm -C frontend test      # 前端 Playwright E2E
 npm test                 # 组合执行
 ```
+
+> `./bazi test` 默认在隔离的临时数据库上跑，不会碰开发库；只有显式加 `--use-dev-db` 才会直连 `.env` 里的开发库。
 
 > 若前端 E2E 依赖真实后端/数据库，请确保相关服务已启动且数据可用。
 

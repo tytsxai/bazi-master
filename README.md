@@ -20,7 +20,7 @@ English summary: **BaZi Master is an open-source full-stack divination web app s
 | 技术栈       | React 18, Vite, Tailwind CSS, Express 4, Node.js 20+, Prisma, PostgreSQL, Redis, Playwright, Vitest |
 | 默认本地依赖 | 当前 Prisma schema 使用 PostgreSQL；`docker-compose.yml` 提供本地 PostgreSQL + Redis                |
 | AI 能力      | 支持 mock / OpenAI / Anthropic 文本解读；Soul Portrait 图片生成当前通过 OpenAI 或 mock 占位         |
-| 多语言       | 前端内置 5 种界面语言：`en-US`、`zh-CN`、`zh-TW`、`ja`、`ko`（`frontend/src/i18n/locales`）          |
+| 多语言       | 前端内置 5 种界面语言：`en-US`、`zh-CN`、`zh-TW`、`ja`、`ko`（`frontend/src/i18n/locales`）         |
 | 开发入口     | 仓库根 `./bazi` 程序化 CLI：环境准备、起停本地栈、迁移、测试、端到端校验，全部支持 `--json`         |
 | 主要入口     | 前端页面在 `frontend/src/pages`；API 路由在 `backend/routes`；数据模型在 `prisma/schema.prisma`     |
 | 许可证       | MIT，可自由 fork、修改、自部署和商用（需自行承担合规与免责声明）                                    |
@@ -159,7 +159,7 @@ curl -X POST http://127.0.0.1:4000/api/tarot/draw \
 
 ## 环境变量 / Configuration
 
-本地开发可参考 [.env.example](.env.example)，生产部署可参考 [env.production.template](env.production.template)。项目本身不会自动读取 dotenv 文件，需要由运行环境注入。
+本地开发可参考 [.env.example](.env.example)，生产部署可参考 [env.production.template](env.production.template)。`./bazi setup` 会基于模板生成 `.env`，`./bazi env` 可以查看、校验和改键。应用进程本身不读 dotenv，详见[快速开始](#快速开始--quick-start)里的说明。
 
 关键配置：
 

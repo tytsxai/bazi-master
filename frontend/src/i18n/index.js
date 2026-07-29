@@ -54,15 +54,26 @@ const getInitialLocale = () => {
   return normalizeLocale(navigator.language);
 };
 
+// 让 <html lang> 跟随当前界面语言：搜索引擎和读屏软件都靠它判断页面语言，
+// index.html 里写死的 lang="en" 在中文界面下是错的。
+const syncDocumentLang = (locale) => {
+  if (typeof document === 'undefined') return;
+  document.documentElement.setAttribute('lang', locale);
+};
+
+const initialLocale = getInitialLocale();
+
 void i18n.use(initReactI18next).init({
   resources,
-  lng: getInitialLocale(),
+  lng: initialLocale,
   fallbackLng: {
     'zh-TW': ['zh-CN', 'en-US'],
     default: ['en-US'],
   },
   interpolation: { escapeValue: false },
 });
+
+syncDocumentLang(initialLocale);
 
 i18n.on('languageChanged', (locale) => {
   const normalized = normalizeLocale(locale);
@@ -71,6 +82,7 @@ i18n.on('languageChanged', (locale) => {
     return;
   }
   safeSetStoredLocale(normalized);
+  syncDocumentLang(normalized);
 });
 
 export default i18n;

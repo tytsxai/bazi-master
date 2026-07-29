@@ -146,6 +146,7 @@ Zi Wei records, Soul Portrait, user settings, admin endpoints.
 ## Configuration
 
 Local development: [.env.example](.env.example). Production: [env.production.template](env.production.template).
+`./bazi setup` generates `.env` from the template; `./bazi env show|check|set` inspects, validates, and updates it.
 
 Key variables:
 

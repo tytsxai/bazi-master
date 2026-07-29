@@ -13,6 +13,10 @@
   "bugs": {
     "url": "https://github.com/tytsxai/bazi-master/issues"
   },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=9"
+  },
   "keywords": [
     "bazi",
     "bazi-master",
