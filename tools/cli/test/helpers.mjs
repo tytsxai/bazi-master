@@ -52,6 +52,3 @@ export const walkTree = (node, visit, depth = 0) => {
   visit(node, depth);
   for (const child of node.commands || []) walkTree(child, visit, depth + 1);
 };
-
-/** 一个必定不在本机、也必定不是 localhost 的库地址，用来触发"非本地库"这道闸 */
-export const REMOTE_DB_URL = 'postgresql://u:p@db.invalid.example:5432/whatever';

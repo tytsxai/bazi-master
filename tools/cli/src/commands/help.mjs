@@ -11,7 +11,7 @@ import { usageError } from '../core/errors.mjs';
 /**
  * `--json` 帮助的统一信封。
  *
- * `bazi help --json`、`bazi --json`、`bazi db --json`、`bazi db reset --help --json`
+ * `bazi help --json`、`bazi --json`、`bazi env --json`、`bazi env init --help --json`
  * 必须长得一模一样 —— Agent 不该因为"从哪条路要到的帮助"而拿到不同形状的东西。
  */
 export const helpPayload = (node, commandPath) => ({

@@ -25,11 +25,10 @@ export const TARGETS = {
     args: ['run', 'lint'],
   },
   backend: {
-    label: '后端测试（脚本自带临时 PostgreSQL）',
+    label: '后端测试',
     cwd: () => paths.backend,
     script: 'test',
     args: ['test'],
-    isolatedDb: true,
   },
 };
 
@@ -63,21 +62,15 @@ const blockedReason = (target, cwd) => {
 /**
  * 测试进程的环境刻意不注入 .env。
  *
- * backend/scripts/run-tests-with-db.mjs 的逻辑是"DATABASE_URL 没设就自己起一个临时库"。
- * 如果把 .env 里的 DATABASE_URL 灌进去，测试就会直接跑在开发库上并对它执行迁移 ——
- * 这是数据事故，不是配置便利。要那样做必须显式 --use-dev-db。
+ * 引擎无状态，测试不需要任何外部依赖；灌进 .env 只会让"本机能过、CI 过不了"这类
+ * 问题变得更难查 —— 测试看到的环境应该尽量接近 CI 里那个干净的环境。
  */
-const buildTestEnv = ({ useDevDb }) => {
-  const env = { ...process.env };
-  if (!useDevDb) delete env.DATABASE_URL;
-  return env;
-};
+const buildTestEnv = () => ({ ...process.env });
 
 export const testCommand = defineCommand({
   name: 'test',
   summary: '跑测试（cli / lint / backend）',
-  description:
-    '不带参数把三个目标全跑一遍。\n' + '测试默认使用隔离的临时数据库，不会碰你的开发库。',
+  description: '不带参数把三个目标全跑一遍。\n引擎无状态，测试不需要数据库或任何外部服务。',
   usage: 'bazi test [目标...] [-- 透传给底层的参数]',
   args: [{ name: 'targets', summary: '要跑的目标', choices: Object.keys(TARGETS) }],
   flags: [
@@ -86,11 +79,6 @@ export const testCommand = defineCommand({
       name: 'fail-on-skip',
       type: 'boolean',
       summary: '有目标因依赖缺失被跳过时也算失败（CI 用，避免"什么都没跑"报成通过）',
-    },
-    {
-      name: 'use-dev-db',
-      type: 'boolean',
-      summary: '让测试直连 .env 里的开发库（危险：会对它执行迁移/重置）',
     },
   ],
   examples: [
@@ -113,11 +101,7 @@ export const testCommand = defineCommand({
       });
     }
 
-    if (flags['use-dev-db']) {
-      out.warn('--use-dev-db：测试会直接跑在开发库上，可能清空其中数据。');
-    }
-
-    const env = buildTestEnv({ useDevDb: flags['use-dev-db'] });
+    const env = buildTestEnv();
     const results = [];
 
     for (const name of targets) {

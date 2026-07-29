@@ -2,16 +2,8 @@ import path from 'node:path';
 
 import { defineCommand } from '../core/registry.mjs';
 import { CliError, EXIT } from '../core/errors.mjs';
-import { capture, checkPort, run, which } from '../core/proc.mjs';
-import {
-  buildEnv,
-  describeDatabaseUrl,
-  fileExists,
-  paths,
-  readEnvFile,
-  readPrismaProvider,
-  resolveDatabaseUrl,
-} from '../core/context.mjs';
+import { checkPort, run, which } from '../core/proc.mjs';
+import { buildEnv, describeUrl, fileExists, paths, readEnvFile } from '../core/context.mjs';
 
 const MIN_NODE_MAJOR = 20;
 
@@ -64,120 +56,43 @@ const collectChecks = async () => {
     );
   }
 
-  const prismaClient = path.join(paths.backend, 'node_modules', '.prisma', 'client');
-  results.push(
-    check(
-      'prisma:client',
-      'Prisma Client 已生成',
-      fileExists(prismaClient) ? 'ok' : 'fail',
-      fileExists(prismaClient) ? prismaClient : '未生成，backend 无法连库',
-      fileExists(prismaClient) ? null : 'bazi setup --skip-install'
-    )
-  );
-
   // --- 配置 ---
   results.push(
     check(
       'env:file',
       '.env 存在',
       envFile ? 'ok' : 'fail',
-      envFile ? paths.envFile : '缺少 .env（后端启动会用不安全的默认值）',
+      envFile ? paths.envFile : '缺少 .env（引擎能靠默认值跑起来，但 bazi env 那组命令没法用）',
       envFile ? null : 'bazi env init'
     )
   );
 
-  if (envFile) {
-    const secret = env.SESSION_TOKEN_SECRET || '';
-    const isDefault = secret.startsWith('dev_secret_change_in_production');
-    const secretStatus = secret.length >= 32 ? (isDefault ? 'warn' : 'ok') : 'fail';
-    results.push(
-      check(
-        'env:session-secret',
-        'SESSION_TOKEN_SECRET',
-        secretStatus,
-        secret.length < 32
-          ? `长度 ${secret.length}，要求 >= 32`
-          : isDefault
-            ? '仍是示例默认值，本地可用，上线前必须换'
-            : `长度 ${secret.length}`,
-        secretStatus === 'ok' ? null : 'bazi env init --rotate-secret'
-      )
-    );
-
-    const admins = (env.ADMIN_EMAILS || '').trim();
-    results.push(
-      check(
-        'env:admin-emails',
-        'ADMIN_EMAILS',
-        admins ? 'ok' : 'fail',
-        admins || '未设置，管理端点全部不可用',
-        admins ? null : '在 .env 里设置 ADMIN_EMAILS=你的邮箱'
-      )
-    );
-  }
-
-  // --- 数据库 ---
-  const schemaProvider = readPrismaProvider();
-  const dbUrl = resolveDatabaseUrl(env);
-  const dbInfo = describeDatabaseUrl(dbUrl);
+  // 生产模式下 DOCS_PASSWORD 是唯一的硬性必填项：缺了它 server.js 直接退 1。
+  // 开发模式下缺它无所谓，所以这里按 NODE_ENV 分档，而不是一律报 fail。
+  const isProd = (env.NODE_ENV || '') === 'production';
+  const docsPassword = (env.DOCS_PASSWORD || '').trim();
   results.push(
     check(
-      'db:url',
-      'DATABASE_URL',
-      dbUrl ? 'ok' : 'fail',
-      dbUrl ? `${dbInfo.redacted}（schema provider=${schemaProvider || '未知'}）` : '未配置',
-      dbUrl ? null : 'bazi env init'
+      'env:docs-password',
+      'DOCS_PASSWORD',
+      docsPassword ? 'ok' : isProd ? 'fail' : 'skip',
+      docsPassword
+        ? '已设置'
+        : isProd
+          ? '生产模式必填，缺了它进程启动即退出'
+          : '未设置（开发环境不需要；上线前必须配）',
+      docsPassword || !isProd ? null : 'bazi env set DOCS_PASSWORD=<强随机串>'
     )
   );
 
-  if (dbUrl && schemaProvider) {
-    const matches =
-      (schemaProvider === 'sqlite' && dbInfo.kind === 'sqlite') ||
-      (schemaProvider.startsWith('postgres') && dbInfo.kind.startsWith('postgres'));
-    results.push(
-      check(
-        'db:provider-match',
-        'DATABASE_URL 与 schema provider 一致',
-        matches ? 'ok' : 'fail',
-        matches
-          ? `${schemaProvider}`
-          : `schema=${schemaProvider} 但 URL 是 ${dbInfo.kind}，Prisma 会直接报错`,
-        matches ? null : '改 .env 的 DATABASE_URL，或改 prisma/schema.prisma 的 provider'
-      )
-    );
-  }
-
-  if (dbInfo.kind.startsWith('postgres') && dbInfo.host) {
-    const port = Number(dbInfo.port || 5432);
-    const open = await checkPort(port, dbInfo.host, 800);
-    results.push(
-      check(
-        'db:reachable',
-        'PostgreSQL 可连通',
-        open ? 'ok' : 'fail',
-        `${dbInfo.host}:${port} ${open ? '可连通' : '不可连通'}`,
-        open ? null : 'bazi stack up --only db'
-      )
-    );
-  }
-
-  const psqlPath = which('psql');
-  results.push(
-    check(
-      'tool:psql',
-      'psql / pg_ctl 可用',
-      psqlPath ? 'ok' : 'warn',
-      psqlPath ? capture('psql', ['--version']).stdout : '未安装，无法用本地 PostgreSQL 或做备份',
-      psqlPath ? null : 'brew install postgresql@16'
-    )
-  );
-
-  // --- Redis（可选） ---
+  // --- Redis（可选，纯缓存） ---
   const redisUrl = (env.REDIS_URL || '').trim();
   if (!redisUrl) {
-    results.push(check('redis', 'Redis', 'skip', '未配置（开发环境可选，生产必须配）', null));
+    results.push(
+      check('redis', 'Redis', 'skip', '未配置（可选：只影响跨实例的排盘缓存命中率）', null)
+    );
   } else {
-    const parsed = describeDatabaseUrl(redisUrl);
+    const parsed = describeUrl(redisUrl);
     const open = await checkPort(Number(parsed.port || 6379), parsed.host || '127.0.0.1', 800);
     results.push(
       check(
@@ -209,7 +124,7 @@ const collectChecks = async () => {
       'tool:docker',
       'Docker',
       dockerPath ? 'ok' : 'skip',
-      dockerPath ? dockerPath : '未安装（本地走 pg_ctl，不影响开发；生产 compose 才需要）',
+      dockerPath ? dockerPath : '未安装（本地开发不需要；只有起本地 Redis 或生产 compose 才用到）',
       null
     )
   );
@@ -235,19 +150,9 @@ const AUTO_FIXES = [
     label: '从 .env.example 生成 .env',
     exec: async () => {
       const { initEnvFile } = await import('./env.mjs');
-      initEnvFile({ rotateSecret: true });
+      initEnvFile();
       return { code: 0 };
     },
-  },
-  {
-    id: 'prisma:client',
-    label: '生成 Prisma Client',
-    exec: (opts) =>
-      run('node', ['scripts/prisma.mjs', 'generate', `--schema=${paths.prismaSchema}`], {
-        cwd: paths.backend,
-        env: buildEnv(),
-        ...opts,
-      }),
   },
 ];
 
@@ -261,9 +166,9 @@ export const doctorCommand = defineCommand({
     {
       name: 'fix',
       type: 'boolean',
-      summary: '自动执行安全的修复（装依赖、建 .env、生成 Prisma Client）',
+      summary: '自动执行安全的修复（装依赖、建 .env）',
     },
-    { name: 'only', type: 'string', summary: '只跑 id 前缀匹配的检查，如 --only db' },
+    { name: 'only', type: 'string', summary: '只跑 id 前缀匹配的检查，如 --only env' },
   ],
   examples: [
     { note: '先看环境是否就绪', command: 'bazi doctor --json' },

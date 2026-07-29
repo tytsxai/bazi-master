@@ -22,18 +22,15 @@ import { bazi, baziJson } from './helpers.mjs';
 const READONLY_COMMANDS = [
   [],
   ['help'],
-  ['help', 'db', 'reset'],
+  ['help', 'env', 'init'],
   ['doctor', '--only', 'node'],
   ['env', 'show'],
   ['env', 'check'],
-  ['db', 'status'],
   ['stack', 'status'],
-  ['stack', 'logs', 'api'],
-  ['verify', 'list'],
+  ['stack', 'logs'],
   ['test', '--dry-run'],
-  ['test', '--all', '--dry-run'],
   ['setup', '--dry-run'],
-  ['db', 'backup', '--dry-run'],
+  ['env', 'init', '--force', '--dry-run'],
 ];
 
 test('--json 模式下 stdout 只有一个 JSON 文档', async (t) => {
@@ -50,20 +47,15 @@ test('--json 模式下 stdout 只有一个 JSON 文档', async (t) => {
 });
 
 test('--json 模式下进度和噪音只走 stderr', () => {
-  // doctor 会 spawn 一堆子进程（node/npm/psql/prisma），是最容易漏出 stdout 的那个
+  // doctor 会 spawn 子进程并做一堆网络/端口探测，是最容易漏出 stdout 的那个
   baziJson(['doctor']);
 
-  // 一条确定会往 stderr 写警告的命令。baziJson 本身就断言了 stdout 能被 JSON.parse，
-  // 任何一行进度漏进 stdout 都会当场炸；这里再确认警告两条路都走到了：
-  // 人看 stderr，Agent 读 payload.notes。只测"stdout 干净"的话，把 warn 整个删掉也能过。
-  const noisy = baziJson(['test', 'backend', '--dry-run', '--use-dev-db']);
+  // 一条确定会往 stderr 写进度的命令。baziJson 本身就断言了 stdout 能被 JSON.parse，
+  // 任何一行进度漏进 stdout 都会当场炸；这里再确认进度确实走到了 stderr：
+  // 人看 stderr，Agent 读 stdout 上那份 JSON。
+  const noisy = baziJson(['setup', '--dry-run']);
   assert.equal(noisy.payload.ok, true);
-  assert.match(noisy.stderr, /开发库/, '警告必须出现在 stderr');
-  assert.equal(
-    noisy.payload.notes.some((n) => /开发库/.test(n.message)),
-    true,
-    '警告必须同时进 payload.notes，否则 Agent 看不到'
-  );
+  assert.match(noisy.stderr, /dry-run/, '进度必须出现在 stderr');
 });
 
 test('失败负载带齐 Agent 需要的字段', () => {
@@ -78,7 +70,13 @@ test('失败负载带齐 Agent 需要的字段', () => {
 });
 
 test('payload.exit 必须等于进程真实退出码', async (t) => {
-  const cases = [['nope'], ['doctor', '--nope'], ['db'], ['test', 'nosuchtarget'], ['db', 'reset']];
+  const cases = [
+    ['nope'],
+    ['doctor', '--nope'],
+    ['env'],
+    ['test', 'nosuchtarget'],
+    ['env', 'init', '--force'],
+  ];
   for (const args of cases) {
     await t.test(`bazi ${args.join(' ')}`, () => {
       const { code, payload } = baziJson(args);
@@ -97,14 +95,14 @@ test('退出码语义', async (t) => {
     { args: [], code: 0, why: '裸跑输出顶层帮助，算正常' },
     { args: ['help'], code: 0, why: 'help 正常收尾' },
     { args: ['nope'], code: 2, why: '不存在的命令是用法错' },
-    { args: ['db', 'nope'], code: 2, why: '不存在的子命令是用法错' },
-    { args: ['db'], code: 2, why: '分组节点缺子命令是用法错' },
+    { args: ['env', 'nope'], code: 2, why: '不存在的子命令是用法错' },
+    { args: ['env'], code: 2, why: '分组节点缺子命令是用法错' },
     { args: ['stack'], code: 2, why: '同上' },
     { args: ['doctor', '--nope'], code: 2, why: '未知选项是用法错' },
     { args: ['doctor', '--only'], code: 2, why: '选项缺取值是用法错' },
     { args: ['test', 'nosuchtarget'], code: 2, why: '不存在的测试目标是用法错' },
-    { args: ['verify', 'run', 'nosuchscript'], code: 2, why: '不存在的校验脚本是用法错' },
-    { args: ['db', 'reset'], code: 7, why: '破坏性操作没确认要命中安全边界' },
+    { args: ['stack', 'logs', 'db'], code: 2, why: '已删除的组件参数必须报用法错，不能被静默忽略' },
+    { args: ['env', 'init', '--force'], code: 7, why: '破坏性操作没确认要命中安全边界' },
   ];
   for (const { args, code, why } of cases) {
     await t.test(`bazi ${args.join(' ')} -> ${code}（${why}）`, () => {
@@ -114,9 +112,16 @@ test('退出码语义', async (t) => {
 });
 
 test('json 与文本两种模式的退出码必须一致', async (t) => {
-  // 曾经出过：`bazi db` 退 2，但 `bazi db --json` 退 0。
+  // 曾经出过：`bazi env` 退 2，但 `bazi env --json` 退 0。
   // Agent 用 --json，人不用，两边看到的结论不能相反。
-  const cases = [[], ['db'], ['stack'], ['nope'], ['doctor', '--nope'], ['db', 'reset']];
+  const cases = [
+    [],
+    ['env'],
+    ['stack'],
+    ['nope'],
+    ['doctor', '--nope'],
+    ['env', 'init', '--force'],
+  ];
   for (const args of cases) {
     await t.test(`bazi ${args.join(' ')}`, () => {
       const text = bazi(args);
@@ -148,8 +153,8 @@ test('失败时给出的 next 必须是一条真实存在的命令', () => {
 
   const failing = [
     ['nope'],
-    ['db'],
-    ['db', 'reset'],
+    ['env'],
+    ['env', 'init', '--force'],
     ['test', 'nosuchtarget'],
     ['doctor', '--nope'],
   ];

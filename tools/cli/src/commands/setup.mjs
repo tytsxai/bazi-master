@@ -1,7 +1,7 @@
 import { defineCommand } from '../core/registry.mjs';
 import { CliError, EXIT } from '../core/errors.mjs';
 import { run } from '../core/proc.mjs';
-import { buildEnv, fileExists, paths } from '../core/context.mjs';
+import { fileExists, paths } from '../core/context.mjs';
 import { initEnvFile } from './env.mjs';
 import path from 'node:path';
 
@@ -38,36 +38,23 @@ const buildSteps = ({ skipInstall }) => {
     },
   });
 
-  steps.push({
-    id: 'prisma:generate',
-    label: '生成 Prisma Client',
-    exec: (opts) =>
-      run('node', ['scripts/prisma.mjs', 'generate', `--schema=${paths.prismaSchema}`], {
-        cwd: paths.backend,
-        env: buildEnv(),
-        ...opts,
-      }),
-  });
-
   return steps;
 };
 
 export const setupCommand = defineCommand({
   name: 'setup',
   summary: '一次性把本地开发环境准备好（幂等，可反复跑）',
-  description:
-    '装依赖 -> 建 .env -> 生成 Prisma Client。\n' +
-    '不启动任何服务，也不碰数据库数据；起服务用 bazi stack up。',
+  description: '装依赖 -> 建 .env。\n不启动任何服务；起引擎用 bazi stack up。',
   flags: [
     {
       name: 'skip-install',
       type: 'boolean',
-      summary: '跳过 npm install，只做 .env 与 Prisma Client',
+      summary: '跳过 npm install，只准备 .env',
     },
   ],
   examples: [
     { note: '第一次上手', command: 'bazi setup' },
-    { note: '依赖已装好，只补 .env 和 Prisma Client', command: 'bazi setup --skip-install' },
+    { note: '依赖已装好，只补 .env', command: 'bazi setup --skip-install' },
   ],
   run: async ({ flags, out }) => {
     const steps = buildSteps({ skipInstall: flags['skip-install'] });

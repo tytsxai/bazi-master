@@ -45,8 +45,8 @@ test('全局标志只在树根出现一次', () => {
 
 test('子命令的帮助也带同一个信封', async (t) => {
   for (const args of [
-    ['help', 'db'],
-    ['help', 'db', 'reset'],
+    ['help', 'env'],
+    ['help', 'env', 'init'],
     ['help', 'stack', 'up'],
   ]) {
     await t.test(`bazi ${args.join(' ')} --json`, () => {
@@ -118,7 +118,7 @@ test('破坏性命令必须打上 destructive 标记', () => {
     if (node.destructive) marked.push(node.path);
   });
   // Agent 靠这个字段在动手前识别"这条要先问人"，不能靠命令名去猜
-  assert.deepEqual(marked.sort(), ['db reset', 'db restore']);
+  assert.deepEqual(marked.sort(), ['env init']);
   walkTree(tree(), (node) => {
     if (!node.destructive) return;
     assert.match(
@@ -207,7 +207,7 @@ test('示例里用到的标志都是真实存在的', () => {
 });
 
 test('文本帮助也把全局标志打出来', () => {
-  const { stdout, code } = bazi(['help', 'db', 'reset']);
+  const { stdout, code } = bazi(['help', 'env', 'init']);
   assert.equal(code, 0);
   assert.match(stdout, /通用选项/);
   assert.match(stdout, /--yes/);

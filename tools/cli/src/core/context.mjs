@@ -10,18 +10,15 @@ export const repoRoot = path.resolve(here, '..', '..', '..', '..');
 export const paths = {
   root: repoRoot,
   backend: path.join(repoRoot, 'backend'),
-  prismaSchema: path.join(repoRoot, 'prisma', 'schema.prisma'),
   envFile: path.join(repoRoot, '.env'),
   envExample: path.join(repoRoot, '.env.example'),
-  /** CLI 自己的运行态目录：pidfile、日志、会话缓存。已被 .gitignore 的 .tmp/ 覆盖。 */
+  /** CLI 自己的运行态目录：pidfile、日志。已被 .gitignore 的 .tmp/ 覆盖。 */
   state: path.join(repoRoot, '.tmp', 'cli'),
   logs: path.join(repoRoot, '.tmp', 'cli', 'logs'),
-  pgData: path.join(repoRoot, '.tmp', 'cli', 'pg', 'data'),
-  backups: path.join(repoRoot, '.tmp', 'cli', 'backups'),
 };
 
 export const ensureStateDirs = () => {
-  for (const dir of [paths.state, paths.logs, paths.backups]) {
+  for (const dir of [paths.state, paths.logs]) {
     fs.mkdirSync(dir, { recursive: true });
   }
 };
@@ -65,77 +62,25 @@ export const buildEnv = (overrides = {}) => {
   return { ...merged, ...overrides };
 };
 
-export const readPrismaProvider = () => {
-  try {
-    const raw = fs.readFileSync(paths.prismaSchema, 'utf8');
-    const block = raw.match(/datasource\s+db\s*{([\s\S]*?)\n}/m)?.[1] ?? '';
-    return (block.match(/\bprovider\s*=\s*"([^"]+)"/)?.[1] ?? '').trim().toLowerCase();
-  } catch {
-    return '';
-  }
-};
-
-/** 本地开发默认库：跟 backend/scripts/local-postgres.mjs 保持同一套端口/库名约定。 */
-export const LOCAL_PG = {
-  host: '127.0.0.1',
-  port: Number(process.env.BAZI_PG_PORT || 5433),
-  db: process.env.BAZI_PG_DB || 'bazi_master',
-};
-
-export const localDatabaseUrl = () => {
-  const user = process.env.PGUSER || process.env.USER || 'postgres';
-  return `postgresql://${encodeURIComponent(user)}@${LOCAL_PG.host}:${LOCAL_PG.port}/${LOCAL_PG.db}?schema=public`;
-};
-
-export const resolveDatabaseUrl = (env = buildEnv()) => env.DATABASE_URL || '';
-
 /**
- * Prisma 连接串里有一批 libpq 不认的私有参数（schema、connection_limit…），
- * 直接把 DATABASE_URL 丢给 pg_dump / pg_restore / psql 会报
- * `invalid URI query parameter`。转换一次再给原生工具用。
+ * 把一个连接串拆成可展示的形态，并把密码打码。
+ * 引擎无状态之后这里只剩 REDIS_URL 一个调用方，但脱敏逻辑仍然必须走它 ——
+ * `bazi env show` 会把结果直接打到终端上。
  */
-const PRISMA_ONLY_PARAMS = [
-  'schema',
-  'connection_limit',
-  'pool_timeout',
-  'pgbouncer',
-  'socket_timeout',
-  'statement_cache_size',
-  'sslidentity',
-  'sslpassword',
-];
-
-export const toLibpqUrl = (url) => {
-  try {
-    const parsed = new URL(url);
-    for (const key of PRISMA_ONLY_PARAMS) parsed.searchParams.delete(key);
-    return parsed.toString();
-  } catch {
-    return url;
-  }
-};
-
-export const describeDatabaseUrl = (url) => {
-  if (!url) return { kind: 'none', host: null, database: null, local: false, redacted: null };
-  if (url.startsWith('file:')) {
-    return { kind: 'sqlite', host: null, database: url.slice(5), local: true, redacted: url };
-  }
+export const describeUrl = (url) => {
+  if (!url) return { kind: 'none', host: null, port: null, local: false, redacted: null };
   try {
     const parsed = new URL(url);
     const host = parsed.hostname;
-    const local = ['127.0.0.1', 'localhost', '::1', '0.0.0.0'].includes(host);
-    const redacted = `${parsed.protocol}//${parsed.username ? `${parsed.username}:***@` : ''}${parsed.host}${parsed.pathname}`;
     return {
       kind: parsed.protocol.replace(':', ''),
       host,
       port: parsed.port || null,
-      database: parsed.pathname.replace(/^\//, ''),
-      user: parsed.username || null,
-      local,
-      redacted,
+      local: ['127.0.0.1', 'localhost', '::1', '0.0.0.0'].includes(host),
+      redacted: `${parsed.protocol}//${parsed.username ? `${parsed.username}:***@` : ''}${parsed.host}${parsed.pathname}`,
     };
   } catch {
-    return { kind: 'unknown', host: null, database: null, local: false, redacted: '<unparseable>' };
+    return { kind: 'unknown', host: null, port: null, local: false, redacted: '<unparseable>' };
   }
 };
 
@@ -143,49 +88,41 @@ export const describeDatabaseUrl = (url) => {
  * 安全边界，硬编码在能力层。
  *
  * 这条规则刻意不放进 SKILL.md —— 文档是软约束，模型会漏读、会在长上下文里衰减。
- * 任何会写库的命令都必须先过这里。
+ * 任何会覆盖既有文件的命令都必须先过这里。
+ *
+ * 引擎收敛成无状态计算层之后，这里守的不再是数据库，而是 `.env`：它是仓库里唯一
+ * 一份存着真实 API Key 的文件，覆盖掉就没了，而重新拿到那些 key 未必还在本机。
  */
 export const assertDestructiveAllowed = ({
   action,
+  target,
   env = buildEnv(),
   yes = false,
-  allowRemote = false,
   dryRun = false,
 }) => {
-  const url = resolveDatabaseUrl(env);
-  const info = describeDatabaseUrl(url);
-
   if ((env.NODE_ENV || '') === 'production') {
     throw blockedError(`拒绝在 NODE_ENV=production 下执行 ${action}`, {
       hint: '生产环境的破坏性操作不允许由 CLI 自动执行。',
       next: '如果确实需要，请人工在目标机器上操作并留存记录。',
-      details: { action, nodeEnv: 'production', database: info.redacted },
-    });
-  }
-
-  if (!info.local && !allowRemote) {
-    throw blockedError(`拒绝对非本地数据库执行 ${action}`, {
-      hint: `DATABASE_URL 指向 ${info.host || '未知主机'}，不是 localhost。`,
-      next: `确认这是你要操作的库之后，加 --allow-remote --yes 重跑。`,
-      details: { action, database: info.redacted },
+      details: { action, nodeEnv: 'production', target },
     });
   }
 
   // --dry-run 不执行任何东西，所以它可以越过"确认"这道闸 —— 但只越过这一道。
-  // 上面两道（production / 非本地库）是"你指错库了"的信号，dry-run 一样拦。
+  // 上面那道（production）是"你指错环境了"的信号，dry-run 一样拦。
   //
   // 这么排是给 Agent 留一条安全的自助路径：先 --dry-run 看清楚会发生什么，
   // 把结论摆给人，拿到明确的"是"之后再加 --yes。
   // 如果 dry-run 也退 7，Agent 唯一能做的就是去碰 --yes —— 那才是真正削弱了这道闸。
   if (!yes && !dryRun) {
     throw blockedError(`${action} 是破坏性操作，需要显式确认`, {
-      hint: `目标库：${info.redacted || '(未配置)'}`,
+      hint: `目标文件：${target || '(未指定)'}`,
       next: `先 \`--dry-run\` 看会做什么；确认无误后由人拍板，再加 --yes 重跑。`,
-      details: { action, database: info.redacted, dryRunAvailable: true },
+      details: { action, target, dryRunAvailable: true },
     });
   }
 
-  return info;
+  return { action, target };
 };
 
 export const fileExists = (target) => {

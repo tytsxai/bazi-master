@@ -2,33 +2,38 @@ import { createOutput } from './core/output.mjs';
 import { CliError, EXIT } from './core/errors.mjs';
 import { defineCommand, parseArgs, renderHelp, resolveCommand } from './core/registry.mjs';
 
+import { calcCommand } from './commands/calc.mjs';
+import { castCommand } from './commands/cast.mjs';
 import { setupCommand } from './commands/setup.mjs';
 import { doctorCommand } from './commands/doctor.mjs';
 import { envCommand } from './commands/env.mjs';
 import { stackCommand } from './commands/stack.mjs';
-import { dbCommand } from './commands/db.mjs';
 import { testCommand } from './commands/test.mjs';
-import { verifyCommand } from './commands/verify.mjs';
 import { helpCommand, helpPayload } from './commands/help.mjs';
 
 export const rootCommand = defineCommand({
   name: 'bazi',
   summary: 'bazi-master 项目的程序化 CLI —— 面向 AI Agent 调用设计',
   description:
+    '两类命令：calc / cast 是这个项目对外输出的算法能力，其余是维护本仓库的运维命令。\n' +
     '所有命令都支持 --json（stdout 只有一个 JSON 文档，进度与噪音走 stderr）。\n' +
     '退出码是契约：0 成功 / 1 结果失败 / 2 用法错 / 3 环境未就绪 / 4 远端拒绝 / 5 可重试 / 7 命中安全边界。',
   commands: [
+    calcCommand,
+    castCommand,
     setupCommand,
     doctorCommand,
     envCommand,
     stackCommand,
-    dbCommand,
     testCommand,
-    verifyCommand,
     helpCommand,
   ],
   examples: [
     { note: '第一次上手', command: 'bazi setup && bazi doctor' },
+    {
+      note: '调用算法能力（引擎要先起着）',
+      command: 'bazi calc bazi --birth 1990-05-20T14:30 --gender male --json',
+    },
     { note: '拿到完整能力清单', command: 'bazi help --json' },
   ],
 });
@@ -55,7 +60,7 @@ export const main = async (argv) => {
   try {
     const { flags, positionals, passthrough } = parseArgs(node, rest);
 
-    // 没有 run 的节点是分组（root、env、stack…），只能展示帮助。
+    // 没有 run 的节点是分组（root、env、stack、calc…），只能展示帮助。
     if (!node.run && !flags.help && positionals.length) {
       throw new CliError(`没有名为 "${positionals[0]}" 的${commandPath.length ? '子' : ''}命令`, {
         exit: EXIT.USAGE,
@@ -76,7 +81,7 @@ export const main = async (argv) => {
         return EXIT.OK;
       }
 
-      // 分组节点（db / stack / env…）没带子命令：用法错。
+      // 分组节点（stack / env / calc…）没带子命令：用法错。
       // 人还是要看到子命令列表，所以文本模式先打帮助再失败；json 模式只出错误信封，
       // 否则 stdout 会同时出现帮助文本和 JSON，解析契约就破了。
       out.render({}, () => renderHelp(node, commandPath));
