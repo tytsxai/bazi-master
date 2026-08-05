@@ -29,7 +29,7 @@
 - 密码重置：`PASSWORD_RESET_ENABLED=true`
 - Cookie：`SESSION_COOKIE_SAMESITE` / `SESSION_COOKIE_DOMAIN` / `SESSION_COOKIE_SECURE`
 - 代理：`TRUST_PROXY=1`
-- 文档：`DOCS_USER` / `DOCS_PASSWORD`（生产访问 `/api-docs`）
+- 文档：`DOCS_USER` / `DOCS_PASSWORD`（生产访问 `/api-docs`）。生产环境下 `/api-docs` 只接受 HTTPS 请求：判据是 `req.secure` 或反向代理传来的 `X-Forwarded-Proto: https`，直连应用端口（明文）会返回 403 且不会弹 Basic Auth 认证框——Basic Auth 的口令是可逆 base64 且没有重放保护，明文一旦被抓包就长期有效。因此 `TRUST_PROXY=1` 必须配好；确实需要在可信内网跑明文时，才显式设置 `DOCS_ALLOW_INSECURE=true`。
 - Docker Compose：`.env.production` 中新增的运行变量必须同步出现在 `docker-compose.prod.yml` 的 `environment` 或受控 `env_file`
 
 ## 应用健康

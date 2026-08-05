@@ -70,7 +70,33 @@ const timingSafeEqualDigest = (a, b) => {
   return crypto.timingSafeEqual(left, right);
 };
 
+// TLS terminates at the reverse proxy, so the app itself never sees a TLS
+// socket. `req.secure` only tells the truth once `trust proxy` is configured,
+// hence the explicit X-Forwarded-Proto fallback.
+const isSecureRequest = (req) => {
+  if (req.secure) return true;
+  const forwarded = req.headers['x-forwarded-proto'];
+  if (!forwarded) return false;
+  return String(forwarded).split(',')[0].trim().toLowerCase() === 'https';
+};
+
 export const docsBasicAuth = (req, res, next) => {
+  // Basic Auth ships the password on the wire in reversible base64, and it has
+  // no replay protection: one captured header stays valid until the password is
+  // rotated. Port 4000 is still reachable directly if the proxy is bypassed or
+  // misconfigured, so refuse over cleartext instead of prompting for
+  // credentials there. Set DOCS_ALLOW_INSECURE=true only when the port is
+  // confined to a trusted private network.
+  if (
+    process.env.NODE_ENV === 'production' &&
+    process.env.DOCS_ALLOW_INSECURE !== 'true' &&
+    !isSecureRequest(req)
+  ) {
+    return res
+      .status(403)
+      .send('API docs are only served over HTTPS. Reach them through the TLS endpoint.');
+  }
+
   const validUser = process.env.DOCS_USER || 'admin';
   const validPassword = process.env.DOCS_PASSWORD;
 

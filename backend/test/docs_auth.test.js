@@ -2,8 +2,13 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { docsBasicAuth } from '../middleware/auth.js';
 
-const createRequest = ({ headers = {} } = {}) => ({
+// Requests default to secure: the docs endpoint is only reachable through the
+// TLS reverse proxy in a correct deployment, so that is the baseline every
+// credential test runs against. Pass secure: false to model a direct hit on the
+// app port.
+const createRequest = ({ headers = {}, secure = true } = {}) => ({
   headers,
+  secure,
 });
 
 const createResponse = () => {
@@ -122,5 +127,85 @@ describe('Docs Basic Auth Middleware', () => {
 
     // Restore
     process.env.DOCS_PASSWORD = 'secret_password';
+  });
+
+  it('should refuse cleartext requests in production before touching credentials', () => {
+    const req = createRequest({
+      secure: false,
+      headers: {
+        authorization: 'Basic ' + Buffer.from('admin:secret_password').toString('base64'),
+      },
+    });
+    const res = createResponse();
+
+    let nextCalled = false;
+    docsBasicAuth(req, res, () => {
+      nextCalled = true;
+    });
+
+    assert.strictEqual(res.statusCode, 403);
+    assert.ok(!nextCalled);
+    // No credential prompt over cleartext — that is what leaks the password.
+    assert.strictEqual(res.getHeader('WWW-Authenticate'), undefined);
+  });
+
+  it('should accept X-Forwarded-Proto: https from the TLS reverse proxy', () => {
+    const req = createRequest({
+      secure: false,
+      headers: {
+        'x-forwarded-proto': 'https, http',
+        authorization: 'Basic ' + Buffer.from('admin:secret_password').toString('base64'),
+      },
+    });
+    const res = createResponse();
+
+    let nextCalled = false;
+    docsBasicAuth(req, res, () => {
+      nextCalled = true;
+    });
+
+    assert.ok(nextCalled);
+  });
+
+  it('should allow cleartext when DOCS_ALLOW_INSECURE is explicitly set', () => {
+    process.env.DOCS_ALLOW_INSECURE = 'true';
+
+    const req = createRequest({
+      secure: false,
+      headers: {
+        authorization: 'Basic ' + Buffer.from('admin:secret_password').toString('base64'),
+      },
+    });
+    const res = createResponse();
+
+    let nextCalled = false;
+    docsBasicAuth(req, res, () => {
+      nextCalled = true;
+    });
+
+    delete process.env.DOCS_ALLOW_INSECURE;
+
+    assert.ok(nextCalled);
+  });
+
+  it('should not enforce HTTPS outside production', () => {
+    process.env.NODE_ENV = 'development';
+
+    const req = createRequest({
+      secure: false,
+      headers: {
+        authorization: 'Basic ' + Buffer.from('admin:secret_password').toString('base64'),
+      },
+    });
+    const res = createResponse();
+
+    let nextCalled = false;
+    docsBasicAuth(req, res, () => {
+      nextCalled = true;
+    });
+
+    process.env.NODE_ENV = 'production';
+
+    assert.ok(nextCalled);
   });
 });
